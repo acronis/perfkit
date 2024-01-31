@@ -1,0 +1,59 @@
+output:
+  sort-results: true
+  print-issued-lines: false
+
+linters:
+  disable-all: true
+  enable:
+    - errcheck
+    - gosimple
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - gofmt
+    - nolintlint
+    - revive
+    - contextcheck
+    - dogsled
+    - dupword
+    - errname
+    - godox
+    - goimports
+    - nilerr
+    - nilnil
+    - nlreturn
+    - perfsprint
+    - prealloc
+    - sqlclosecheck
+    - unconvert
+    - whitespace
+    - wrapcheck
+
+linters-settings:
+  govet:
+    enable:
+      - niliness
+      - reflectvaluecompare
+      - sortslice
+      - unusedwrite
+
+issues:
+  # Print all issues reported by all linters.
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+  # Don't ignore some of the issues that golangci-lint considers okay.
+  # This includes documenting all exported entities.
+  exclude-use-default: false
+
+  exclude-rules:
+    # Don't need to handle errors from deferred Close calls.
+    - linters: [errcheck]
+      text: 'Error return value of `rows.Close` is not checked'
+    - linters: [errcheck]
+      text: 'Error return value of `c.dbSess.Close` is not checked'
+    - linters: [errcheck]
+      text: 'Error return value of `c.dbrSess.Close` is not checked'
+    - linters: [errcheck]
+      text: 'Error return value of `stmt.Close` is not checked'
