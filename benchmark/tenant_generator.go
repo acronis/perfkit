@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -59,6 +58,7 @@ type TenantsCache struct {
 	tenantsWorkingSetLimit    int
 	ctisWorkingSetLimit       int
 	logger                    *Logger
+	benchmark                 *Benchmark
 	uuids                     []TenantUUID
 	ctiUuids                  []CTIUUID
 	tenantStructureRandomizer *tenantStructureRandomizer
@@ -66,10 +66,11 @@ type TenantsCache struct {
 }
 
 // NewTenantsCache creates a new TenantsCache instance
-func NewTenantsCache(logger *Logger) *TenantsCache {
+func NewTenantsCache(benchmark *Benchmark) *TenantsCache {
 	return &TenantsCache{
 		tenantsWorkingSetLimit: 0,
-		logger:                 logger,
+		logger:                 benchmark.Logger,
+		benchmark:              benchmark,
 		uuids:                  []TenantUUID{},
 	}
 }
@@ -99,8 +100,7 @@ func (tc *TenantsCache) SetCTIsWorkingSet(limit int) {
 // Exit prints message and exits with -1 code
 func (tc *TenantsCache) Exit(msg string) {
 	tc.exitLock.Lock() // ugly, but prevents multiple messages on exit
-	fmt.Print(msg)
-	os.Exit(-1)
+	tc.benchmark.Exit(msg)
 }
 
 // TenantsDDLSQL is a DDL for tenants table for MySQL and PostgreSQL databases

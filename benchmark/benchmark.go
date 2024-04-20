@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"os/signal"
 	"sync"
 	"time"
 
@@ -68,6 +69,7 @@ type Benchmark struct {
 	Worker          func(id int) (loops int)
 	FinishPerWorker func(id int)
 	Finish          func()
+	PreExit         func()
 	Metric          func() (metric string)
 	GetRate         func(loops uint64, seconds float64) float64
 	PrintScore      func(score Score)
@@ -80,7 +82,8 @@ type Benchmark struct {
 	TenantsCache    *TenantsCache
 	Randomizer      *Randomizer
 
-	Score Score
+	NeedToExit bool
+	Score      Score
 
 	CliArgs    []string
 	WorkerData []WorkerData
@@ -103,6 +106,8 @@ func New() *Benchmark {
 		},
 		Worker: func(id int) (loops int) {
 			return 0
+		},
+		PreExit: func() {
 		},
 		FinishPerWorker: func(id int) {
 		},
@@ -214,8 +219,16 @@ func (b *Benchmark) Run() {
 		b.CommonOpts.Workers = 1
 	}
 
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt)
+	go func() {
+		<-sigChan
+		fmt.Printf(" Getting process interruption signal...\n")
+		b.NeedToExit = true
+	}()
+
 	b.Randomizer = NewRandomizer(b.CommonOpts.RandSeed, b.CommonOpts.Workers)
-	b.TenantsCache = NewTenantsCache(b.Logger)
+	b.TenantsCache = NewTenantsCache(b)
 	b.Init()
 
 	b.WorkerData = make([]WorkerData, b.CommonOpts.Workers)
@@ -223,6 +236,9 @@ func (b *Benchmark) Run() {
 	b.Log(LogDebug, 0, "per-worker initialization")
 	for i := 0; i < b.CommonOpts.Workers; i++ {
 		b.InitPerWorker(i)
+		if b.NeedToExit {
+			break
+		}
 	}
 
 	var minRate, maxRate, sumRate float64
@@ -239,6 +255,9 @@ func (b *Benchmark) Run() {
 			maxRate = b.Score.Rate
 		}
 		sumRate += b.Score.Rate
+		if b.NeedToExit {
+			break
+		}
 	}
 
 	b.Log(LogDebug, 0, "per-worker termination")
@@ -269,6 +288,10 @@ func runner(id int, b *Benchmark, loops *int, requiredLoops int, wg *sync.WaitGr
 			}
 			doneLoops += l
 
+			if b.NeedToExit {
+				break
+			}
+
 			if b.CommonOpts.Sleep > 0 {
 				time.Sleep(time.Millisecond * time.Duration(b.CommonOpts.Sleep))
 			}
@@ -283,6 +306,10 @@ func runner(id int, b *Benchmark, loops *int, requiredLoops int, wg *sync.WaitGr
 			}
 			doneLoops += l
 
+			if b.NeedToExit {
+				break
+			}
+
 			if b.CommonOpts.Sleep > 0 {
 				time.Sleep(time.Millisecond * time.Duration(b.CommonOpts.Sleep))
 			}
@@ -294,10 +321,32 @@ func runner(id int, b *Benchmark, loops *int, requiredLoops int, wg *sync.WaitGr
 	wg.Done()
 }
 
-// Exit prints the error message and exits
-func (b *Benchmark) Exit(fmts string, args ...interface{}) {
-	fmt.Printf(fmts, args...)
+// Exit calls os.Exit() and sets 127 exit code if there is a message (+ args) passed, otherwise just exit with 0 (successfull exit)
+func (b *Benchmark) Exit(fmtAndArgs ...interface{}) {
+	if len(fmtAndArgs) == 0 {
+		b.PreExit()
+		os.Exit(0)
+	}
+
+	// Assume the first argument, if present, is the format string
+	fmtStr, ok := fmtAndArgs[0].(string)
+	if !ok {
+		fmt.Println("First argument must be a format string.")
+		b.PreExit()
+		os.Exit(127)
+	}
+
+	// If there are more arguments, use them with fmt.Printf
+	if len(fmtAndArgs) > 1 {
+		args := fmtAndArgs[1:]
+		fmt.Printf(fmtStr, args...)
+	} else {
+		// If fmtStr is the only argument, just print it
+		fmt.Print(fmtStr)
+	}
+
 	fmt.Println()
+	b.PreExit()
 	os.Exit(127)
 }
 
