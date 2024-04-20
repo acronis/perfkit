@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 
@@ -1434,8 +1433,7 @@ var TestSelectAdvmTasksCodePerWeek = TestDesc{
 	table:       TestTableAdvmTasks,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
 		// need to implement it
-		fmt.Printf("%s: is not implemented!\n", testDesc.name)
-		os.Exit(-1)
+		b.Exit("%s: is not implemented!\n", testDesc.name)
 	},
 }
 

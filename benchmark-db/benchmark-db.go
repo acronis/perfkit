@@ -5,12 +5,12 @@ package main
 import (
 	"fmt"
 	"net/http"
-	"os"
 	"runtime"
 	"sort"
 	"strings"
 
 	"github.com/acronis/perfkit/benchmark"
+	embeddedpostgres "github.com/fergusstrange/embedded-postgres" // embedder postgres
 )
 
 // Version is a version of the benchmark-db
@@ -29,10 +29,11 @@ func printVersion() {
 
 // TestOpts is a structure to store all the test options
 type TestOpts struct {
-	DBOpts       benchmark.DatabaseOpts
-	BenchOpts    BenchOpts
-	TestcaseOpts TestcaseOpts
-	CTIOpts      CTIOpts
+	DBOpts               benchmark.DatabaseOpts
+	BenchOpts            BenchOpts
+	EmbeddedPostgresOpts EmbeddedPostgresOpts
+	TestcaseOpts         TestcaseOpts
+	CTIOpts              CTIOpts
 }
 
 // BenchOpts is a structure to store all the benchmark options
@@ -69,9 +70,10 @@ type TestcaseOpts struct {
 
 // DBTestData is a structure to store all the test data
 type DBTestData struct {
-	TestDesc       *TestDesc
-	EventBus       *EventBus
-	EffectiveBatch int // EffectiveBatch reflects the default value if the --batch option is not set, it can be different for different tests
+	TestDesc         *TestDesc
+	EventBus         *EventBus
+	EmbeddedPostgres *embeddedpostgres.EmbeddedPostgres
+	EffectiveBatch   int // EffectiveBatch reflects the default value if the --batch option is not set, it can be different for different tests
 
 	scores map[string][]benchmark.Score
 }
@@ -94,10 +96,15 @@ func main() {
 		var testOpts TestOpts
 		b.Cli.AddFlagGroup("Database options", "", &testOpts.DBOpts)
 		b.Cli.AddFlagGroup("acronis-db-bench specific options", "", &testOpts.BenchOpts)
-		b.Cli.AddFlagGroup("testcase specific options", "", &testOpts.TestcaseOpts)
+		b.Cli.AddFlagGroup("Embedded Postgres specific options", "", &testOpts.EmbeddedPostgresOpts)
+		b.Cli.AddFlagGroup("Testcase specific options", "", &testOpts.TestcaseOpts)
 		b.Cli.AddFlagGroup("CTI-pattern simulation test options", "", &testOpts.CTIOpts)
 
 		return &testOpts
+	}
+
+	b.PreExit = func() {
+		finiEmbeddedPostgres(b)
 	}
 
 	b.PrintScore = func(score benchmark.Score) {
@@ -162,27 +169,29 @@ func main() {
 			fmt.Printf(" %s - %s;", db.Symbol, db.Name)
 		}
 		fmt.Printf("\n\n")
-		os.Exit(0)
+		b.Exit()
 	}
+
+	initEmbeddedPostgres(b)
 
 	if testOpts.BenchOpts.Describe {
 		describeTest(b, testOpts)
-		os.Exit(0)
+		b.Exit()
 	}
 
 	if testOpts.BenchOpts.DescribeAll {
 		describeAllTests(b, testOpts)
-		os.Exit(0)
+		b.Exit()
 	}
 
 	if testOpts.BenchOpts.Cleanup {
 		cleanupTables(b)
-		os.Exit(0)
+		b.Exit()
 	}
 
 	if testOpts.BenchOpts.Init {
 		createTables(b)
-		os.Exit(0)
+		b.Exit()
 	}
 
 	if testOpts.DBOpts.Reconnect {
@@ -272,19 +281,21 @@ func main() {
 	} else if testOpts.BenchOpts.Test != "" {
 		executeTests(b, testOpts)
 	} else if !testOpts.BenchOpts.Info {
-		benchmark.FatalError("either --test or --info options must be set\n")
+		b.Exit("either --test or --info options must be set\n")
 	}
+
+	b.Exit()
 }
 
 func executeTests(b *benchmark.Benchmark, testOpts *TestOpts) {
 	_, tests := GetTests()
 	_, exists := tests[testOpts.BenchOpts.Test]
 	if !exists {
-		benchmark.FatalError(fmt.Sprintf("Test: '%s' doesn't exist, see the list of available tests using --list option\n", testOpts.BenchOpts.Test))
+		b.Exit(fmt.Sprintf("Test: '%s' doesn't exist, see the list of available tests using --list option\n", testOpts.BenchOpts.Test))
 	}
 	test := tests[testOpts.BenchOpts.Test]
 	if !test.dbIsSupported(testOpts.DBOpts.Driver) {
-		benchmark.FatalError(fmt.Sprintf("Test: '%s' doesn't support '%s' database\n", testOpts.BenchOpts.Test, testOpts.DBOpts.Driver))
+		b.Exit(fmt.Sprintf("Test: '%s' doesn't support '%s' database\n", testOpts.BenchOpts.Test, testOpts.DBOpts.Driver))
 	}
 	test.launcherFunc(b, test)
 }
@@ -315,7 +326,7 @@ func describeTest(b *benchmark.Benchmark, testOpts *TestOpts) {
 	_, tests := GetTests()
 	_, exists := tests[testOpts.BenchOpts.Test]
 	if !exists {
-		benchmark.FatalError(fmt.Sprintf("Test: '%s' doesn' exist, see the list of available tests using --list option\n", testOpts.BenchOpts.Test))
+		b.Exit(fmt.Sprintf("Test: '%s' doesn' exist, see the list of available tests using --list option\n", testOpts.BenchOpts.Test))
 	}
 	test := tests[testOpts.BenchOpts.Test]
 	describeOne(b, test)

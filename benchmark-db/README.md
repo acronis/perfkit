@@ -50,6 +50,14 @@ Replace <database_driver> with the driver for your database (mysql, postgres, ms
   -s, --randseed=            Seed used for random number generation (default: 1)
 ```
 
+#### Embedded Postgres specific options:
+
+```
+      --ep-port=             embedded postgres port (default 5432) (default: 5432)
+      --ep-data-dir=         embedded postgres data dir (default: $USER_HOME/.embedded-postgres-go/data)
+      --ep-max-connections=  embedded postgres 'max_connections' (default 200) (default: 200)
+```
+
 #### Benchmark specific options
 
 ```
@@ -81,6 +89,13 @@ Replace <database_driver> with the driver for your database (mysql, postgres, ms
 ```bash
 acronis-db-bench --driver postgres --dsn "host=localhost port=5432 user=<USER> password=<PASSWORD> dbname=<DATABASE NAME> sslmode=disable|enable"
 ```
+
+#### Embedded PostgreSQL
+
+```bash
+acronis-db-bench --embedded-postgres
+```
+For details, see [embedded Postgres](https://github.com/fergusstrange/embedded-postgres/) and [embedded Postgres binaries](https://github.com/zonkyio/embedded-postgres-binaries)
 
 #### MySQL / MariaDB
 
@@ -238,3 +253,8 @@ Databases symbol legend:
 
   P - PostgreSQL; M - MySQL/MariaDB; W - MSSQL; S - SQLite; C - ClickHouse; A - Cassandra;
 ```
+
+## Versions
+
+v1.0.0 - initial version
+v1.1.0 - added Embedded Postgres support (see --embedded-postgres and --ep-* options)
