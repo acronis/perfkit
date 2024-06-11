@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 
@@ -122,7 +121,7 @@ var TestPing = TestDesc{
 	isDBRTest:   false,
 	databases:   ALL,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
-		worker := func(b *benchmark.Benchmark, c *benchmark.DBConnector, testDesc *TestDesc, batch int) (loops int) {
+		worker := func(b *benchmark.Benchmark, c *benchmark.DBConnector, testDesc *TestDesc, batch int) (loops int) { //nolint:revive
 			err := c.Ping()
 			if err != nil {
 				return 0
@@ -149,7 +148,7 @@ var TestRawQuery = TestDesc{
 		var worker testWorkerFunc
 
 		if strings.Contains(query, "{") {
-			worker = func(b *benchmark.Benchmark, c *benchmark.DBConnector, testDesc *TestDesc, batch int) (loops int) {
+			worker = func(b *benchmark.Benchmark, c *benchmark.DBConnector, testDesc *TestDesc, batch int) (loops int) { //nolint:revive
 				q := query
 				if strings.Contains(q, "{CTI}") {
 					rw := b.Randomizer.GetWorker(c.WorkerID)
@@ -173,7 +172,7 @@ var TestRawQuery = TestDesc{
 				return 1
 			}
 		} else {
-			worker = func(b *benchmark.Benchmark, c *benchmark.DBConnector, testDesc *TestDesc, batch int) (loops int) {
+			worker = func(b *benchmark.Benchmark, c *benchmark.DBConnector, testDesc *TestDesc, batch int) (loops int) { //nolint:revive
 				c.SelectRaw(b.TestOpts.(*TestOpts).BenchOpts.Explain, query)
 
 				return 1
@@ -193,7 +192,7 @@ var TestSelectOne = TestDesc{
 	isDBRTest:   false,
 	databases:   ALL,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
-		worker := func(b *benchmark.Benchmark, c *benchmark.DBConnector, testDesc *TestDesc, batch int) (loops int) {
+		worker := func(b *benchmark.Benchmark, c *benchmark.DBConnector, testDesc *TestDesc, batch int) (loops int) { //nolint:revive
 			c.SelectRaw(b.TestOpts.(*TestOpts).BenchOpts.Explain, "SELECT 1")
 
 			return 1
@@ -212,7 +211,7 @@ var TestSelectOneDBR = TestDesc{
 	isDBRTest:   true,
 	databases:   RELATIONAL,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
-		worker := func(b *benchmark.Benchmark, c *benchmark.DBConnector, testDesc *TestDesc, batch int) (loops int) {
+		worker := func(b *benchmark.Benchmark, c *benchmark.DBConnector, testDesc *TestDesc, batch int) (loops int) { //nolint:revive
 			var ret int
 			if err := c.DbrSess().Select("1").LoadOne(&ret); err != nil {
 				b.Exit("DBRSelect load error: %v", err)
@@ -239,7 +238,7 @@ var TestSelectNextVal = TestDesc{
 		c.CreateSequence(benchmark.SequenceName)
 		c.Close()
 
-		worker := func(b *benchmark.Benchmark, c *benchmark.DBConnector, testDesc *TestDesc, batch int) (loops int) {
+		worker := func(b *benchmark.Benchmark, c *benchmark.DBConnector, testDesc *TestDesc, batch int) (loops int) { //nolint:revive
 			c.GetNextVal(benchmark.SequenceName)
 
 			return 1
@@ -260,7 +259,7 @@ var TestSelectMediumLast = TestDesc{
 	databases:   ALL,
 	table:       TestTableMedium,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
-		orderby := func(b *benchmark.Benchmark) string { return "id DESC" }
+		orderby := func(b *benchmark.Benchmark) string { return "id DESC" } //nolint:revive
 		testSelect(b, testDesc, nil, "id", nil, orderby, 1)
 	},
 }
@@ -276,7 +275,7 @@ var TestSelectMediumLastDBR = TestDesc{
 	databases:   RELATIONAL,
 	table:       TestTableMedium,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
-		orderby := func(b *benchmark.Benchmark) string { return "id DESC" }
+		orderby := func(b *benchmark.Benchmark) string { return "id DESC" } //nolint:revive
 		testSelect(b, testDesc, nil, "id", nil, orderby, 1)
 	},
 }
@@ -297,7 +296,7 @@ var TestSelectMediumRand = TestDesc{
 
 			return fmt.Sprintf("id > %d", id)
 		}
-		orderby := func(b *benchmark.Benchmark) string {
+		orderby := func(b *benchmark.Benchmark) string { //nolint:revive
 			return "id ASC"
 		}
 		testSelect(b, testDesc, nil, "id", where, orderby, 1)
@@ -320,7 +319,7 @@ var TestSelectMediumRandDBR = TestDesc{
 
 			return fmt.Sprintf("id > %d", id)
 		}
-		orderby := func(b *benchmark.Benchmark) string {
+		orderby := func(b *benchmark.Benchmark) string { //nolint:revive
 			return "id ASC"
 		}
 		testSelect(b, testDesc, nil, "id", where, orderby, 1)
@@ -338,7 +337,7 @@ var TestSelectHeavyLast = TestDesc{
 	databases:   RELATIONAL,
 	table:       TestTableHeavy,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
-		orderby := func(b *benchmark.Benchmark) string { return "id DESC" }
+		orderby := func(b *benchmark.Benchmark) string { return "id DESC" } //nolint:revive
 		testSelect(b, testDesc, nil, "id", nil, orderby, 1)
 	},
 }
@@ -354,7 +353,7 @@ var TestSelectHeavyLastDBR = TestDesc{
 	databases:   RELATIONAL,
 	table:       TestTableHeavy,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
-		orderby := func(b *benchmark.Benchmark) string { return "id DESC" }
+		orderby := func(b *benchmark.Benchmark) string { return "id DESC" } //nolint:revive
 		testSelect(b, testDesc, nil, "id", nil, orderby, 1)
 	},
 }
@@ -375,7 +374,7 @@ var TestSelectHeavyRand = TestDesc{
 
 			return fmt.Sprintf("id > %d", id)
 		}
-		orderby := func(b *benchmark.Benchmark) string {
+		orderby := func(b *benchmark.Benchmark) string { //nolint:revive
 			return "id ASC"
 		}
 		testSelect(b, testDesc, nil, "id", where, orderby, 1)
@@ -398,7 +397,7 @@ var TestSelectHeavyRandDBR = TestDesc{
 
 			return fmt.Sprintf("id > %d", id)
 		}
-		orderby := func(b *benchmark.Benchmark) string {
+		orderby := func(b *benchmark.Benchmark) string { //nolint:revive
 			return "id ASC"
 		}
 		testSelect(b, testDesc, nil, "id", where, orderby, 1)
@@ -424,7 +423,7 @@ var TestSelectHeavyRandTenantLike = TestDesc{
 
 			return fmt.Sprintf("tenant_id = '%s' AND resource_name LIKE '%s'", (*w)["tenant_id"], "%a%")
 		}
-		orderby := func(b *benchmark.Benchmark) string {
+		orderby := func(b *benchmark.Benchmark) string { //nolint:revive
 			return "id DESC"
 		}
 		testSelect(b, testDesc, nil, "id", where, orderby, 1)
@@ -500,7 +499,7 @@ var TestSelectHeavyForUpdateSkipLocked = TestDesc{
 			b.Exit("unsupported driver: '%v', supported drivers are: %s|%s|%s", b.TestOpts.(*TestOpts).DBOpts.Driver, benchmark.POSTGRES, benchmark.MYSQL, benchmark.MSSQL)
 		}
 
-		worker := func(b *benchmark.Benchmark, c *benchmark.DBConnector, testDesc *TestDesc, batch int) (loops int) {
+		worker := func(b *benchmark.Benchmark, c *benchmark.DBConnector, testDesc *TestDesc, batch int) (loops int) { //nolint:revive
 			var id int64
 			var progress int
 
@@ -556,7 +555,7 @@ func insertByPreparedDataWorker(b *benchmark.Benchmark, c *benchmark.DBConnector
 		c.StatementExit("Exec()", t, err, false, nil, "<< stdin ", values, nil, nil)
 
 		if err != nil {
-			stmt.Close() //nolint:sqlclosecheck
+			stmt.Close()
 			c.Exit(err.Error())
 		}
 	}
@@ -684,7 +683,7 @@ func copyDataWorker(b *benchmark.Benchmark, c *benchmark.DBConnector, testDesc *
 		c.StatementExit("Exec()", t, err, false, nil, "<< stdin ", values, nil, nil)
 
 		if err != nil {
-			stmt.Close() //nolint:sqlclosecheck
+			stmt.Close()
 			c.Exit(err.Error())
 		}
 	}
@@ -1038,7 +1037,7 @@ var TestSelectJSONByIndexedValue = TestDesc{
 
 			return ""
 		}
-		orderby := func(b *benchmark.Benchmark) string {
+		orderby := func(b *benchmark.Benchmark) string { //nolint:revive
 			return "id ASC"
 		}
 		testSelect(b, testDesc, nil, "id", where, orderby, 1)
@@ -1072,7 +1071,7 @@ var TestSearchJSONByIndexedValue = TestDesc{
 
 			return ""
 		}
-		orderby := func(b *benchmark.Benchmark) string {
+		orderby := func(b *benchmark.Benchmark) string { //nolint:revive
 			return "id ASC"
 		}
 		testSelect(b, testDesc, nil, "id", where, orderby, 1)
@@ -1106,7 +1105,7 @@ var TestSelectJSONByNonIndexedValue = TestDesc{
 
 			return ""
 		}
-		orderby := func(b *benchmark.Benchmark) string {
+		orderby := func(b *benchmark.Benchmark) string { //nolint:revive
 			return "id ASC"
 		}
 		testSelect(b, testDesc, nil, "id", where, orderby, 1)
@@ -1140,7 +1139,7 @@ var TestSearchJSONByNonIndexedValue = TestDesc{
 
 			return ""
 		}
-		orderby := func(b *benchmark.Benchmark) string {
+		orderby := func(b *benchmark.Benchmark) string { //nolint:revive
 			return "id ASC"
 		}
 		testSelect(b, testDesc, nil, "id", where, orderby, 1)
@@ -1372,7 +1371,7 @@ var TestSelectTimeSeriesSQL = TestDesc{
 
 			return fmt.Sprintf("tenant_id = '%s' AND device_id = '%s' AND metric_id = '%s'", (*w)["tenant_id"], (*w)["device_id"], (*w)["metric_id"])
 		}
-		orderby := func(b *benchmark.Benchmark) string {
+		orderby := func(b *benchmark.Benchmark) string { //nolint:revive
 			return "id DESC"
 		}
 
@@ -1412,10 +1411,10 @@ var TestSelectAdvmTasksLast = TestDesc{
 	databases:   []string{benchmark.POSTGRES},
 	table:       TestTableAdvmTasks,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
-		where := func(b *benchmark.Benchmark, workerId int) string {
+		where := func(b *benchmark.Benchmark, workerId int) string { //nolint:revive
 			return "origin in (1, 2, 3)"
 		}
-		orderby := func(b *benchmark.Benchmark) string {
+		orderby := func(b *benchmark.Benchmark) string { //nolint:revive
 			return "id ASC"
 		}
 		testSelect(b, testDesc, nil, "id", where, orderby, 1)
@@ -1434,8 +1433,7 @@ var TestSelectAdvmTasksCodePerWeek = TestDesc{
 	table:       TestTableAdvmTasks,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
 		// need to implement it
-		fmt.Printf("%s: is not implemented!\n", testDesc.name)
-		os.Exit(-1)
+		b.Exit("%s: is not implemented!\n", testDesc.name)
 	},
 }
 
@@ -1685,7 +1683,7 @@ var TestSelectMediumLastTenant = TestDesc{
 	databases:   ALL,
 	table:       TestTableMedium,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
-		worker := func(b *benchmark.Benchmark, c *benchmark.DBConnector, testDesc *TestDesc, batch int) (loops int) {
+		worker := func(b *benchmark.Benchmark, c *benchmark.DBConnector, testDesc *TestDesc, batch int) (loops int) { //nolint:revive
 			return tenantAwareWorker(b, c, testDesc, "ORDER BY enqueue_time_ns DESC", 1)
 		}
 		testGeneric(b, testDesc, worker, 1)
@@ -1703,7 +1701,7 @@ var TestSelectBlobLastTenant = TestDesc{
 	databases:   ALL,
 	table:       TestTableBlob,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
-		worker := func(b *benchmark.Benchmark, c *benchmark.DBConnector, testDesc *TestDesc, batch int) (loops int) {
+		worker := func(b *benchmark.Benchmark, c *benchmark.DBConnector, testDesc *TestDesc, batch int) (loops int) { //nolint:revive
 			return tenantAwareWorker(b, c, testDesc, "ORDER BY timestamp DESC", 1)
 		}
 		testGeneric(b, testDesc, worker, 1)
@@ -1721,7 +1719,7 @@ var TestSelectHeavyLastTenant = TestDesc{
 	databases:   RELATIONAL,
 	table:       TestTableHeavy,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
-		worker := func(b *benchmark.Benchmark, c *benchmark.DBConnector, testDesc *TestDesc, batch int) (loops int) {
+		worker := func(b *benchmark.Benchmark, c *benchmark.DBConnector, testDesc *TestDesc, batch int) (loops int) { //nolint:revive
 			return tenantAwareWorker(b, c, testDesc, "ORDER BY enqueue_time_ns DESC", 1)
 		}
 		testGeneric(b, testDesc, worker, 1)
@@ -1739,7 +1737,7 @@ var TestSelectHeavyLastTenantCTI = TestDesc{
 	databases:   RELATIONAL,
 	table:       TestTableHeavy,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
-		worker := func(b *benchmark.Benchmark, c *benchmark.DBConnector, testDesc *TestDesc, batch int) (loops int) {
+		worker := func(b *benchmark.Benchmark, c *benchmark.DBConnector, testDesc *TestDesc, batch int) (loops int) { //nolint:revive
 			return tenantAwareCTIAwareWorker(b, c, testDesc, "ORDER BY enqueue_time_ns DESC", 1)
 		}
 		testGeneric(b, testDesc, worker, 1)
@@ -1754,7 +1752,7 @@ func GetTests() ([]*TestGroup, map[string]*TestDesc) {
 	tg := NewTestGroup("Base tests group")
 	g = append(g, tg)
 
-	TestBaseAll.launcherFunc = func(b *benchmark.Benchmark, testDesc *TestDesc) {
+	TestBaseAll.launcherFunc = func(b *benchmark.Benchmark, testDesc *TestDesc) { //nolint:revive
 		testOpts, ok := b.TestOpts.(*TestOpts)
 		if !ok {
 			b.Exit("internal error: can't cast TestOpts struct")

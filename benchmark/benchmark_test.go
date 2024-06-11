@@ -17,7 +17,7 @@ func TestRunOnce(t *testing.T) {
 	b := New()
 	b.CommonOpts.Workers = 1
 	b.CommonOpts.Loops = 1
-	b.Worker = func(id int) (loops int) {
+	b.Worker = func(id int) (loops int) { //nolint:revive
 		return 1
 	}
 	b.RunOnce(false)
@@ -89,7 +89,7 @@ func TestGeomean(t *testing.T) {
 func TestRun(t *testing.T) {
 	os.Args = []string{"test", "--duration=1", "--loops=1", "-c=1"}
 	b := New()
-	b.Worker = func(id int) (loops int) {
+	b.Worker = func(id int) (loops int) { //nolint:revive
 		return 1
 	}
 	b.Run()

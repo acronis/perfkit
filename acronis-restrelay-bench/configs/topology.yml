@@ -1,0 +1,231 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: restrelay-bench-0
+  labels:
+    app: restrelay-bench-0-app
+    label: restrelay-bench-0
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: 8080
+      name: api
+  selector:
+    app: restrelay-bench-0-app
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: restrelay-bench-0-deployment
+  labels:
+    app: restrelay-bench-0-app
+spec:
+  replicas: 4
+  selector:
+    matchLabels:
+      app: restrelay-bench-0-app
+      label: restrelay-bench-0
+  template:
+    metadata:
+      labels:
+        app: restrelay-bench-0-app
+        label: restrelay-bench-0
+    spec:
+      containers:
+      - name: restrelay-bench-0
+        image: restrelay-bench-server:1.0
+        ports:
+        - containerPort: 8080
+        env:
+        - name: NEXT_SERVICE
+          value: "http://restrelay-bench-1:8080/"
+        - name: NUMBER_IN_CHAIN
+          value: "0"
+        - name: PORT
+          value: "8080"
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+          limits:
+            cpu: "1"
+            memory: "512Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: restrelay-bench-1
+  labels:
+    app: restrelay-bench-1-app
+    label: restrelay-bench-1
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: 8080
+  selector: 
+    app: restrelay-bench-1-app
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: restrelay-bench-1-deployment
+  labels:
+    app: restrelay-bench-1-app
+spec:
+  replicas: 4
+  selector:
+    matchLabels:
+      app: restrelay-bench-1-app
+      label: restrelay-bench-1
+  template:
+    metadata:
+      labels:
+        app: restrelay-bench-1-app
+        label: restrelay-bench-1
+    spec:
+      containers:
+      - name: restrelay-bench-1
+        image: restrelay-bench-server:1.0
+        ports:
+        - containerPort: 8080
+        env:
+        - name: NEXT_SERVICE
+          value: "http://restrelay-bench-2:8080/"
+        - name: NUMBER_IN_CHAIN
+          value: "1"
+        - name: PORT
+          value: "8080"
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+          limits:
+            cpu: "1"
+            memory: "512Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: restrelay-bench-2
+  labels:
+    app: restrelay-bench-2-app
+    label: restrelay-bench-2
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: 8080
+  selector: 
+    app: restrelay-bench-2-app
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: restrelay-bench-2-deployment
+  labels:
+    app: restrelay-bench-2-app
+spec:
+  replicas: 4
+  selector:
+    matchLabels:
+      app: restrelay-bench-2-app
+      label: restrelay-bench-2
+  template:
+    metadata:
+      labels:
+        app: restrelay-bench-2-app
+        label: restrelay-bench-2
+    spec:
+      containers:
+      - name: restrelay-bench-2
+        image: restrelay-bench-server:1.0
+        ports:
+        - containerPort: 8080
+        env:
+        - name: NEXT_SERVICE
+          value: "http://restrelay-bench--1:8080/"
+        - name: NUMBER_IN_CHAIN
+          value: "2"
+        - name: PORT
+          value: "8080"
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+          limits:
+            cpu: "1"
+            memory: "512Mi"
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: restrelay-bench-0-fw
+  labels:
+    app: restrelay-bench-0-app
+    label: restrelay-bench-0
+  annotations:
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-body-size: 16m
+    nginx.ingress.kubernetes.io/proxy-buffer-size: 32k
+    nginx.ingress.kubernetes.io/proxy-buffering: "on"
+    nginx.ingress.kubernetes.io/proxy-buffers-number: "8"
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          - path: "/api/restrelay_bench_server.*"
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: restrelay-bench-0
+                port:
+                  name: api
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgresql-service
+  labels:
+    app: postresql
+    label: postgresql-service
+spec:
+  ports:
+    - port: 5432
+      targetPort: 5432
+  selector: 
+    app: postgresql
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgresql-deployment
+  labels:
+    app: postgresql
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgresql
+      label: postgresql-service
+  template:
+    metadata:
+      labels:
+        app: postgresql
+        label: postgresql-service
+    spec:
+      containers:
+      - name: postgresql
+        image: postgres:10-alpine
+        ports:
+        - containerPort: 5432
+        env:
+        - name: POSTGRES_USER
+          value: "test"
+        - name: POSTGRES_PASSWORD
+          value: "test"

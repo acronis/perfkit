@@ -1,6 +1,7 @@
 go 1.21
 
 use (
-	benchmark-db
-	benchmark
+	./acronis-db-bench
+	./acronis-restrelay-bench
+	./benchmark
 )

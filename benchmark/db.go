@@ -974,7 +974,7 @@ func (c *DBConnector) Select(from string, what string, where string, orderBy str
 	if where == "" {
 		query = strings.Replace(query, "{WHERE}", "", -1)
 	} else {
-		query = strings.Replace(query, "{WHERE}", fmt.Sprintf("WHERE %s", where), -1)
+		query = strings.Replace(query, "{WHERE}", fmt.Sprintf("WHERE %s", where), -1) //nolint:perfsprint
 	}
 
 	if limit == 0 {
@@ -991,7 +991,7 @@ func (c *DBConnector) Select(from string, what string, where string, orderBy str
 	if orderBy == "" {
 		query = strings.Replace(query, "{ORDERBY}", "", -1)
 	} else {
-		query = strings.Replace(query, "{ORDERBY}", fmt.Sprintf("ORDER BY %s", orderBy), -1)
+		query = strings.Replace(query, "{ORDERBY}", fmt.Sprintf("ORDER BY %s", orderBy), -1) //nolint:perfsprint
 	}
 
 	query = c.updatePlaceholders(query)
@@ -1100,13 +1100,84 @@ func (c *DBConnector) TableExists(tableName string) bool {
 	return exists
 }
 
+// DbConstraint represents a database constraint
+type DbConstraint struct {
+	Name       string `json:"name"`
+	TableName  string `json:"table_name"`
+	Definition string `json:"definition"`
+}
+
+// ReadConstraints reads constraints from the database
+func (c *DBConnector) ReadConstraints() []DbConstraint {
+	if c.DbOpts.Driver != POSTGRES {
+		return nil
+	}
+
+	query := `
+	SELECT conname, conrelid::regclass AS table_name, pg_get_constraintdef(oid) AS condef
+	FROM pg_constraint
+	WHERE contype IN ('f', 'p', 'u');
+	`
+
+	rows := c.QueryOrExitWithResult(query)
+	defer rows.Close()
+
+	var constraints []DbConstraint
+
+	for rows.Next() {
+		var constraint DbConstraint
+		if err := rows.Scan(&constraint.Name, &constraint.TableName, &constraint.Definition); err != nil {
+			return nil
+		}
+		if !strings.HasPrefix(constraint.TableName, "acronis_db_bench") {
+			continue
+		}
+		if strings.Contains(strings.ToLower(constraint.Definition), "foreign key") {
+			constraints = append(constraints, constraint)
+		}
+	}
+
+	return constraints
+}
+
+// RemoveConstraints removes constraints from the database
+func (c *DBConnector) RemoveConstraints(constraints []DbConstraint) {
+	if c.DbOpts.Driver != POSTGRES || constraints == nil {
+		return
+	}
+	for _, constraint := range constraints {
+		query := fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", constraint.TableName, constraint.Name)
+		c.Log(LogDebug, fmt.Sprintf("removing constraint '%s', '%s' on table '%s'", constraint.Name, constraint.Definition, constraint.TableName))
+		c.ExecOrExit(query)
+	}
+}
+
+// RestoreConstraints restores constraints in the database
+func (c *DBConnector) RestoreConstraints(constraints []DbConstraint) {
+	if c.DbOpts.Driver != POSTGRES || constraints == nil {
+		return
+	}
+	for _, constraint := range constraints {
+		query := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s %s", constraint.TableName, constraint.Name, constraint.Definition)
+		c.Log(LogDebug, fmt.Sprintf("restoring constraint '%s', '%s' on table '%s'", constraint.Name, constraint.Definition, constraint.TableName))
+		c.ExecOrExit(query)
+	}
+}
+
 // DropTable drops a table if it exists
 func (c *DBConnector) DropTable(tableName string) {
 	if c.DbOpts.UseTruncate {
 		if c.TableExists(tableName) {
-			c.ExecOrExit("TRUNCATE TABLE " + tableName)
+			c.Log(LogDebug, fmt.Sprintf("truncate table '%s'", tableName))
+			switch c.DbOpts.Driver {
+			case POSTGRES:
+				c.ExecOrExit("TRUNCATE TABLE " + tableName + " CASCADE")
+			default:
+				c.ExecOrExit("TRUNCATE TABLE " + tableName)
+			}
 		}
 	} else {
+		c.Log(LogDebug, fmt.Sprintf("drop table '%s'", tableName))
 		c.ExecOrExit("DROP TABLE IF EXISTS " + tableName)
 	}
 }
@@ -1365,7 +1436,7 @@ func (c *DBConnector) CreateTable(tableName string, tableMigrationSQL string) {
 	}
 
 	c.ApplyMigrations(tableName, tableMigrationSQL)
-	c.Log(LogDebug, fmt.Sprintf("created table: %s", tableName))
+	c.Log(LogDebug, fmt.Sprintf("created table: %s", tableName)) //nolint:perfsprint
 }
 
 // getTableMigrationSQL returns a table migration query for a given driver
@@ -1438,7 +1509,7 @@ func (c *DBConnector) CreateIndex(tableName string, columns string, id int) {
 		if err != nil {
 			c.Exit("DB exec failed: %s\nError: %s", query, err.Error())
 		}
-		c.Log(LogDebug, fmt.Sprintf("created index: %s", indexName))
+		c.Log(LogDebug, fmt.Sprintf("created index: %s", indexName)) //nolint:perfsprint
 
 		return
 	} else {
@@ -1464,7 +1535,7 @@ func (c *DBConnector) CreateIndex(tableName string, columns string, id int) {
 		if err != nil {
 			c.Exit("DB exec failed: %s\nError: %s", query, err.Error())
 		}
-		c.Log(LogDebug, fmt.Sprintf("created index: %s", indexName))
+		c.Log(LogDebug, fmt.Sprintf("created index: %s", indexName)) //nolint:perfsprint
 	}
 }
 
@@ -1499,7 +1570,7 @@ func (c *DBConnector) GetTablesSchemaInfo(tableNames []string) (ret []string) {
 			continue
 		}
 
-		ret = append(ret, fmt.Sprintf("TABLE: %s", table))
+		ret = append(ret, fmt.Sprintf("TABLE: %s", table)) //nolint:perfsprint
 
 		// Query to list columns
 
@@ -1568,7 +1639,7 @@ func (c *DBConnector) GetTablesSchemaInfo(tableNames []string) (ret []string) {
 		case SQLITE:
 			listIndexesQuery = fmt.Sprintf("PRAGMA index_list('%s')", table)
 		case CLICKHOUSE:
-			listIndexesQuery = fmt.Sprintf("SHOW CREATE TABLE %s", table)
+			listIndexesQuery = fmt.Sprintf("SHOW CREATE TABLE %s", table) //nolint:perfsprint
 		case CASSANDRA:
 			listIndexesQuery = fmt.Sprintf("select index_name, kind, options from system_schema.indexes where keyspace_name = '%s' and table_name = '%s'", CassandraKeySpace, table)
 		default:
@@ -1599,12 +1670,12 @@ func (c *DBConnector) GetTablesSchemaInfo(tableNames []string) (ret []string) {
 					&subPart, &nullable, &indexType, &comment); err != nil {
 					c.Exit("error: %s\nquery: %s", err, listIndexesQuery)
 				}
-				ret = append(ret, fmt.Sprintf("   - %s", indexName))
+				ret = append(ret, fmt.Sprintf("   - %s", indexName)) //nolint:perfsprint
 			case MSSQL:
 				if err := indexes.Scan(&indexName); err != nil {
 					c.Exit("error: %s\nquery: %s", err, listIndexesQuery)
 				}
-				ret = append(ret, fmt.Sprintf("   - %s", indexName))
+				ret = append(ret, fmt.Sprintf("   - %s", indexName)) //nolint:perfsprint
 			case SQLITE:
 				var seq int
 				var unique, partial bool
@@ -1612,7 +1683,7 @@ func (c *DBConnector) GetTablesSchemaInfo(tableNames []string) (ret []string) {
 				if err := indexes.Scan(&seq, &indexName, &unique, &origin, &partial); err != nil {
 					c.Exit("error: %s\nquery: %s", err, listIndexesQuery)
 				}
-				ret = append(ret, fmt.Sprintf("   - %s", indexName))
+				ret = append(ret, fmt.Sprintf("   - %s", indexName)) //nolint:perfsprint
 			case CLICKHOUSE:
 				var createStatement string
 				if err := indexes.Scan(&createStatement); err != nil {

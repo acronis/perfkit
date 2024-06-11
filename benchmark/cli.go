@@ -22,14 +22,15 @@ type CommonOpts struct {
 
 // DatabaseOpts represents common flags for every test
 type DatabaseOpts struct {
-	Driver       string `long:"driver" description:"db driver (postgres|mysql|sqlite3)" default:"postgres" required:"false"`
-	Dsn          string `long:"dsn" description:"dsn connection string" default:"host=127.0.0.1 sslmode=disable user=test_user" required:"false"`
-	DontCleanup  bool   `long:"dont-cleanup" description:"do not cleanup DB content before/after the test in '-t all' mode" required:"false"`
-	UseTruncate  bool   `long:"use-truncate" description:"use TRUNCATE instead of DROP TABLE in cleanup procedure" required:"false"`
-	MaxOpenConns int    `long:"maxopencons" description:"Set sql/db MaxOpenConns per worker, default value is set to 2 because the benchmark uses it's own workers pool" default:"2" required:"false"`
-	MySQLEngine  string `long:"mysql-engine" description:"mysql engine (innodb|myisam|xpand|...)" default:"innodb" required:"false"`
-	Reconnect    bool   `long:"reconnect" description:"reconnect to DB before every test iteration" required:"false"`
-	DryRun       bool   `long:"dry-run" description:"do not execute any INSERT/UPDATE/DELETE queries on DB-side" required:"false"`
+	Driver           string `long:"driver" description:"db driver (postgres|mysql|sqlite3)" default:"postgres" required:"false"`
+	Dsn              string `long:"dsn" description:"dsn connection string" default:"host=127.0.0.1 sslmode=disable user=test_user" required:"false"`
+	DontCleanup      bool   `long:"dont-cleanup" description:"do not cleanup DB content before/after the test in '-t all' mode" required:"false"`
+	UseTruncate      bool   `long:"use-truncate" description:"use TRUNCATE instead of DROP TABLE in cleanup procedure" required:"false"`
+	MaxOpenConns     int    `long:"maxopencons" description:"Set sql/db MaxOpenConns per worker, default value is set to 2 because the benchmark uses it's own workers pool" default:"2" required:"false"`
+	MySQLEngine      string `long:"mysql-engine" description:"mysql engine (innodb|myisam|xpand|...)" default:"innodb" required:"false"`
+	Reconnect        bool   `long:"reconnect" description:"reconnect to DB before every test iteration" required:"false"`
+	DryRun           bool   `long:"dry-run" description:"do not execute any INSERT/UPDATE/DELETE queries on DB-side" required:"false"`
+	EmbeddedPostgres bool   `long:"embedded-postgres" description:"use embedded postgres and apply --driver postgres" required:"false"`
 }
 
 // CLI is a wrapper for go-flags library

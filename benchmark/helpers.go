@@ -306,7 +306,7 @@ func StringToBytes(str string) (int64, error) {
 	}
 
 	if str == "" {
-		return 0, fmt.Errorf("empty string")
+		return 0, fmt.Errorf("empty string") //nolint:perfsprint
 	}
 
 	for suffix, multiplier := range multipliers {

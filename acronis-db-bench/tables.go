@@ -451,7 +451,7 @@ var TestTableTimeSeriesSQL = TestTable{
 			value int {$notnull}
 		) {$engine};`,
 	CreateQueryPatchFuncs: []CreateQueryPatchFunc{
-		func(table string, query string, sql_driver string, sql_engine string) (string, error) {
+		func(table string, query string, sql_driver string, sql_engine string) (string, error) { //nolint:revive
 			if sql_driver == benchmark.CASSANDRA {
 				query = strings.ReplaceAll(query, "{$bigint_autoinc_pk}", "{$bigint_autoinc}")
 				query = strings.ReplaceAll(query, "value int {$notnull}", `value int,

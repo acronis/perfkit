@@ -1,4 +1,4 @@
-module acronis-db-bench
+module github.com/acronis/perfkit/acronis-db-bench
 
 go 1.21
 
@@ -7,7 +7,7 @@ toolchain go1.21.4
 replace github.com/acronis/perfkit/benchmark => ../benchmark
 
 require (
-	github.com/acronis/perfkit/benchmark v1.0.0
+	github.com/acronis/perfkit/benchmark v0.0.0-20240202110525-239dbf0ed9d5
 	github.com/denisenkom/go-mssqldb v0.12.3
 	github.com/google/uuid v1.6.0
 	github.com/lib/pq v1.10.9

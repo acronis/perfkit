@@ -6,12 +6,14 @@ export PATH := $(GOBIN):$(PATH)
 BENCH_FLAGS ?= -cpuprofile=cpu.pprof -memprofile=mem.pprof -benchmem
 
 # Directories containing independent Go modules.
-MODULE_DIRS = benchmark benchmark-db
+MODULE_DIRS = benchmark acronis-db-bench acronis-restrelay-bench
 
-GO_INSTALLABLE_DIRS = benchmark-db
+GO_INSTALLABLE_DIRS = acronis-db-bench
 
 # Directories that we want to test and track coverage for.
-TEST_DIRS = benchmark
+TEST_DIRS = benchmark acronis-restrelay-bench
+
+include acronis-restrelay-bench/restrelay-bench.Makefile
 
 .PHONY: all
 all: lint cover
@@ -54,13 +56,16 @@ go-install:
 
 .PHONY: install-acronis-db-bench
 install-acronis-db-bench:
-	@$(MAKE) GO_INSTALLABLE_DIRS=benchmark-db install
+	@$(MAKE) GO_INSTALLABLE_DIRS=acronis-db-bench install
+
+.PHONY: build-acronis-restrelay-bench
+build-acronis-restrelay-bench: build-restrelay-bench
 
 .PHONY: up-version
 up-version:
 	@$(foreach dir,$(MODULE_DIRS), ( \
 	    cd $(dir) ; \
 		echo "Up version for `basename $(dir)` to `cat VERSION`" ; \
-		git tag "`basename $(dir)`-v`cat VERSION`" ; \
-		git push origin "`basename $(dir)`-v`cat VERSION`") ; \
+		git tag "`basename $(dir)`/v`cat VERSION`" ; \
+		git push origin "`basename $(dir)`/v`cat VERSION`") ; \
 	) true

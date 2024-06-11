@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -59,6 +58,7 @@ type TenantsCache struct {
 	tenantsWorkingSetLimit    int
 	ctisWorkingSetLimit       int
 	logger                    *Logger
+	benchmark                 *Benchmark
 	uuids                     []TenantUUID
 	ctiUuids                  []CTIUUID
 	tenantStructureRandomizer *tenantStructureRandomizer
@@ -66,10 +66,11 @@ type TenantsCache struct {
 }
 
 // NewTenantsCache creates a new TenantsCache instance
-func NewTenantsCache(logger *Logger) *TenantsCache {
+func NewTenantsCache(benchmark *Benchmark) *TenantsCache {
 	return &TenantsCache{
 		tenantsWorkingSetLimit: 0,
-		logger:                 logger,
+		logger:                 benchmark.Logger,
+		benchmark:              benchmark,
 		uuids:                  []TenantUUID{},
 	}
 }
@@ -99,8 +100,7 @@ func (tc *TenantsCache) SetCTIsWorkingSet(limit int) {
 // Exit prints message and exits with -1 code
 func (tc *TenantsCache) Exit(msg string) {
 	tc.exitLock.Lock() // ugly, but prevents multiple messages on exit
-	fmt.Print(msg)
-	os.Exit(-1)
+	tc.benchmark.Exit(msg)
 }
 
 // TenantsDDLSQL is a DDL for tenants table for MySQL and PostgreSQL databases
@@ -344,6 +344,14 @@ func (tc *TenantsCache) CreateTables(c *DBConnector) {
 	}
 }
 
+// InitTables initializes tables for tenants cache
+func (tc *TenantsCache) InitTables(c *DBConnector) {
+	c.Log(LogTrace, "init tenant tables")
+
+	c.ExecOrExit(fmt.Sprintf("INSERT INTO %s (id, uuid, name, kind, parent_id, nesting_level) VALUES (1, '', '/', 'r', 1, 0)", TableNameTenants))
+	c.ExecOrExit(fmt.Sprintf("INSERT INTO %s (parent_id, child_id, parent_kind, barrier) VALUES (1, 1, 'r', 0)", TableNameTenantClosure))
+}
+
 // DropTables drops all tables created by this test
 func (tc *TenantsCache) DropTables(c *DBConnector) {
 	c.Log(LogTrace, "drop tenant tables")
@@ -352,6 +360,10 @@ func (tc *TenantsCache) DropTables(c *DBConnector) {
 	c.DropTable(TableNameTenantClosure)
 	c.DropTable(TableNameCtiEntities)
 	c.DropTable(TableNameCtiProvisioning)
+
+	if c.DbOpts.UseTruncate {
+		tc.InitTables(c)
+	}
 }
 
 // PopulateUuidsFromDB populates uuids from DB table acronis_db_bench_cybercache_tenants

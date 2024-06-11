@@ -184,7 +184,7 @@ func testInsertGeneric(b *benchmark.Benchmark, testDesc *TestDesc) {
 	}
 
 	if b.TestOpts.(*TestOpts).DBOpts.Driver == benchmark.CLICKHOUSE {
-		sql := fmt.Sprintf("INSERT INTO %s", table.TableName)
+		sql := fmt.Sprintf("INSERT INTO %s", table.TableName) //nolint:perfsprint
 		b.Worker = func(workerId int) (loops int) {
 			workerData := b.WorkerData[workerId].(*DBWorkerData)
 			rows := table.RowsCount

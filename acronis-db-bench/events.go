@@ -173,6 +173,13 @@ func (e *EventBus) CreateTables() {
 // DropTables drops all the tables created by CreateTables()
 func (e *EventBus) DropTables() {
 	c := e.workerConn
+	var constraints []benchmark.DbConstraint
+
+	if c.DbOpts.UseTruncate {
+		constraints = c.ReadConstraints()
+		c.RemoveConstraints(constraints)
+	}
+
 	c.DropTable("acronis_db_bench_eventbus_consolidated")
 	c.DropTable("acronis_db_bench_eventbus_archive")
 	c.DropTable("acronis_db_bench_eventbus_distrlocks")
@@ -181,9 +188,13 @@ func (e *EventBus) DropTables() {
 	c.DropTable("acronis_db_bench_eventbus_stream")
 	c.DropTable("acronis_db_bench_eventbus_events")
 	c.DropTable("acronis_db_bench_eventbus_initial_seeding_cursors")
+	c.DropTable("acronis_db_bench_eventbus_data")
 	c.DropTable("acronis_db_bench_eventbus_event_types")
 	c.DropTable("acronis_db_bench_eventbus_topics")
-	c.DropTable("acronis_db_bench_eventbus_data")
+
+	if c.DbOpts.UseTruncate {
+		c.RestoreConstraints(constraints)
+	}
 }
 
 // InsertEvent inserts a single event into the event bus

@@ -1,2 +1,10 @@
+.idea
+
 cover.html
 cover.out
+
+restrelay-bench-client
+restrelay-bench-server
+restrelay-bench-kube-configurer
+
+topology.yml.bak

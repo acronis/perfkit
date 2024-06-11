@@ -1,0 +1,52 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{.ServiceName}}
+  labels:
+    app: {{.ServiceApp}}
+    label: {{.ServiceName}}
+spec:
+  {{.OptionalNodePort}}
+  ports:
+    - port: 8080
+      {{.OutputPort}}
+  selector: 
+    app: {{.ServiceApp}}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{.DeploymentName}}
+  labels:
+    app: {{.ServiceApp}}
+spec:
+  replicas: {{.Replicas}}
+  selector:
+    matchLabels:
+      app: {{.ServiceApp}}
+      label: {{.ServiceName}}
+  template:
+    metadata:
+      labels:
+        app: {{.ServiceApp}}
+        label: {{.ServiceName}}
+    spec:
+      containers:
+      - name: {{.ContainerName}}
+        image: {{.ImageName}}
+        ports:
+        - containerPort: 8080
+        env:
+        - name: NEXT_SERVICE
+          value: "{{.NextService}}"
+        - name: NUMBER_IN_CHAIN
+          value: "{{.NumberInChain}}"
+        - name: PORT
+          value: "{{.Port}}"
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+          limits:
+            cpu: "1"
+            memory: "512Mi"

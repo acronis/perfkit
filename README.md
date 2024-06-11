@@ -4,7 +4,8 @@ perfkit is a set of performance tools.
 
 It includes:
 * [benchmark](benchmark) - a library for writing benchmarks
-* [benchmark-db](benchmark-db) - a tool to run database benchmarks
+* [acronis-db-bench](acronis-db-bench) - a tool to run database benchmarks
+* [acronis-restrelay-bench](acronis-restrelay-bench) - a tool to run end-to-end cloud deployment benchmarks
 
 ## Getting Started
 
