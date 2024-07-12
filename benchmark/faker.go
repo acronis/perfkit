@@ -3,7 +3,7 @@ package benchmark
 import (
 	"fmt"
 	"math/rand"
-	"strings"
+	"os"
 	"sync"
 	"time"
 )
@@ -207,9 +207,16 @@ func NewRandomizerWorker(seed int64, workerID int) *RandomizerWorker {
 	return &rw
 }
 
+// RandomizerPlugin is a
+type RandomizerPlugin interface {
+	GenCommonFakeValue(columnType string, rw *RandomizerWorker, cardinality int) (bool, interface{})
+	GenFakeValue(columnType string, rw *RandomizerWorker, cardinality int, preGenerated map[string]interface{}) (bool, interface{})
+}
+
 // Randomizer is a struct for storing randomizer data
 type Randomizer struct {
-	worker map[int]*RandomizerWorker // worker is a map, id -> RandomizerWorker
+	worker  map[int]*RandomizerWorker // worker is a map, id -> RandomizerWorker
+	plugins map[string]RandomizerPlugin
 }
 
 // NewRandomizer returns new Randomizer object with given seed and workers count
@@ -229,10 +236,19 @@ func NewRandomizer(seed int64, workers int) *Randomizer {
 func (rz *Randomizer) GetWorker(workerID int) *RandomizerWorker {
 	rw, exists := rz.worker[workerID]
 	if !exists {
-		FatalError(fmt.Sprintf("random generator for worker %d has not been initialized, probably NewRandomizer() was not initilized properly", workerID))
+		fmt.Printf("fatal error: %v", fmt.Sprintf("random generator for worker %d has not been initialized, probably NewRandomizer() was not initilized properly", workerID))
+		os.Exit(127)
 	}
 
 	return rw
+}
+
+func (rz *Randomizer) RegisterPlugin(name string, plugin RandomizerPlugin) { //nolint:revive
+	if rz.plugins == nil {
+		rz.plugins = make(map[string]RandomizerPlugin)
+	}
+
+	rz.plugins[name] = plugin
 }
 
 /*
@@ -249,7 +265,7 @@ type DBFakeColumnConf struct {
 }
 
 // GenFakeValue generates fake value for given column type
-func (b *Benchmark) GenFakeValue(workerID int, columnType string, columnName string, cardinality int, maxsize int, minsize int, tenantUUID TenantUUID) interface{} {
+func (b *Benchmark) GenFakeValue(workerID int, columnType string, columnName string, cardinality int, maxsize int, minsize int, preGenerated map[string]interface{}) interface{} {
 	rw := b.Randomizer.GetWorker(workerID)
 
 	switch columnType {
@@ -270,17 +286,6 @@ func (b *Benchmark) GenFakeValue(workerID int, columnType string, columnName str
 		return rw.Intn(cardinality)
 	case "bigint":
 		return rand.Int63()
-	case "tenant_uuid":
-		return tenantUUID
-	case "tenant_uuid_bound_id":
-		return b.TenantsCache.GetTenantUuidBoundId(rw, tenantUUID, cardinality)
-	case "cti_uuid":
-		ret, err := b.TenantsCache.GetRandomCTIUUID(rw, cardinality)
-		if err != nil {
-			b.Exit(err.Error())
-		}
-
-		return ret
 	case "string":
 		return b.RandStringBytes(workerID, columnName+"_", cardinality, maxsize, minsize, true)
 	case "rstring":
@@ -328,29 +333,16 @@ func (b *Benchmark) GenFakeValue(workerID int, columnType string, columnName str
 
 		return blob
 	default:
+		for _, plugin := range b.Randomizer.plugins {
+			if ok, value := plugin.GenFakeValue(columnType, rw, cardinality, preGenerated); ok {
+				return value
+			}
+		}
+
 		b.Exit("generateParameter: unsupported parameter '%s'", columnType)
 
 		return ""
 	}
-}
-
-// getTenantUUID returns random tenant_uuid value for given workerID
-func (b *Benchmark) getTenantUUID(workerID int, colConfs *[]DBFakeColumnConf) (tenantUUID TenantUUID) {
-	var err error
-	rw := b.Randomizer.GetWorker(workerID)
-
-	for _, c := range *colConfs {
-		if c.ColumnType == "tenant_uuid" {
-			tenantUUID, err = b.TenantsCache.GetRandomTenantUUID(rw, c.Cardinality)
-			if err != nil {
-				b.Exit(err.Error())
-			}
-
-			return
-		}
-	}
-
-	return
 }
 
 // columnRequired returns true if given column is required
@@ -372,14 +364,26 @@ func columnRequired(column string, columns []string) bool { //nolint:unused
 func (b *Benchmark) GenFakeData(workerID int, colConfs *[]DBFakeColumnConf, WithAutoInc bool) ([]string, []interface{}) {
 	columns := make([]string, 0, len(*colConfs))
 	values := make([]interface{}, 0, len(*colConfs))
-	tenantUUID := b.getTenantUUID(workerID, colConfs)
+	rw := b.Randomizer.GetWorker(workerID)
+
+	var preGenerated map[string]interface{}
+	for _, plugin := range b.Randomizer.plugins {
+		for _, c := range *colConfs {
+			if exists, value := plugin.GenCommonFakeValue(c.ColumnType, rw, c.Cardinality); exists {
+				if preGenerated == nil {
+					preGenerated = make(map[string]interface{})
+				}
+				preGenerated[c.ColumnType] = value
+			}
+		}
+	}
 
 	for _, c := range *colConfs {
 		if c.ColumnType == "autoinc" && !WithAutoInc {
 			continue
 		}
 		columns = append(columns, c.ColumnName)
-		values = append(values, b.GenFakeValue(workerID, c.ColumnType, c.ColumnName, c.Cardinality, c.MaxSize, c.MinSize, tenantUUID))
+		values = append(values, b.GenFakeValue(workerID, c.ColumnType, c.ColumnName, c.Cardinality, c.MaxSize, c.MinSize, preGenerated))
 	}
 
 	return columns, values
@@ -388,36 +392,26 @@ func (b *Benchmark) GenFakeData(workerID int, colConfs *[]DBFakeColumnConf, With
 // GenFakeDataAsMap generates fake data for given column configuration as map
 func (b *Benchmark) GenFakeDataAsMap(workerID int, colConfs *[]DBFakeColumnConf, WithAutoInc bool) *map[string]interface{} {
 	ret := make(map[string]interface{}, len(*colConfs))
-	tenantUUID := b.getTenantUUID(workerID, colConfs)
+	rw := b.Randomizer.GetWorker(workerID)
+
+	var preGenerated map[string]interface{}
+	for _, plugin := range b.Randomizer.plugins {
+		for _, c := range *colConfs {
+			if exists, value := plugin.GenCommonFakeValue(c.ColumnType, rw, c.Cardinality); exists {
+				if preGenerated == nil {
+					preGenerated = make(map[string]interface{})
+				}
+				preGenerated[c.ColumnType] = value
+			}
+		}
+	}
 
 	for _, c := range *colConfs {
 		if c.ColumnType == "autoinc" && !WithAutoInc {
 			continue
 		}
-		ret[c.ColumnName] = b.GenFakeValue(workerID, c.ColumnType, c.ColumnName, c.Cardinality, c.MaxSize, c.MinSize, tenantUUID)
+		ret[c.ColumnName] = b.GenFakeValue(workerID, c.ColumnType, c.ColumnName, c.Cardinality, c.MaxSize, c.MinSize, preGenerated)
 	}
 
 	return &ret
-}
-
-// GenDBParameterPlaceholders generates placeholders for given start and count
-func GenDBParameterPlaceholders(start int, count int) string {
-	var ret = make([]string, count)
-	end := start + count
-	for i := start; i < end; i++ {
-		ret[i-start] = fmt.Sprintf("$%d", i+1)
-	}
-
-	return strings.Join(ret, ",")
-}
-
-// GenDBParameterPlaceholdersCassandra generates placeholders for given start and count
-func GenDBParameterPlaceholdersCassandra(start int, count int) string {
-	var ret = make([]string, count)
-	end := start + count
-	for i := start; i < end; i++ {
-		ret[i-start] = "?"
-	}
-
-	return strings.Join(ret, ",")
 }

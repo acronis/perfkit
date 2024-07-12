@@ -1,0 +1,20 @@
+version: '3.4'
+
+x-logging:
+  &logging
+  driver: gelf
+  options:
+    gelf-address: udp://${GELF_IP}:${GELF_PORT}
+
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:23.9.1.1854-alpine
+    environment:
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+      CLICKHOUSE_DB: perfkit_db_ci
+      CLICKHOUSE_USER: username
+      CLICKHOUSE_PASSWORD: password
+    logging: *logging
+    ports:
+      - "8123:8123"
+      - "9000:9000"

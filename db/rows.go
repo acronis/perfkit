@@ -1,4 +1,4 @@
-package benchmark
+package db
 
 import (
 	"fmt"
@@ -7,17 +7,45 @@ import (
 	"strings"
 )
 
-type dbRow []interface{}
+type Row interface {
+	Scan(dest ...any) error
+}
 
-// DBRows is a struct for storing DB rows (as a slice of dbRow) and current index
-type DBRows struct {
-	data []dbRow
+// Rows is a struct for storing DB rows (as a slice of Row) and current index
+type Rows interface {
+	Next() bool
+	Err() error
+	Scan(dest ...interface{}) error
+	Close() error
+	Dump() string
+}
+
+type surrogateRowsRow []interface{}
+
+// SurrogateRows is a struct for storing DB rows (as a slice of dbRow) and current index
+type SurrogateRows struct {
+	data []surrogateRowsRow
 	idx  int
+}
+
+// Next implements sql.Rows interface for DBRows struct (used in tests)
+func (r *SurrogateRows) Next() bool {
+	if r.idx < len(r.data) {
+		r.idx++
+
+		return true
+	}
+
+	return false
+}
+
+func (r *SurrogateRows) Err() error {
+	return nil
 }
 
 // Scan implements sql.Rows interface for DBRows struct (used in tests)
 // and returns error if conversion is not implemented
-func (r *DBRows) Scan(dest ...interface{}) error {
+func (r *SurrogateRows) Scan(dest ...interface{}) error {
 	row := r.data[r.idx-1]
 
 	for i := range row {
@@ -90,17 +118,17 @@ func (r *DBRows) Scan(dest ...interface{}) error {
 			dv.Elem().SetInt(sv.Int())
 
 			continue
-		} else if sv.Kind() == reflect.TypeOf(TenantUUID("")).Kind() && dv.Elem().Kind() == reflect.String {
-			dv.Elem().SetString(sv.Interface().(string))
+			// } else if sv.Kind() == reflect.TypeOf(TenantUUID("")).Kind() && dv.Elem().Kind() == reflect.String {
+			// 	dv.Elem().SetString(sv.Interface().(string))
 
-			continue
+			//	continue
 		} else if sv.Type().AssignableTo(dv.Elem().Type()) {
 			dv.Elem().Set(sv)
 
 			continue
 		}
-		printStack()
-		fmt.Printf("xxx internal error: DBRows.Scan() - convertion of '%v' (%v) to '%v' is not implemented yet\n", sv.Kind(), reflect.TypeOf(TenantUUID("")).Kind(), dv.Elem().Kind())
+		PrintStack()
+		// fmt.Printf("xxx internal error: DBRows.Scan() - convertion of '%v' (%v) to '%v' is not implemented yet\n", sv.Kind(), reflect.TypeOf(TenantUUID("")).Kind(), dv.Elem().Kind())
 
 		return fmt.Errorf("internal error: DBRows.Scan() - convertion of '%v' to '%v' is not implemented yet", sv.Kind(), dv.Elem().Kind())
 	}
@@ -108,24 +136,13 @@ func (r *DBRows) Scan(dest ...interface{}) error {
 	return nil
 }
 
-// Next implements sql.Rows interface for DBRows struct (used in tests)
-func (r *DBRows) Next() bool {
-	if r.idx < len(r.data) {
-		r.idx++
-
-		return true
-	}
-
-	return false
-}
-
 // Close implements sql.Rows interface for DBRows struct (used in tests)
-func (r *DBRows) Close() error {
+func (r *SurrogateRows) Close() error {
 	return nil
 }
 
 // Dump returns string representation of DBRows struct (used in tests)
-func (r *DBRows) Dump() string {
+func (r *SurrogateRows) Dump() string {
 	ret := make([]string, 0, len(r.data))
 	for n, row := range r.data {
 		if n > 10 {

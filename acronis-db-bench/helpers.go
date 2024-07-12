@@ -2,12 +2,20 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"regexp"
 	"sort"
 	"strings"
 
 	"github.com/acronis/perfkit/benchmark"
+	"github.com/acronis/perfkit/db"
 )
+
+// FatalError prints error message and exits with code 127
+func FatalError(err string) {
+	fmt.Printf("fatal error: %v", err)
+	os.Exit(127)
+}
 
 /*
  * Helpers
@@ -17,9 +25,14 @@ func createTables(b *benchmark.Benchmark) {
 	dbOpts := b.TestOpts.(*TestOpts).DBOpts
 	usedTables := benchmark.NewSet()
 
+	var dialectName, err = db.GetDialectName(dbOpts.ConnString)
+	if err != nil {
+		b.Exit(err)
+	}
+
 	_, tests := GetTests()
 	for _, t := range tests {
-		if t.table.TableName != "" && t.dbIsSupported(dbOpts.Driver) {
+		if t.table.TableName != "" && t.dbIsSupported(dialectName) {
 			usedTables.Add(t.table.TableName)
 		}
 	}
@@ -32,8 +45,8 @@ func createTables(b *benchmark.Benchmark) {
 			tableDesc.Create(c, b)
 		}
 	}
-	b.TenantsCache.CreateTables(c)
-	c.CreateSequence(benchmark.SequenceName)
+	b.Vault.(*DBTestData).TenantsCache.CreateTables(c.database)
+	c.database.CreateSequence(SequenceName)
 	c.Release()
 
 	eb := NewEventBus(&dbOpts, b.Logger)
@@ -42,8 +55,13 @@ func createTables(b *benchmark.Benchmark) {
 	fmt.Printf("done\n")
 }
 
-func dbConnector(b *benchmark.Benchmark) *benchmark.DBConnector {
-	return benchmark.NewDBConnector(&b.TestOpts.(*TestOpts).DBOpts, 0, b.Logger, 1)
+func dbConnector(b *benchmark.Benchmark) *DBConnector {
+	var conn, err = NewDBConnector(&b.TestOpts.(*TestOpts).DBOpts, 0, b.Logger, 1)
+	if err != nil {
+		FatalError(err.Error())
+	}
+
+	return conn
 }
 
 func cleanupTables(b *benchmark.Benchmark) {
@@ -60,11 +78,15 @@ func cleanupTables(b *benchmark.Benchmark) {
 	c := dbConnector(b)
 
 	for tableName := range TestTables {
-		c.DropTable(tableName)
+		c.database.DropTable(tableName)
 	}
 
-	b.TenantsCache.DropTables(c)
-	c.DropSequence(benchmark.SequenceName)
+	if b.Vault.(*DBTestData).TenantsCache == nil {
+		b.Vault.(*DBTestData).TenantsCache = NewTenantsCache(b)
+	}
+
+	b.Vault.(*DBTestData).TenantsCache.DropTables(c.database)
+	c.database.DropSequence(SequenceName)
 	c.Release()
 
 	eb := NewEventBus(&b.TestOpts.(*TestOpts).DBOpts, b.Logger)
@@ -82,12 +104,25 @@ func getDBInfo(b *benchmark.Benchmark, content []string) (ret string) {
 	}
 	sort.Strings(tableNames)
 
+	var tableSchemaInfo, tablesVolumeInfo []string
+	var err error
+
+	tableSchemaInfo, err = c.database.GetTablesSchemaInfo(tableNames)
+	if err != nil {
+		FatalError(err.Error())
+	}
+
+	tablesVolumeInfo, err = c.database.GetTablesVolumeInfo(tableNames)
+	if err != nil {
+		FatalError(err.Error())
+	}
+
 	ret += "\n"
 	ret += fmt.Sprintf("DATABASE INFO:\n\n%s\n", strings.Join(content, "\n"))
 	ret += "\nSCHEMAS / INDEXES INFO:\n\n"
-	ret += strings.Join(c.GetTablesSchemaInfo(tableNames), "\n")
+	ret += strings.Join(tableSchemaInfo, "\n")
 	ret += "\nTABLES INFO:\n\n"
-	ret += strings.Join(c.GetTablesVolumeInfo(tableNames), "\n")
+	ret += strings.Join(tablesVolumeInfo, "\n")
 	ret += "\n\n"
 
 	c.Release()
@@ -95,8 +130,8 @@ func getDBInfo(b *benchmark.Benchmark, content []string) (ret string) {
 	return ret
 }
 
-func formatSQL(sqlTemlate, driver string) string {
-	if driver == benchmark.POSTGRES {
+func formatSQL(sqlTemlate string, dialectName db.DialectName) string {
+	if dialectName == db.POSTGRES {
 		return sqlTemlate
 	}
 

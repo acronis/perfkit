@@ -6,10 +6,11 @@ import (
 	"strings"
 
 	"github.com/acronis/perfkit/benchmark"
+	"github.com/acronis/perfkit/db"
 )
 
 // CreateQueryPatchFunc is a function to patch create query for specific DB
-type CreateQueryPatchFunc func(table string, query string, sql_driver string, sql_engine string) (string, error)
+type CreateQueryPatchFunc func(table string, query string, dialect db.DialectName) (string, error)
 
 // TestTable represents table to be used in tests and benchmarks
 type TestTable struct {
@@ -20,7 +21,7 @@ type TestTable struct {
 	UpdateColumns         []string
 	CreateQuery           string
 	CreateQueryPatchFuncs []CreateQueryPatchFunc
-	Indexes               []string
+	Indexes               [][]string
 
 	// runtime information
 	RowsCount uint64
@@ -134,7 +135,7 @@ func (t *TestTable) GetColumnsForUpdate(withAutoInc bool) *[]benchmark.DBFakeCol
 }
 
 // Create creates table in DB using provided DBConnector
-func (t *TestTable) Create(c *benchmark.DBConnector, b *benchmark.Benchmark) {
+func (t *TestTable) Create(c *DBConnector, b *benchmark.Benchmark) {
 	if t.TableName == "" {
 		return
 	}
@@ -149,16 +150,16 @@ func (t *TestTable) Create(c *benchmark.DBConnector, b *benchmark.Benchmark) {
 	var err error
 
 	for _, patch := range t.CreateQueryPatchFuncs {
-		tableCreationQuery, err = patch(t.TableName, tableCreationQuery, c.DbOpts.Driver, c.DbOpts.MySQLEngine)
+		tableCreationQuery, err = patch(t.TableName, tableCreationQuery, c.database.DialectName())
 		if err != nil {
 			b.Exit(err.Error())
 		}
 	}
 
-	c.CreateTable(t.TableName, tableCreationQuery)
+	c.database.CreateTable(t.TableName, nil, tableCreationQuery)
 
-	for n, columns := range t.Indexes {
-		c.CreateIndex(t.TableName, columns, n)
+	for _, columns := range t.Indexes {
+		c.database.CreateIndex(fmt.Sprintf("%s_%s_idx", t.TableName, strings.Join(columns, "_")), t.TableName, columns, db.IndexTypeBtree)
 	}
 }
 
@@ -198,7 +199,7 @@ var TestTableMedium = TestTable{
 			euc_id int {$notnull},
 			progress int {$null}
 			) {$engine};`,
-	Indexes: []string{"tenant_id"},
+	Indexes: [][]string{{"tenant_id"}},
 }
 
 var tableHeavySchema = `
@@ -313,27 +314,27 @@ var TestTableHeavy = TestTable{
 	InsertColumns: []string{}, // all
 	UpdateColumns: []string{"progress", "result_payload", "update_time_str", "update_time_ns", "completion_time_str", "completion_time_ns"},
 	CreateQuery:   `create table {table} (` + tableHeavySchema + `) {$engine};`,
-	Indexes: []string{
-		"uuid",
-		"completion_time_ns",
-		"cti_entity_uuid",
-		"tenant_id",
-		"euc_id",
-		"queue, state, affinity_agent_id, affinity_cluster_id, tenant_id, priority",
-		"queue, state, affinity_agent_id, affinity_cluster_id, euc_id, priority",
-		"update_time_ns",
-		"state, completion_time_ns",
-		"start_time_ns",
-		"enqueue_time_ns",
-		"resource_id",
-		"policy_id",
-		"result_code",
-		"resource_id, enqueue_time_ns",
-		"type",
-		"type, tenant_id, enqueue_time_ns",
-		"type, euc_id, enqueue_time_ns",
-		"queue, type, tenant_id",
-		"queue, type, euc_id",
+	Indexes: [][]string{
+		{"uuid"},
+		{"completion_time_ns"},
+		{"cti_entity_uuid"},
+		{"tenant_id"},
+		{"euc_id"},
+		{"queue", "state", "affinity_agent_id", "affinity_cluster_id", "tenant_id", "priority"},
+		{"queue", "state", "affinity_agent_id", "affinity_cluster_id", "euc_id", "priority"},
+		{"update_time_ns"},
+		{"state", "completion_time_ns"},
+		{"start_time_ns"},
+		{"enqueue_time_ns"},
+		{"resource_id"},
+		{"policy_id"},
+		{"result_code"},
+		{"resource_id", "enqueue_time_ns"},
+		{"type"},
+		{"type", "tenant_id", "enqueue_time_ns"},
+		{"type", "euc_id", "enqueue_time_ns"},
+		{"queue", "type", "tenant_id"},
+		{"queue", "type", "euc_id"},
 	},
 }
 
@@ -355,7 +356,7 @@ var TestTableBlob = TestTable{
 		timestamp bigint {$notnull},
 		data {$hugeblob} {$notnull}
 		) {$engine};`,
-	Indexes: []string{"tenant_id", "uuid"},
+	Indexes: [][]string{{"tenant_id"}, {"uuid"}},
 }
 
 // TestTableLargeObj is table to store large objects
@@ -375,7 +376,7 @@ var TestTableLargeObj = TestTable{
 		timestamp bigint not null,
 		oid int not null
 		) {$engine};`,
-	Indexes: []string{"tenant_id", "uuid"},
+	Indexes: [][]string{{"tenant_id"}, {"uuid"}},
 }
 
 // TestTableJSON is table to store JSON data
@@ -427,7 +428,7 @@ var TestTableJSON = TestTable{
 			) {$engine};
 			{$json_index}`,
 	CreateQueryPatchFuncs: []CreateQueryPatchFunc{JSONTableCreateQueryPatchFunc},
-	Indexes:               []string{"sequence", "created_at"},
+	Indexes:               [][]string{{"sequence"}, {"created_at"}},
 }
 
 // TestTableTimeSeriesSQL is table to store time series data
@@ -451,8 +452,8 @@ var TestTableTimeSeriesSQL = TestTable{
 			value int {$notnull}
 		) {$engine};`,
 	CreateQueryPatchFuncs: []CreateQueryPatchFunc{
-		func(table string, query string, sql_driver string, sql_engine string) (string, error) { //nolint:revive
-			if sql_driver == benchmark.CASSANDRA {
+		func(table string, query string, dialect db.DialectName) (string, error) { //nolint:revive
+			if dialect == db.CASSANDRA {
 				query = strings.ReplaceAll(query, "{$bigint_autoinc_pk}", "{$bigint_autoinc}")
 				query = strings.ReplaceAll(query, "value int {$notnull}", `value int,
 						PRIMARY KEY ((tenant_id, device_id, metric_id), id, ts)
@@ -462,7 +463,7 @@ var TestTableTimeSeriesSQL = TestTable{
 			return query, nil
 		},
 	},
-	Indexes: []string{"tenant_id", "device_id", "metric_id"},
+	Indexes: [][]string{{"tenant_id"}, {"device_id"}, {"metric_id"}},
 }
 
 // TestTableAdvmTasks is table to store tasks
@@ -519,7 +520,7 @@ var TestTableAdvmTasks = TestTable{
 
 			PRIMARY KEY (origin, id)
 			) {$engine};`,
-	Indexes: []string{"origin", "created_at", "result_code_indexed"},
+	Indexes: [][]string{{"origin"}, {"created_at"}, {"result_code_indexed"}},
 }
 
 // TestTableAdvmResources is table to store resources
@@ -556,7 +557,7 @@ var TestTableAdvmResources = TestTable{
 		
 			PRIMARY KEY (origin, resource_uuid, tenant_id)
 			) {$engine};`,
-	Indexes: []string{"origin", "type", "name"},
+	Indexes: [][]string{{"origin"}, {"type"}, {"name"}},
 }
 
 // TestTableAdvmResourcesStatuses is table to store resources statuses
@@ -584,7 +585,7 @@ var TestTableAdvmResourcesStatuses = TestTable{
 		
 			PRIMARY KEY (origin, resource_id)
 			) {$engine};`,
-	Indexes: []string{"origin", "state"},
+	Indexes: [][]string{{"origin"}, {"state"}},
 }
 
 // TestTableAdvmAgentsResources is table to store agents
@@ -606,7 +607,7 @@ var TestTableAdvmAgentsResources = TestTable{
 		
 			PRIMARY KEY (origin, agent_uuid, resource_id, tenant_id)
 			) {$engine};`,
-	Indexes: []string{"origin"},
+	Indexes: [][]string{{"origin"}},
 }
 
 // TestTableAdvmAgents is table to store agents
@@ -647,7 +648,7 @@ var TestTableAdvmAgents = TestTable{
 		
 			PRIMARY KEY (origin, uuid)
 			) {$engine};`,
-	Indexes: []string{"origin", "type", "name"},
+	Indexes: [][]string{{"origin"}, {"type"}, {"name"}},
 }
 
 // TestTableAdvmBackupResources is table to store backups
@@ -667,7 +668,7 @@ var TestTableAdvmBackupResources = TestTable{
 		
 			PRIMARY KEY (origin, backup_id, resource_uuid)
 			) {$engine};`,
-	Indexes: []string{"origin"},
+	Indexes: [][]string{{"origin"}},
 }
 
 // TestTableAdvmBackups is table to store backups
@@ -693,7 +694,7 @@ var TestTableAdvmBackups = TestTable{
 		
 			PRIMARY KEY (origin, id)
 			) {$engine};`,
-	Indexes: []string{"origin", "created_at", "archive_id"},
+	Indexes: [][]string{{"origin"}, {"created_at"}, {"archive_id"}},
 }
 
 // TestTableAdvmArchives is table to store archives
@@ -721,7 +722,7 @@ var TestTableAdvmArchives = TestTable{
 		
 			PRIMARY KEY (origin, id)
 			) {$engine};`,
-	Indexes: []string{"origin", "created_at", "vault_id"},
+	Indexes: [][]string{{"origin"}, {"created_at"}, {"vault_id"}},
 }
 
 // TestTableAdvmVaults is table to store vaults
@@ -744,7 +745,7 @@ var TestTableAdvmVaults = TestTable{
 		
 			PRIMARY KEY (origin, id)
 			) {$engine};`,
-	Indexes: []string{"origin", "name"},
+	Indexes: [][]string{{"origin"}, {"name"}},
 }
 
 // TestTableAdvmDevices is table to store devices
@@ -821,7 +822,7 @@ var TestTableAdvmDevices = TestTable{
 			
 			PRIMARY KEY (origin, id)
 			) {$engine};`,
-	Indexes: []string{"origin", "name", "type", "group_name", "registered_at", "agent_name", "agent_is_active"},
+	Indexes: [][]string{{"origin"}, {"name"}, {"type"}, {"group_name"}, {"registered_at"}, {"agent_name"}, {"agent_is_active"}},
 }
 
 // TestTableTenants is table to store tenants
@@ -860,21 +861,21 @@ var TestTables = map[string]TestTable{
 	"acronis_db_bench_advm_devices":              TestTableAdvmDevices,
 }
 
-func JSONTableCreateQueryPatchFunc(table string, query string, sql_driver string, sql_engine string) (string, error) { //nolint:revive
-	switch sql_driver {
-	case benchmark.MYSQL:
+func JSONTableCreateQueryPatchFunc(table string, query string, dialect db.DialectName) (string, error) { //nolint:revive
+	switch dialect {
+	case db.MYSQL:
 		query = strings.ReplaceAll(query, "{$json_type}", "json")
 		query = strings.ReplaceAll(query, "{$json_index}",
 			"ALTER TABLE acronis_db_bench_json ADD COLUMN _data_f0f0 VARCHAR(1024) AS (JSON_EXTRACT(json_data, '$.field0.field0')) STORED;"+
 				"ALTER TABLE acronis_db_bench_json ADD COLUMN _data_f0f0f0 VARCHAR(1024) AS (JSON_EXTRACT(json_data, '$.field0.field0.field0')) STORED;"+
 				"CREATE INDEX acronis_db_bench_json_idx_data_f0f0 ON acronis_db_bench_json(_data_f0f0);"+
 				"CREATE INDEX acronis_db_bench_json_idx_data_f0f0f0 ON acronis_db_bench_json(_data_f0f0f0);")
-	case benchmark.POSTGRES:
+	case db.POSTGRES:
 		query = strings.ReplaceAll(query, "{$json_type}", "jsonb")
 		query = strings.ReplaceAll(query, "{$json_index}",
 			"CREATE INDEX acronis_db_bench_json_idx_data ON acronis_db_bench_json USING GIN (json_data jsonb_path_ops)")
 	default:
-		return "", fmt.Errorf("unsupported driver: '%v', supported drivers are: postgres|mysql", sql_driver)
+		return "", fmt.Errorf("unsupported driver: '%v', supported drivers are: postgres|mysql", dialect)
 	}
 
 	return query, nil

@@ -1,0 +1,23 @@
+version: '3.4'
+
+x-logging:
+  &logging
+  driver: gelf
+  options:
+    gelf-address: udp://${GELF_IP}:${GELF_PORT}
+
+services:
+  mssql:
+    image: mcmoe/mssqldocker:v1.0.0
+    environment:
+      ACCEPT_EULA: Y
+      SA_PASSWORD: qwe123!@#
+      MSSQL_DB: perfkit_db_ci
+      MSSQL_USER: perfkit_db_runner
+      MSSQL_PASSWORD: qwe123!@#
+    logging: *logging
+    ports:
+      - "1433:1433"
+
+volumes:
+  mssql:

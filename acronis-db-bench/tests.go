@@ -1,14 +1,19 @@
 package main
 
 import (
+	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
 
 	mssql "github.com/denisenkom/go-mssqldb"
+	"github.com/gocraft/dbr/v2"
 	"github.com/lib/pq"
 
 	"github.com/acronis/perfkit/benchmark"
+	"github.com/acronis/perfkit/db"
 )
 
 const (
@@ -40,7 +45,7 @@ func (g *TestGroup) add(t *TestDesc) {
 	g.tests[t.name] = t
 	_, exists := allTests.tests[t.name]
 	if exists {
-		benchmark.FatalError("Internal error: test %s already defined")
+		FatalError("Internal error: test %s already defined")
 	}
 	allTests.tests[t.name] = t
 }
@@ -48,7 +53,7 @@ func (g *TestGroup) add(t *TestDesc) {
 // TestCategories is a list of all test categories
 var TestCategories = []string{TestSelect, TestUpdate, TestInsert, TestDelete, TestTransaction}
 
-type testWorkerFunc func(b *benchmark.Benchmark, c *benchmark.DBConnector, testDesc *TestDesc, batch int) (loops int)
+type testWorkerFunc func(b *benchmark.Benchmark, c *DBConnector, testDesc *TestDesc, batch int) (loops int)
 type orderByFunc func(b *benchmark.Benchmark) string //nolint:unused
 type launcherFunc func(b *benchmark.Benchmark, testDesc *TestDesc)
 
@@ -60,7 +65,7 @@ type TestDesc struct {
 	category    string
 	isReadonly  bool // indicates the test doesn't run DDL and doesn't modidy data
 	isDBRTest   bool
-	databases   []string
+	databases   []db.DialectName
 
 	table TestTable // SQL table name
 
@@ -68,7 +73,7 @@ type TestDesc struct {
 }
 
 // dbIsSupported returns true if the database is supported by the test
-func (t *TestDesc) dbIsSupported(db string) bool {
+func (t *TestDesc) dbIsSupported(db db.DialectName) bool {
 	for _, b := range t.databases {
 		if b == db {
 			return true
@@ -82,7 +87,7 @@ func (t *TestDesc) dbIsSupported(db string) bool {
 func (t *TestDesc) getDBs() string {
 	ret := "["
 
-	for _, db := range benchmark.GetDatabases() {
+	for _, db := range db.GetDatabases() {
 		if t.dbIsSupported(db.Driver) {
 			ret += db.Symbol
 		} else {
@@ -96,11 +101,11 @@ func (t *TestDesc) getDBs() string {
 
 var (
 	// ALL is a list of all supported databases
-	ALL = []string{benchmark.POSTGRES, benchmark.MYSQL, benchmark.MSSQL, benchmark.SQLITE, benchmark.CLICKHOUSE, benchmark.CASSANDRA}
+	ALL = []db.DialectName{db.POSTGRES, db.MYSQL, db.MSSQL, db.SQLITE, db.CLICKHOUSE, db.CASSANDRA}
 	// RELATIONAL is a list of all supported relational databases
-	RELATIONAL = []string{benchmark.POSTGRES, benchmark.MYSQL, benchmark.MSSQL, benchmark.SQLITE}
+	RELATIONAL = []db.DialectName{db.POSTGRES, db.MYSQL, db.MSSQL, db.SQLITE}
 	// PMWSA is a list of all supported databases except ClickHouse
-	PMWSA = []string{benchmark.POSTGRES, benchmark.MYSQL, benchmark.MSSQL, benchmark.SQLITE, benchmark.CASSANDRA}
+	PMWSA = []db.DialectName{db.POSTGRES, db.MYSQL, db.MSSQL, db.SQLITE, db.CASSANDRA}
 )
 
 // TestBaseAll tests all tests in the 'base' group
@@ -121,8 +126,8 @@ var TestPing = TestDesc{
 	isDBRTest:   false,
 	databases:   ALL,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
-		worker := func(b *benchmark.Benchmark, c *benchmark.DBConnector, testDesc *TestDesc, batch int) (loops int) { //nolint:revive
-			err := c.Ping()
+		worker := func(b *benchmark.Benchmark, c *DBConnector, testDesc *TestDesc, batch int) (loops int) { //nolint:revive
+			err := c.database.Ping(context.Background())
 			if err != nil {
 				return 0
 			}
@@ -146,34 +151,42 @@ var TestRawQuery = TestDesc{
 		query := b.TestOpts.(*TestOpts).BenchOpts.Query
 
 		var worker testWorkerFunc
+		var _ = b.TestOpts.(*TestOpts).BenchOpts.Explain
 
 		if strings.Contains(query, "{") {
-			worker = func(b *benchmark.Benchmark, c *benchmark.DBConnector, testDesc *TestDesc, batch int) (loops int) { //nolint:revive
+			worker = func(b *benchmark.Benchmark, c *DBConnector, testDesc *TestDesc, batch int) (loops int) { //nolint:revive
 				q := query
 				if strings.Contains(q, "{CTI}") {
 					rw := b.Randomizer.GetWorker(c.WorkerID)
-					ctiUUID, err := b.TenantsCache.GetRandomCTIUUID(rw, 0)
+					ctiUUID, err := b.Vault.(*DBTestData).TenantsCache.GetRandomCTIUUID(rw, 0)
 					if err != nil {
-						b.Exit(err.Error())
+						b.Exit(err)
 					}
 					q = strings.Replace(q, "{CTI}", "'"+string(ctiUUID)+"'", -1)
 				}
 				if strings.Contains(query, "{TENANT}") {
 					rw := b.Randomizer.GetWorker(c.WorkerID)
-					tenantUUID, err := b.TenantsCache.GetRandomTenantUUID(rw, 0)
+					tenantUUID, err := b.Vault.(*DBTestData).TenantsCache.GetRandomTenantUUID(rw, 0)
 					if err != nil {
-						b.Exit(err.Error())
+						b.Exit(err)
 					}
 					q = strings.Replace(q, "{TENANT}", "'"+string(tenantUUID)+"'", -1)
 				}
 				fmt.Printf("query %s\n", q)
-				c.SelectRaw(b.TestOpts.(*TestOpts).BenchOpts.Explain, q)
+
+				var session = c.database.Session(c.database.Context(context.Background()))
+				if _, err := session.Query(q); err != nil {
+					b.Exit(err)
+				}
 
 				return 1
 			}
 		} else {
-			worker = func(b *benchmark.Benchmark, c *benchmark.DBConnector, testDesc *TestDesc, batch int) (loops int) { //nolint:revive
-				c.SelectRaw(b.TestOpts.(*TestOpts).BenchOpts.Explain, query)
+			worker = func(b *benchmark.Benchmark, c *DBConnector, testDesc *TestDesc, batch int) (loops int) {
+				var session = c.database.Session(c.database.Context(context.Background()))
+				if _, err := session.Query(query); err != nil {
+					b.Exit(err)
+				}
 
 				return 1
 			}
@@ -192,31 +205,22 @@ var TestSelectOne = TestDesc{
 	isDBRTest:   false,
 	databases:   ALL,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
-		worker := func(b *benchmark.Benchmark, c *benchmark.DBConnector, testDesc *TestDesc, batch int) (loops int) { //nolint:revive
-			c.SelectRaw(b.TestOpts.(*TestOpts).BenchOpts.Explain, "SELECT 1")
+		worker := func(b *benchmark.Benchmark, c *DBConnector, testDesc *TestDesc, batch int) (loops int) { //nolint:revive
+			var _ = b.TestOpts.(*TestOpts).BenchOpts.Explain
 
-			return 1
-		}
-		testGeneric(b, testDesc, worker, 0)
-	},
-}
-
-// TestSelectOneDBR tests do 'SELECT 1' using golang DBR query builder
-var TestSelectOneDBR = TestDesc{
-	name:        "dbr-select-1",
-	metric:      "select/sec",
-	description: "do 'SELECT 1' using golang DBR query builder",
-	category:    TestSelect,
-	isReadonly:  true,
-	isDBRTest:   true,
-	databases:   RELATIONAL,
-	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
-		worker := func(b *benchmark.Benchmark, c *benchmark.DBConnector, testDesc *TestDesc, batch int) (loops int) { //nolint:revive
 			var ret int
-			if err := c.DbrSess().Select("1").LoadOne(&ret); err != nil {
-				b.Exit("DBRSelect load error: %v", err)
+			switch rawSession := c.database.RawSession().(type) {
+			case *dbr.Session:
+				if err := rawSession.Select("1").LoadOne(&ret); err != nil {
+					b.Exit("DBRSelect load error: %v", err)
+				}
+			case *sql.DB:
+				if err := rawSession.QueryRow("SELECT 1").Scan(&ret); err != nil {
+					b.Exit("can't do 'SELECT 1': %v", err)
+				}
+			default:
+				b.Exit("unknown driver: '%v', supported drivers are: postgres|sqlite|mysql|mssql", c.database.DialectName())
 			}
-			c.DBRLogQuery(ret)
 
 			return 1
 		}
@@ -235,11 +239,13 @@ var TestSelectNextVal = TestDesc{
 	databases:   RELATIONAL,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
 		c := dbConnector(b)
-		c.CreateSequence(benchmark.SequenceName)
-		c.Close()
+		c.database.CreateSequence(SequenceName)
 
-		worker := func(b *benchmark.Benchmark, c *benchmark.DBConnector, testDesc *TestDesc, batch int) (loops int) { //nolint:revive
-			c.GetNextVal(benchmark.SequenceName)
+		worker := func(b *benchmark.Benchmark, c *DBConnector, testDesc *TestDesc, batch int) (loops int) { //nolint:revive
+			var session = c.database.Session(c.database.Context(context.Background()))
+			if _, err := session.GetNextVal(SequenceName); err != nil {
+				b.Exit(err)
+			}
 
 			return 1
 		}
@@ -490,21 +496,39 @@ var TestSelectHeavyForUpdateSkipLocked = TestDesc{
 		var query string
 		max := b.CommonOpts.Workers*2 + 1
 
-		switch b.TestOpts.(*TestOpts).DBOpts.Driver {
-		case benchmark.POSTGRES, benchmark.MYSQL:
-			query = fmt.Sprintf("SELECT id, progress FROM acronis_db_bench_heavy WHERE id < %d LIMIT 1 FOR UPDATE SKIP LOCKED", max)
-		case benchmark.MSSQL:
-			query = fmt.Sprintf("SELECT TOP(1) id, progress FROM acronis_db_bench_heavy WITH (UPDLOCK, READPAST, ROWLOCK) WHERE id < %d", max)
-		default:
-			b.Exit("unsupported driver: '%v', supported drivers are: %s|%s|%s", b.TestOpts.(*TestOpts).DBOpts.Driver, benchmark.POSTGRES, benchmark.MYSQL, benchmark.MSSQL)
+		var dialectName, err = db.GetDialectName(b.TestOpts.(*TestOpts).DBOpts.ConnString)
+		if err != nil {
+			b.Exit(err)
 		}
 
-		worker := func(b *benchmark.Benchmark, c *benchmark.DBConnector, testDesc *TestDesc, batch int) (loops int) { //nolint:revive
-			var id int64
-			var progress int
+		switch dialectName {
+		case db.POSTGRES, db.MYSQL:
+			query = fmt.Sprintf("SELECT id, progress FROM acronis_db_bench_heavy WHERE id < %d LIMIT 1 FOR UPDATE SKIP LOCKED", max)
+		case db.MSSQL:
+			query = fmt.Sprintf("SELECT TOP(1) id, progress FROM acronis_db_bench_heavy WITH (UPDLOCK, READPAST, ROWLOCK) WHERE id < %d", max)
+		default:
+			b.Exit("unsupported driver: '%v', supported drivers are: %s|%s|%s", dialectName, db.POSTGRES, db.MYSQL, db.MSSQL)
+		}
 
-			c.QueryRowAndScan(query, &id, &progress)
-			c.ExecOrExit(fmt.Sprintf("UPDATE acronis_db_bench_heavy SET progress = %d WHERE id = %d", progress+1, id))
+		worker := func(b *benchmark.Benchmark, c *DBConnector, testDesc *TestDesc, batch int) (loops int) { //nolint:revive
+
+			var session = c.database.Session(c.database.Context(context.Background()))
+			if txErr := session.Transact(func(tx db.DatabaseAccessor) error {
+				var id int64
+				var progress int
+
+				if err := session.QueryRow(query).Scan(&id, &progress); err != nil {
+					return err
+				}
+
+				if _, err := session.Exec(fmt.Sprintf("UPDATE acronis_db_bench_heavy SET progress = %d WHERE id = %d", progress+1, id)); err != nil {
+					return err
+				}
+
+				return nil
+			}); txErr != nil {
+				b.Exit(txErr.Error())
+			}
 
 			return 1
 		}
@@ -528,38 +552,42 @@ var TestInsertLight = TestDesc{
 }
 
 // insertByPreparedDataWorker inserts a row into the 'light' table using prepared statement for the batch
-func insertByPreparedDataWorker(b *benchmark.Benchmark, c *benchmark.DBConnector, testDesc *TestDesc, batch int) (loops int) {
-	colConfs := testDesc.table.GetColumnsForInsert(benchmark.WithAutoInc(c.DbOpts.Driver))
+func insertByPreparedDataWorker(b *benchmark.Benchmark, c *DBConnector, testDesc *TestDesc, batch int) (loops int) {
+	colConfs := testDesc.table.GetColumnsForInsert(db.WithAutoInc(c.database.DialectName()))
 	workerID := c.WorkerID
+	sess := c.database.Session(c.database.Context(context.Background()))
 
-	tx := c.Begin()
+	if txErr := sess.Transact(func(tx db.DatabaseAccessor) error {
+		columns, _ := b.GenFakeData(workerID, colConfs, false)
 
-	columns, _ := b.GenFakeData(workerID, colConfs, false)
+		parametersPlaceholder := db.GenDBParameterPlaceholders(0, len(*colConfs))
+		sql := fmt.Sprintf("INSERT INTO %s (%s) VALUES(%s)", testDesc.table.TableName, strings.Join(columns, ","), parametersPlaceholder)
+		sql = formatSQL(sql, c.database.DialectName())
 
-	parametersPlaceholder := benchmark.GenDBParameterPlaceholders(0, len(*colConfs))
-	sql := fmt.Sprintf("INSERT INTO %s (%s) VALUES(%s)", testDesc.table.TableName, strings.Join(columns, ","), parametersPlaceholder)
-	sql = formatSQL(sql, c.DbOpts.Driver)
-
-	t := c.StatementEnter(sql, nil)
-	stmt, err := tx.Prepare(sql)
-	c.StatementExit("Prepare()", t, err, false, nil, sql, nil, nil, nil)
-
-	if err != nil {
-		c.Exit(err.Error())
-	}
-	for i := 0; i < batch; i++ {
-		_, values := b.GenFakeData(workerID, colConfs, false)
-
-		t := c.StatementEnter("", nil)
-		_, err = stmt.Exec(values...)
-		c.StatementExit("Exec()", t, err, false, nil, "<< stdin ", values, nil, nil)
+		t := tx.StatementEnter(sql, nil)
+		stmt, err := tx.Prepare(sql)
+		tx.StatementExit("Prepare()", t, err, false, nil, sql, nil, nil, nil)
 
 		if err != nil {
-			stmt.Close()
 			c.Exit(err.Error())
 		}
+		for i := 0; i < batch; i++ {
+			_, values := b.GenFakeData(workerID, colConfs, false)
+
+			t := tx.StatementEnter("", nil)
+			_, err = stmt.Exec(values...)
+			tx.StatementExit("Exec()", t, err, false, nil, "<< stdin ", values, nil, nil)
+
+			if err != nil {
+				stmt.Close()
+				c.Exit(err.Error())
+			}
+		}
+
+		return nil
+	}); txErr != nil {
+		c.Exit(txErr.Error())
 	}
-	c.Commit()
 
 	return batch
 }
@@ -580,58 +608,66 @@ var TestInsertLightPrepared = TestDesc{
 }
 
 // insertMultiValueDataWorker inserts a row into the 'light' table using INSERT INTO t (x, y, z) VALUES (..., ..., ...)
-func insertMultiValueDataWorker(b *benchmark.Benchmark, c *benchmark.DBConnector, testDesc *TestDesc, batch int) (loops int) {
-	colConfs := testDesc.table.GetColumnsForInsert(benchmark.WithAutoInc(c.DbOpts.Driver))
+func insertMultiValueDataWorker(b *benchmark.Benchmark, c *DBConnector, testDesc *TestDesc, batch int) (loops int) {
+	colConfs := testDesc.table.GetColumnsForInsert(db.WithAutoInc(c.database.DialectName()))
 	workerID := c.WorkerID
 
-	columns, _ := b.GenFakeData(workerID, colConfs, benchmark.WithAutoInc(c.DbOpts.Driver))
-	if c.DbOpts.Driver == benchmark.CASSANDRA {
+	columns, _ := b.GenFakeData(workerID, colConfs, db.WithAutoInc(c.database.DialectName()))
+	switch c.database.DialectName() {
+	case db.CASSANDRA:
 		var values []interface{}
 		var sql string
 
 		sqlInsertTpl := fmt.Sprintf("INSERT INTO %s (%s) VALUES ", testDesc.table.TableName, strings.Join(columns, ","))
 
 		for i := 0; i < batch; i++ {
-			sql = fmt.Sprintf("%s\n%s (%s);", sql, sqlInsertTpl, benchmark.GenDBParameterPlaceholdersCassandra(i*len(*colConfs), len(*colConfs)))
+			sql = fmt.Sprintf("%s\n%s (%s);", sql, sqlInsertTpl, db.GenDBParameterPlaceholdersCassandra(i*len(*colConfs), len(*colConfs)))
 		}
 
-		sql = formatSQL(sql, c.DbOpts.Driver)
+		sql = formatSQL(sql, c.database.DialectName())
 
 		for i := 0; i < batch; i++ {
-			_, vals := b.GenFakeData(workerID, colConfs, benchmark.WithAutoInc(c.DbOpts.Driver))
+			_, vals := b.GenFakeData(workerID, colConfs, db.WithAutoInc(c.database.DialectName()))
 			values = append(values, vals...)
 		}
 
 		sql = fmt.Sprintf("BEGIN BATCH%s\nAPPLY BATCH;", sql)
-		c.ExecOrExit(sql, values...)
+		if _, err := c.database.Session(c.database.Context(context.Background())).Exec(sql, values...); err != nil {
+			c.Exit(err.Error())
+		}
+
+		return batch
+
+	default:
+		var values []interface{}
+
+		sql := fmt.Sprintf("INSERT INTO %s (%s) VALUES ", testDesc.table.TableName, strings.Join(columns, ","))
+
+		for i := 0; i < batch; i++ {
+			if i == 0 {
+				sql = fmt.Sprintf("%s (%s)", sql, db.GenDBParameterPlaceholders(i*len(*colConfs), len(*colConfs)))
+			} else {
+				sql = fmt.Sprintf("%s, (%s)", sql, db.GenDBParameterPlaceholders(i*len(*colConfs), len(*colConfs)))
+			}
+		}
+
+		sql = formatSQL(sql, c.database.DialectName())
+
+		for i := 0; i < batch; i++ {
+			_, vals := b.GenFakeData(workerID, colConfs, db.WithAutoInc(c.database.DialectName()))
+			values = append(values, vals...)
+		}
+
+		var session = c.database.Session(c.database.Context(context.Background()))
+		if txErr := session.Transact(func(tx db.DatabaseAccessor) error {
+			_, err := tx.Exec(sql, values...)
+			return err
+		}); txErr != nil {
+			c.Exit(txErr.Error())
+		}
 
 		return batch
 	}
-
-	var values []interface{}
-
-	sql := fmt.Sprintf("INSERT INTO %s (%s) VALUES ", testDesc.table.TableName, strings.Join(columns, ","))
-
-	for i := 0; i < batch; i++ {
-		if i == 0 {
-			sql = fmt.Sprintf("%s (%s)", sql, benchmark.GenDBParameterPlaceholders(i*len(*colConfs), len(*colConfs)))
-		} else {
-			sql = fmt.Sprintf("%s, (%s)", sql, benchmark.GenDBParameterPlaceholders(i*len(*colConfs), len(*colConfs)))
-		}
-	}
-
-	sql = formatSQL(sql, c.DbOpts.Driver)
-
-	for i := 0; i < batch; i++ {
-		_, vals := b.GenFakeData(workerID, colConfs, benchmark.WithAutoInc(c.DbOpts.Driver))
-		values = append(values, vals...)
-	}
-
-	c.Begin()
-	c.ExecOrExit(sql, values...)
-	c.Commit()
-
-	return batch
 }
 
 // TestInsertLightMultiValue inserts a row into the 'light' table using INSERT INTO t (x, y, z) VALUES (..., ..., ...)
@@ -650,49 +686,54 @@ var TestInsertLightMultiValue = TestDesc{
 }
 
 // copyDataWorker copies a row into the 'light' table
-func copyDataWorker(b *benchmark.Benchmark, c *benchmark.DBConnector, testDesc *TestDesc, batch int) (loops int) {
+func copyDataWorker(b *benchmark.Benchmark, c *DBConnector, testDesc *TestDesc, batch int) (loops int) {
 	var sql string
-	colConfs := testDesc.table.GetColumnsForInsert(benchmark.WithAutoInc(c.DbOpts.Driver))
+	colConfs := testDesc.table.GetColumnsForInsert(db.WithAutoInc(c.database.DialectName()))
 	workerID := c.WorkerID
+	sess := c.database.Session(c.database.Context(context.Background()))
 
-	tx := c.Begin()
+	if txErr := sess.Transact(func(tx db.DatabaseAccessor) error {
+		columns, _ := b.GenFakeData(workerID, colConfs, false)
 
-	columns, _ := b.GenFakeData(workerID, colConfs, false)
+		switch c.database.DialectName() {
+		case db.POSTGRES:
+			sql = pq.CopyIn(testDesc.table.TableName, columns...)
+		case db.MSSQL:
+			sql = mssql.CopyIn(testDesc.table.TableName, mssql.BulkOptions{KeepNulls: true, RowsPerBatch: batch}, columns...)
+		default:
+			b.Exit("unsupported driver: '%v', supported drivers are: %s|%s", c.database.DialectName(), db.POSTGRES, db.MSSQL)
+		}
 
-	switch c.DbOpts.Driver {
-	case benchmark.POSTGRES:
-		sql = pq.CopyIn(testDesc.table.TableName, columns...)
-	case benchmark.MSSQL:
-		sql = mssql.CopyIn(testDesc.table.TableName, mssql.BulkOptions{KeepNulls: true, RowsPerBatch: batch}, columns...)
-	default:
-		b.Exit("unsupported driver: '%v', supported drivers are: %s|%s", b.TestOpts.(*TestOpts).DBOpts.Driver, benchmark.POSTGRES, benchmark.MSSQL)
-	}
+		t := tx.StatementEnter(sql, nil)
+		stmt, err := tx.Prepare(sql)
+		tx.StatementExit("Prepare()", t, err, false, nil, sql, nil, nil, nil)
 
-	t := c.StatementEnter(sql, nil)
-	stmt, err := tx.Prepare(sql)
-	c.StatementExit("Prepare()", t, err, false, nil, sql, nil, nil, nil)
+		if err != nil {
+			c.Exit(err.Error())
+		}
+		for i := 0; i < batch; i++ {
+			_, values := b.GenFakeData(workerID, colConfs, false)
 
-	if err != nil {
-		c.Exit(err.Error())
-	}
-	for i := 0; i < batch; i++ {
-		_, values := b.GenFakeData(workerID, colConfs, false)
+			t := tx.StatementEnter("", nil)
+			_, err = stmt.Exec(values...)
+			tx.StatementExit("Exec()", t, err, false, nil, "<< stdin ", values, nil, nil)
 
-		t := c.StatementEnter("", nil)
-		_, err = stmt.Exec(values...)
-		c.StatementExit("Exec()", t, err, false, nil, "<< stdin ", values, nil, nil)
+			if err != nil {
+				stmt.Close()
+				c.Exit(err.Error())
+			}
+		}
 
+		_, err = stmt.Exec()
 		if err != nil {
 			stmt.Close()
 			c.Exit(err.Error())
 		}
+
+		return nil
+	}); txErr != nil {
+		c.Exit(txErr.Error())
 	}
-	_, err = stmt.Exec()
-	if err != nil {
-		stmt.Close()
-		c.Exit(err.Error())
-	}
-	c.Commit()
 
 	return batch
 }
@@ -705,7 +746,7 @@ var TestCopyLight = TestDesc{
 	category:    TestInsert,
 	isReadonly:  false,
 	isDBRTest:   false,
-	databases:   []string{benchmark.POSTGRES, benchmark.MSSQL},
+	databases:   []db.DialectName{db.POSTGRES, db.MSSQL},
 	table:       TestTableLight,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
 		testGeneric(b, testDesc, copyDataWorker, 0)
@@ -780,7 +821,7 @@ var TestCopyMedium = TestDesc{
 	category:    TestInsert,
 	isReadonly:  false,
 	isDBRTest:   false,
-	databases:   []string{benchmark.POSTGRES, benchmark.MSSQL},
+	databases:   []db.DialectName{db.POSTGRES, db.MSSQL},
 	table:       TestTableMedium,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
 		testGeneric(b, testDesc, copyDataWorker, 0)
@@ -832,7 +873,7 @@ var TestCopyBlob = TestDesc{
 	category:    TestInsert,
 	isReadonly:  false,
 	isDBRTest:   false,
-	databases:   []string{benchmark.POSTGRES, benchmark.MSSQL},
+	databases:   []db.DialectName{db.POSTGRES, db.MSSQL},
 	table:       TestTableBlob,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
 		testDesc.table.InitColumnsConf()
@@ -847,45 +888,59 @@ var TestCopyBlob = TestDesc{
 }
 
 // createLargeObjectWorker inserts a row with large random object into the 'largeobject' table
-func createLargeObjectWorker(b *benchmark.Benchmark, c *benchmark.DBConnector, testDesc *TestDesc, batch int) (loops int) {
-	colConfs := testDesc.table.GetColumnsForInsert(benchmark.WithAutoInc(c.DbOpts.Driver))
-	parametersPlaceholder := benchmark.GenDBParameterPlaceholders(0, len(*colConfs))
-	testOpts := b.TestOpts.(*TestOpts)
+func createLargeObjectWorker(b *benchmark.Benchmark, c *DBConnector, testDesc *TestDesc, batch int) (loops int) {
+	colConfs := testDesc.table.GetColumnsForInsert(db.WithAutoInc(c.database.DialectName()))
+	parametersPlaceholder := db.GenDBParameterPlaceholders(0, len(*colConfs))
 	workerID := c.WorkerID
 
-	c.Begin()
+	var session = c.database.Session(c.database.Context(context.Background()))
 
-	var sql string
+	if txErr := session.Transact(func(tx db.DatabaseAccessor) error {
+		var sql string
+		for i := 0; i < batch; i++ {
+			columns, values := b.GenFakeData(workerID, colConfs, false)
 
-	for i := 0; i < batch; i++ {
-		columns, values := b.GenFakeData(workerID, colConfs, false)
+			blob := b.GenFakeValue(workerID, "blob", "", 0, b.TestOpts.(*TestOpts).TestcaseOpts.MaxBlobSize, b.TestOpts.(*TestOpts).TestcaseOpts.MinBlobSize, nil)
 
-		blob := b.GenFakeValue(workerID, "blob", "", 0, b.TestOpts.(*TestOpts).TestcaseOpts.MaxBlobSize, b.TestOpts.(*TestOpts).TestcaseOpts.MinBlobSize, "")
+			var oid int
+			if err := tx.QueryRow("SELECT lo_create(0)").Scan(&oid); err != nil {
+				return err
+			}
 
-		var oid int
-		var fd int
+			var fd int
+			if err := tx.QueryRow(fmt.Sprintf("SELECT lo_open(%d, 131072)", oid)).Scan(&fd); err != nil { // 131072 == 0x20000 - write mode
+				return err
+			}
 
-		c.QueryRowAndScan("SELECT lo_create(0)", &oid)
-		c.QueryRowAndScan(fmt.Sprintf("SELECT lo_open(%d, 131072)", oid), &fd) // 131072 == 0x20000 - write mode
+			if _, err := tx.Exec("SELECT lowrite($1, $2)", fd, blob); err != nil {
+				return err
+			}
 
-		c.ExecOrExit("SELECT lowrite($1, $2)", fd, blob)
-		c.ExecOrExit("SELECT lo_close($1)", fd)
+			if _, err := tx.Exec("SELECT lo_close($1)", fd); err != nil {
+				return err
+			}
 
-		for c := range columns {
-			if columns[c] == "oid" {
-				values[c] = oid
+			for col := range columns {
+				if columns[col] == "oid" {
+					values[col] = oid
+				}
+			}
+
+			if i == 0 {
+				insertSQL := "INSERT INTO %s (%s) VALUES(%s)"
+				sqlTemplate := fmt.Sprintf(insertSQL, testDesc.table.TableName, strings.Join(columns, ","), parametersPlaceholder)
+				sql = formatSQL(sqlTemplate, c.database.DialectName())
+			}
+
+			if _, err := tx.Exec(sql, values...); err != nil {
+				return err
 			}
 		}
 
-		if i == 0 {
-			insertSQL := "INSERT INTO %s (%s) VALUES(%s)"
-			sqlTemplate := fmt.Sprintf(insertSQL, testDesc.table.TableName, strings.Join(columns, ","), parametersPlaceholder)
-			sql = formatSQL(sqlTemplate, testOpts.DBOpts.Driver)
-		}
-
-		c.ExecOrExit(sql, values...)
+		return nil
+	}); txErr != nil {
+		c.Exit(txErr.Error())
 	}
-	c.Commit()
 
 	return batch
 }
@@ -898,7 +953,7 @@ var TestInsertLargeObj = TestDesc{
 	category:    TestInsert,
 	isReadonly:  false,
 	isDBRTest:   false,
-	databases:   []string{benchmark.POSTGRES},
+	databases:   []db.DialectName{db.POSTGRES},
 	table:       TestTableLargeObj,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
 		testGeneric(b, testDesc, createLargeObjectWorker, 0)
@@ -958,7 +1013,7 @@ var TestCopyHeavy = TestDesc{
 	category:    TestInsert,
 	isReadonly:  false,
 	isDBRTest:   false,
-	databases:   []string{benchmark.POSTGRES, benchmark.MSSQL},
+	databases:   []db.DialectName{db.POSTGRES, db.MSSQL},
 	table:       TestTableHeavy,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
 		testGeneric(b, testDesc, copyDataWorker, 0)
@@ -1024,15 +1079,18 @@ var TestSelectJSONByIndexedValue = TestDesc{
 		where := func(b *benchmark.Benchmark, workerId int) string {
 			id := b.Randomizer.GetWorker(workerId).Uintn64(testDesc.table.RowsCount - 1)
 
-			driver := b.TestOpts.(*TestOpts).DBOpts.Driver
+			var dialectName, err = db.GetDialectName(b.TestOpts.(*TestOpts).DBOpts.ConnString)
+			if err != nil {
+				b.Exit(err)
+			}
 
-			switch driver {
-			case benchmark.MYSQL:
+			switch dialectName {
+			case db.MYSQL:
 				return "_data_f0f0 = '10' AND id > " + strconv.FormatUint(id, 10)
-			case benchmark.POSTGRES:
+			case db.POSTGRES:
 				return "json_data @> '{\"field0\": {\"field0\": 10}}' AND id > " + strconv.FormatUint(id, 10)
 			default:
-				b.Exit("The %s test is not supported on driver: %s", testDesc.name, driver)
+				b.Exit("The %s test is not supported on driver: %s", testDesc.name, dialectName)
 			}
 
 			return ""
@@ -1058,15 +1116,18 @@ var TestSearchJSONByIndexedValue = TestDesc{
 		where := func(b *benchmark.Benchmark, workerId int) string {
 			id := b.Randomizer.GetWorker(workerId).Uintn64(testDesc.table.RowsCount - 1)
 
-			driver := b.TestOpts.(*TestOpts).DBOpts.Driver
+			var dialectName, err = db.GetDialectName(b.TestOpts.(*TestOpts).DBOpts.ConnString)
+			if err != nil {
+				b.Exit(err)
+			}
 
-			switch driver {
-			case benchmark.MYSQL:
+			switch dialectName {
+			case db.MYSQL:
 				return "_data_f0f0f0 LIKE '%eedl%' AND id > " + strconv.FormatUint(id, 10)
-			case benchmark.POSTGRES:
+			case db.POSTGRES:
 				return "json_data->'field0'->'field0'->>'field0' LIKE '%eedl%' AND id > " + strconv.FormatUint(id, 10) // searching for the 'needle' word
 			default:
-				b.Exit("The %s test is not supported on driver: %s", testDesc.name, driver)
+				b.Exit("The %s test is not supported on driver: %s", testDesc.name, dialectName)
 			}
 
 			return ""
@@ -1092,15 +1153,18 @@ var TestSelectJSONByNonIndexedValue = TestDesc{
 		where := func(b *benchmark.Benchmark, workerId int) string {
 			id := b.Randomizer.GetWorker(workerId).Uintn64(testDesc.table.RowsCount - 1)
 
-			driver := b.TestOpts.(*TestOpts).DBOpts.Driver
+			var dialectName, err = db.GetDialectName(b.TestOpts.(*TestOpts).DBOpts.ConnString)
+			if err != nil {
+				b.Exit(err)
+			}
 
-			switch driver {
-			case benchmark.MYSQL:
+			switch dialectName {
+			case db.MYSQL:
 				return "JSON_EXTRACT(json_data, '$.field0.field1') = '10' AND id > " + strconv.FormatUint(id, 10)
-			case benchmark.POSTGRES:
+			case db.POSTGRES:
 				return "json_data @> '{\"field0\": {\"field1\": 10}}' AND id > " + strconv.FormatUint(id, 10)
 			default:
-				b.Exit("The %s test is not supported on driver: %s", testDesc.name, driver)
+				b.Exit("The %s test is not supported on driver: %s", testDesc.name, dialectName)
 			}
 
 			return ""
@@ -1126,15 +1190,18 @@ var TestSearchJSONByNonIndexedValue = TestDesc{
 		where := func(b *benchmark.Benchmark, workerId int) string {
 			id := b.Randomizer.GetWorker(workerId).Uintn64(testDesc.table.RowsCount - 1)
 
-			driver := b.TestOpts.(*TestOpts).DBOpts.Driver
+			var dialectName, err = db.GetDialectName(b.TestOpts.(*TestOpts).DBOpts.ConnString)
+			if err != nil {
+				b.Exit(err)
+			}
 
-			switch driver {
-			case benchmark.MYSQL:
+			switch dialectName {
+			case db.MYSQL:
 				return "JSON_EXTRACT(json_data, '$.field0.field1') LIKE '%eedl%' AND id > " + strconv.FormatUint(id, 10)
-			case benchmark.POSTGRES:
+			case db.POSTGRES:
 				return "json_data->'field0'->'field0'->>'field0' LIKE '%eedl%' AND id > " + strconv.FormatUint(id, 10) // searching for the 'needle' word
 			default:
-				b.Exit("The %s test is not supported on driver: %s", testDesc.name, driver)
+				b.Exit("The %s test is not supported on driver: %s", testDesc.name, dialectName)
 			}
 
 			return ""
@@ -1393,7 +1460,7 @@ var TestInsertAdvmTasks = TestDesc{
 	category:    TestInsert,
 	isReadonly:  false,
 	isDBRTest:   false,
-	databases:   []string{benchmark.POSTGRES},
+	databases:   []db.DialectName{db.POSTGRES},
 	table:       TestTableAdvmTasks,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
 		testInsertGeneric(b, testDesc)
@@ -1408,7 +1475,7 @@ var TestSelectAdvmTasksLast = TestDesc{
 	category:    TestSelect,
 	isReadonly:  false,
 	isDBRTest:   false,
-	databases:   []string{benchmark.POSTGRES},
+	databases:   []db.DialectName{db.POSTGRES},
 	table:       TestTableAdvmTasks,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
 		where := func(b *benchmark.Benchmark, workerId int) string { //nolint:revive
@@ -1429,7 +1496,7 @@ var TestSelectAdvmTasksCodePerWeek = TestDesc{
 	category:    TestSelect,
 	isReadonly:  false,
 	isDBRTest:   false,
-	databases:   []string{benchmark.POSTGRES},
+	databases:   []db.DialectName{db.POSTGRES},
 	table:       TestTableAdvmTasks,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
 		// need to implement it
@@ -1445,7 +1512,7 @@ var TestInsertAdvmResources = TestDesc{
 	category:    TestInsert,
 	isReadonly:  false,
 	isDBRTest:   false,
-	databases:   []string{benchmark.POSTGRES},
+	databases:   []db.DialectName{db.POSTGRES},
 	table:       TestTableAdvmResources,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
 		testInsertGeneric(b, testDesc)
@@ -1460,7 +1527,7 @@ var TestInsertAdvmResourcesStatuses = TestDesc{
 	category:    TestInsert,
 	isReadonly:  false,
 	isDBRTest:   false,
-	databases:   []string{benchmark.POSTGRES},
+	databases:   []db.DialectName{db.POSTGRES},
 	table:       TestTableAdvmResourcesStatuses,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
 		testInsertGeneric(b, testDesc)
@@ -1475,7 +1542,7 @@ var TestInsertAdvmAgentResources = TestDesc{
 	category:    TestInsert,
 	isReadonly:  false,
 	isDBRTest:   false,
-	databases:   []string{benchmark.POSTGRES},
+	databases:   []db.DialectName{db.POSTGRES},
 	table:       TestTableAdvmAgentsResources,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
 		testInsertGeneric(b, testDesc)
@@ -1490,7 +1557,7 @@ var TestInsertAdvmAgents = TestDesc{
 	category:    TestInsert,
 	isReadonly:  false,
 	isDBRTest:   false,
-	databases:   []string{benchmark.POSTGRES},
+	databases:   []db.DialectName{db.POSTGRES},
 	table:       TestTableAdvmAgents,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
 		testInsertGeneric(b, testDesc)
@@ -1505,7 +1572,7 @@ var TestInsertAdvmBackupResources = TestDesc{
 	category:    TestInsert,
 	isReadonly:  false,
 	isDBRTest:   false,
-	databases:   []string{benchmark.POSTGRES},
+	databases:   []db.DialectName{db.POSTGRES},
 	table:       TestTableAdvmBackupResources,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
 		testInsertGeneric(b, testDesc)
@@ -1520,7 +1587,7 @@ var TestInsertAdvmBackups = TestDesc{
 	category:    TestInsert,
 	isReadonly:  false,
 	isDBRTest:   false,
-	databases:   []string{benchmark.POSTGRES},
+	databases:   []db.DialectName{db.POSTGRES},
 	table:       TestTableAdvmBackups,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
 		testInsertGeneric(b, testDesc)
@@ -1535,7 +1602,7 @@ var TestInsertAdvmArchives = TestDesc{
 	category:    TestInsert,
 	isReadonly:  false,
 	isDBRTest:   false,
-	databases:   []string{benchmark.POSTGRES},
+	databases:   []db.DialectName{db.POSTGRES},
 	table:       TestTableAdvmArchives,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
 		testInsertGeneric(b, testDesc)
@@ -1550,7 +1617,7 @@ var TestInsertAdvmVaults = TestDesc{
 	category:    TestInsert,
 	isReadonly:  false,
 	isDBRTest:   false,
-	databases:   []string{benchmark.POSTGRES},
+	databases:   []db.DialectName{db.POSTGRES},
 	table:       TestTableAdvmVaults,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
 		testInsertGeneric(b, testDesc)
@@ -1565,7 +1632,7 @@ var TestInsertAdvmDevices = TestDesc{
 	category:    TestInsert,
 	isReadonly:  false,
 	isDBRTest:   false,
-	databases:   []string{benchmark.POSTGRES},
+	databases:   []db.DialectName{db.POSTGRES},
 	table:       TestTableAdvmDevices,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
 		testInsertGeneric(b, testDesc)
@@ -1577,40 +1644,55 @@ var TestInsertAdvmDevices = TestDesc{
  */
 
 // CreateTenantWorker creates a tenant and optionally inserts an event into the event bus
-func CreateTenantWorker(b *benchmark.Benchmark, c *benchmark.DBConnector, testDesc *TestDesc, batch int) (loops int) { //nolint:revive
-	c.Begin()
+func CreateTenantWorker(b *benchmark.Benchmark, c *DBConnector, testDesc *TestDesc, batch int) (loops int) { //nolint:revive
+	var session = c.database.Session(c.database.Context(context.Background()))
+	if txErr := session.Transact(func(tx db.DatabaseAccessor) error {
+		for i := 0; i < batch; i++ {
+			var tenantUUID, err = b.Vault.(*DBTestData).TenantsCache.CreateTenant(b.Randomizer.GetWorker(c.WorkerID), tx)
+			if err != nil {
+				return err
+			}
 
-	for i := 0; i < batch; i++ {
-		tenantUUID := b.TenantsCache.CreateTenant(b.Randomizer.GetWorker(c.WorkerID), c)
-
-		if b.TestOpts.(*TestOpts).BenchOpts.Events {
-			b.Vault.(*DBTestData).EventBus.InsertEvent(b.Randomizer.GetWorker(c.WorkerID), c, string(tenantUUID))
+			if b.TestOpts.(*TestOpts).BenchOpts.Events {
+				if err = b.Vault.(*DBTestData).EventBus.InsertEvent(b.Randomizer.GetWorker(c.WorkerID), tx, string(tenantUUID)); err != nil {
+					return err
+				}
+			}
 		}
+
+		return nil
+	}); txErr != nil {
+		c.Exit(txErr.Error())
 	}
-	c.Commit()
 
 	return batch
 }
 
-func CreateCTIEntityWorker(b *benchmark.Benchmark, c *benchmark.DBConnector, testDesc *TestDesc, batch int) (loops int) { //nolint:revive
-	c.Begin()
+func CreateCTIEntityWorker(b *benchmark.Benchmark, c *DBConnector, testDesc *TestDesc, batch int) (loops int) { //nolint:revive
+	var session = c.database.Session(c.database.Context(context.Background()))
+	if txErr := session.Transact(func(tx db.DatabaseAccessor) error {
+		for i := 0; i < batch; i++ {
+			if err := b.Vault.(*DBTestData).TenantsCache.CreateCTIEntity(b.Randomizer.GetWorker(c.WorkerID), tx); err != nil {
+				return err
+			}
+		}
 
-	for i := 0; i < batch; i++ {
-		b.TenantsCache.CreateCTIEntity(b.Randomizer.GetWorker(c.WorkerID), c)
+		return nil
+	}); txErr != nil {
+		c.Exit(txErr.Error())
 	}
-	c.Commit()
 
 	return batch
 }
 
-func tenantAwareCTIAwareWorker(b *benchmark.Benchmark, c *benchmark.DBConnector, testDesc *TestDesc, orderBy string, batch int) (loops int) { //nolint:revive
+func tenantAwareCTIAwareWorker(b *benchmark.Benchmark, c *DBConnector, testDesc *TestDesc, orderBy string, batch int) (loops int) { //nolint:revive
 	c.Log(benchmark.LogTrace, "tenant-aware and CTI-aware SELECT test iteration")
 
 	tableName := testDesc.table.TableName
 	query := buildTenantAwareQuery(tableName)
-	ctiUUID, err := b.TenantsCache.GetRandomCTIUUID(b.Randomizer.GetWorker(c.WorkerID), 0)
+	ctiUUID, err := b.Vault.(*DBTestData).TenantsCache.GetRandomCTIUUID(b.Randomizer.GetWorker(c.WorkerID), 0)
 	if err != nil {
-		b.Exit(err.Error())
+		b.Exit(err)
 	}
 	ctiAwareQuery := query + fmt.Sprintf(
 		" JOIN `%[1]s` AS `cti_ent` "+
@@ -1618,12 +1700,12 @@ func tenantAwareCTIAwareWorker(b *benchmark.Benchmark, c *benchmark.DBConnector,
 			"LEFT JOIN `%[3]s` as `cti_prov` "+
 			"ON `cti_prov`.`tenant_id` = `tenants_child`.`id` AND `cti_prov`.`cti_entity_uuid` = `%[2]s`.`cti_entity_uuid` "+
 			"WHERE `cti_prov`.`state` = 1 OR `cti_ent`.`global_state` = 1",
-		benchmark.TableNameCtiEntities, tableName, benchmark.TableNameCtiProvisioning, string(ctiUUID))
+		TableNameCtiEntities, tableName, TableNameCtiProvisioning, string(ctiUUID))
 
 	return tenantAwareGenericWorker(b, c, ctiAwareQuery, orderBy)
 }
 
-func tenantAwareWorker(b *benchmark.Benchmark, c *benchmark.DBConnector, testDesc *TestDesc, orderBy string, batch int) (loops int) { //nolint:revive
+func tenantAwareWorker(b *benchmark.Benchmark, c *DBConnector, testDesc *TestDesc, orderBy string, batch int) (loops int) { //nolint:revive
 	query := buildTenantAwareQuery(testDesc.table.TableName)
 
 	return tenantAwareGenericWorker(b, c, query, orderBy)
@@ -1635,20 +1717,20 @@ func buildTenantAwareQuery(tableName string) string {
 		"JOIN `%[3]s` AS `tenants_closure` ON ((`tenants_closure`.`child_id` = `tenants_child`.`id`) AND (`tenants_closure`.`barrier` <= 0)) "+
 		"JOIN `%[2]s` AS `tenants_parent` ON ((`tenants_parent`.`id` = `tenants_closure`.`parent_id`) "+
 		"AND (`tenants_parent`.`uuid` IN ('{tenant_uuid}')) AND (`tenants_parent`.`is_deleted` != {true}))",
-		tableName, benchmark.TableNameTenants, benchmark.TableNameTenantClosure)
+		tableName, TableNameTenants, TableNameTenantClosure)
 }
 
-func tenantAwareGenericWorker(b *benchmark.Benchmark, c *benchmark.DBConnector, query string, orderBy string) (loops int) {
+func tenantAwareGenericWorker(b *benchmark.Benchmark, c *DBConnector, query string, orderBy string) (loops int) {
 	c.Log(benchmark.LogTrace, "tenant-aware SELECT test iteration")
 
-	uuid, err := b.TenantsCache.GetRandomTenantUUID(b.Randomizer.GetWorker(c.WorkerID), 0)
+	uuid, err := b.Vault.(*DBTestData).TenantsCache.GetRandomTenantUUID(b.Randomizer.GetWorker(c.WorkerID), 0)
 	if err != nil {
-		b.Exit(err.Error())
+		b.Exit(err)
 	}
 
 	var valTrue string
 
-	if b.TestOpts.(*TestOpts).DBOpts.Driver == benchmark.POSTGRES {
+	if c.database.DialectName() == db.POSTGRES {
 		valTrue = "true"
 	} else {
 		valTrue = "1"
@@ -1662,12 +1744,18 @@ func tenantAwareGenericWorker(b *benchmark.Benchmark, c *benchmark.DBConnector, 
 
 	var id, tenantID string
 
-	if b.TestOpts.(*TestOpts).DBOpts.Driver == benchmark.POSTGRES {
+	if c.database.DialectName() == db.POSTGRES {
 		query = strings.ReplaceAll(query, "`", "\"")
 	}
 
 	c.Log(benchmark.LogTrace, "executing query: %s", query)
-	c.QueryRowAndScanAllowEmpty(query, &id, &tenantID)
+
+	var session = c.database.Session(c.database.Context(context.Background()))
+	if err = session.QueryRow(query).Scan(&id, &tenantID); err != nil {
+		if !errors.Is(sql.ErrNoRows, err) {
+			c.Exit(err.Error())
+		}
+	}
 
 	return 1
 }
@@ -1683,7 +1771,7 @@ var TestSelectMediumLastTenant = TestDesc{
 	databases:   ALL,
 	table:       TestTableMedium,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
-		worker := func(b *benchmark.Benchmark, c *benchmark.DBConnector, testDesc *TestDesc, batch int) (loops int) { //nolint:revive
+		worker := func(b *benchmark.Benchmark, c *DBConnector, testDesc *TestDesc, batch int) (loops int) { //nolint:revive
 			return tenantAwareWorker(b, c, testDesc, "ORDER BY enqueue_time_ns DESC", 1)
 		}
 		testGeneric(b, testDesc, worker, 1)
@@ -1701,7 +1789,7 @@ var TestSelectBlobLastTenant = TestDesc{
 	databases:   ALL,
 	table:       TestTableBlob,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
-		worker := func(b *benchmark.Benchmark, c *benchmark.DBConnector, testDesc *TestDesc, batch int) (loops int) { //nolint:revive
+		worker := func(b *benchmark.Benchmark, c *DBConnector, testDesc *TestDesc, batch int) (loops int) { //nolint:revive
 			return tenantAwareWorker(b, c, testDesc, "ORDER BY timestamp DESC", 1)
 		}
 		testGeneric(b, testDesc, worker, 1)
@@ -1719,7 +1807,7 @@ var TestSelectHeavyLastTenant = TestDesc{
 	databases:   RELATIONAL,
 	table:       TestTableHeavy,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
-		worker := func(b *benchmark.Benchmark, c *benchmark.DBConnector, testDesc *TestDesc, batch int) (loops int) { //nolint:revive
+		worker := func(b *benchmark.Benchmark, c *DBConnector, testDesc *TestDesc, batch int) (loops int) { //nolint:revive
 			return tenantAwareWorker(b, c, testDesc, "ORDER BY enqueue_time_ns DESC", 1)
 		}
 		testGeneric(b, testDesc, worker, 1)
@@ -1737,7 +1825,7 @@ var TestSelectHeavyLastTenantCTI = TestDesc{
 	databases:   RELATIONAL,
 	table:       TestTableHeavy,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
-		worker := func(b *benchmark.Benchmark, c *benchmark.DBConnector, testDesc *TestDesc, batch int) (loops int) { //nolint:revive
+		worker := func(b *benchmark.Benchmark, c *DBConnector, testDesc *TestDesc, batch int) (loops int) { //nolint:revive
 			return tenantAwareCTIAwareWorker(b, c, testDesc, "ORDER BY enqueue_time_ns DESC", 1)
 		}
 		testGeneric(b, testDesc, worker, 1)
@@ -1832,7 +1920,6 @@ func GetTests() ([]*TestGroup, map[string]*TestDesc) {
 	tg.add(&TestInsertJSONDBR)
 	tg.add(&TestUpdateMediumDBR)
 	tg.add(&TestUpdateHeavyDBR)
-	tg.add(&TestSelectOneDBR)
 	tg.add(&TestSelectMediumLastDBR)
 	tg.add(&TestSelectMediumRandDBR)
 	tg.add(&TestSelectHeavyLastDBR)

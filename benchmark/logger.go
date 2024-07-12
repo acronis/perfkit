@@ -5,6 +5,14 @@ import (
 	"time"
 )
 
+const (
+	LogError = 0 // LogError is the log level for errors
+	LogWarn  = 1 // LogWarn is the log level for warnings
+	LogInfo  = 2 // LogInfo is the log level for informational messages
+	LogDebug = 3 // LogDebug is the log level for debug messages
+	LogTrace = 4 // LogTrace is the log level for trace messages
+)
+
 // Logger is a simple logger that can be used to log messages to stdout
 type Logger struct {
 	LogLevel int
