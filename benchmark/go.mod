@@ -14,7 +14,6 @@ require (
 	github.com/jessevdk/go-flags v1.5.0
 	github.com/lib/pq v1.10.9
 	github.com/mattn/go-sqlite3 v1.14.19
-	github.com/fergusstrange/embedded-postgres v1.26.0
 )
 
 require (
