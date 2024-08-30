@@ -13,8 +13,8 @@ type sqlDialect struct {
 	dia dialect
 }
 
-func (d *sqlDialect) GetType(id string) string {
-	return d.dia.getType(id)
+func (d *sqlDialect) GetType(dataType db.DataType) string {
+	return d.dia.getType(dataType)
 }
 
 // applyMigrations applies a set of migrations to a table
@@ -39,7 +39,7 @@ func applyMigrations(q querier, d dialect, tableName, tableMigrationSQL string) 
 	for i := range migrationQueries {
 		query := strings.TrimSpace(migrationQueries[i])
 		if query != "" {
-			_, err = q.ExecContext(context.Background(), query)
+			_, err = q.execContext(context.Background(), query)
 			if err != nil {
 				return fmt.Errorf("DB migration failed: %s, error: %s", query, err.Error())
 			}
@@ -142,7 +142,7 @@ func tableExists(q querier, d dialect, name string) (bool, error) {
 
 	var check = fmt.Sprintf(query, args...)
 	var exists int
-	if err := q.QueryRowContext(context.Background(), check).Scan(&exists); err != nil && err != sql.ErrNoRows {
+	if err := q.queryRowContext(context.Background(), check).Scan(&exists); err != nil && err != sql.ErrNoRows {
 		return false, err
 	}
 
@@ -156,7 +156,7 @@ func constructSQLDDLQuery(d dialect, tableName string, tableDefinition *db.Table
 
 	var query = fmt.Sprintf("CREATE TABLE %v (", d.table(tableName))
 	for i, row := range tableDefinition.TableRows {
-		query += fmt.Sprintf("%v %v", row.Name, row.Type)
+		query += fmt.Sprintf("%v %v", row.Name, d.getType(row.Type))
 		if row.NotNull {
 			query += " NOT NULL"
 		}
@@ -205,6 +205,12 @@ func createTable(q querier, d dialect, name string, tableDefinition *db.TableDef
 		return fmt.Errorf("internal error: table %s needs to be created, but migration query has not been provided", name)
 	}
 
+	if tableDefinition != nil {
+		if err := createSelectQueryBuilder(name, tableDefinition.TableRows); err != nil {
+			return err
+		}
+	}
+
 	if err := applyMigrations(q, d, name, ddlQuery); err != nil {
 		return fmt.Errorf("error applying migrations: %v", err)
 	}
@@ -233,7 +239,7 @@ func dropTable(q querier, d dialect, name string, useTruncate bool) error {
 	}
 
 	var drop = fmt.Sprintf(query, args...)
-	if _, err := q.ExecContext(context.Background(), drop); err != nil {
+	if _, err := q.execContext(context.Background(), drop); err != nil {
 		return err
 	}
 
@@ -297,7 +303,7 @@ func indexExists(q querier, d dialect, indexName, tableName string) (bool, error
 
 	var check = fmt.Sprintf(qry, args...)
 	var exists int
-	if err := q.QueryRowContext(context.Background(), check).Scan(&exists); err != nil {
+	if err := q.queryRowContext(context.Background(), check).Scan(&exists); err != nil {
 		return false, err
 	}
 
@@ -325,7 +331,7 @@ func createIndex(q querier, d dialect, indexName string, tableName string, colum
 	}
 
 	var qry = fmt.Sprintf("CREATE INDEX %v ON %v (%v)", indexName, d.table(tableName), strings.Join(columns, ", "))
-	var _, err = q.ExecContext(context.Background(), qry)
+	var _, err = q.execContext(context.Background(), qry)
 
 	return err
 }
@@ -353,7 +359,7 @@ func dropIndex(q querier, d dialect, indexName, tableName string) error {
 	default:
 		qry = fmt.Sprintf("DROP INDEX %v ON %v;", indexName, d.table(tableName))
 	}
-	var _, err = q.ExecContext(context.Background(), qry)
+	var _, err = q.execContext(context.Background(), qry)
 	return err
 }
 
@@ -369,7 +375,7 @@ func readConstraints(q querier, d dialect) ([]db.Constraint, error) {
 	WHERE contype IN ('f', 'p', 'u');
 	`
 
-	var rows, err = q.QueryContext(context.Background(), query)
+	var rows, err = q.queryContext(context.Background(), query)
 	if err != nil {
 		return nil, fmt.Errorf("error querying constraints: %v", err)
 	}
@@ -405,7 +411,7 @@ func addConstraints(q querier, d dialect, constraints []db.Constraint) error {
 	for _, constraint := range constraints {
 		query := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s %s", constraint.TableName, constraint.Name, constraint.Definition)
 
-		_, err := q.ExecContext(context.Background(), query)
+		_, err := q.execContext(context.Background(), query)
 		if err != nil {
 			return err
 		}
@@ -423,7 +429,7 @@ func dropConstraints(q querier, d dialect, constraints []db.Constraint) error {
 	for _, constraint := range constraints {
 		query := fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT %s", constraint.TableName, constraint.Name)
 
-		_, err := q.ExecContext(context.Background(), query)
+		_, err := q.execContext(context.Background(), query)
 		if err != nil {
 			return err
 		}
@@ -446,14 +452,14 @@ func createSequence(q querier, d dialect, sequenceName string) error {
 				sequenceName, sequenceName, sequenceName)); err != nil {
 				return err
 			}
-			_, err = q.ExecContext(context.Background(), fmt.Sprintf("INSERT INTO %s (value, sequence_id) VALUES (1, 1)", sequenceName))
+			_, err = q.execContext(context.Background(), fmt.Sprintf("INSERT INTO %s (value, sequence_id) VALUES (1, 1)", sequenceName))
 			return err
 		}
 	case db.MYSQL, db.POSTGRES:
-		_, err := q.ExecContext(context.Background(), fmt.Sprintf("CREATE SEQUENCE IF NOT EXISTS %v", sequenceName))
+		_, err := q.execContext(context.Background(), fmt.Sprintf("CREATE SEQUENCE IF NOT EXISTS %v", sequenceName))
 		return err
 	case db.MSSQL:
-		_, err := q.ExecContext(context.Background(), fmt.Sprintf(`
+		_, err := q.execContext(context.Background(), fmt.Sprintf(`
 			IF NOT EXISTS (SELECT * FROM sys.sequences WHERE name = '%[1]s') BEGIN CREATE SEQUENCE %[1]s AS BIGINT START WITH 1 INCREMENT BY 1; END;
 			`, sequenceName))
 		return err
@@ -472,7 +478,7 @@ func dropSequence(q querier, d dialect, sequenceName string) error {
 	case db.SQLITE:
 		return dropTable(q, d, sequenceName, false)
 	case db.MYSQL, db.POSTGRES, db.MSSQL:
-		_, err := q.ExecContext(context.Background(), fmt.Sprintf("DROP SEQUENCE IF EXISTS %v", sequenceName))
+		_, err := q.execContext(context.Background(), fmt.Sprintf("DROP SEQUENCE IF EXISTS %v", sequenceName))
 		return err
 	case db.CLICKHOUSE, db.CASSANDRA:
 		//
@@ -487,16 +493,16 @@ func dropSequence(q querier, d dialect, sequenceName string) error {
 func getTableMigrationSQL(tableMigrationSQL string, dialect db.DialectName, engine string) (string, error) { //nolint:unused
 	switch dialect {
 	case db.SQLITE, db.SQLITE3:
-		tableMigrationSQL = strings.ReplaceAll(tableMigrationSQL, "{$id}", "id INTEGER PRIMARY KEY")
+		tableMigrationSQL = strings.ReplaceAll(tableMigrationSQL, string(db.DataTypeId), "id INTEGER PRIMARY KEY")
 		tableMigrationSQL = strings.ReplaceAll(tableMigrationSQL, "$binaryblobtype", "MEDIUMBLOB")
-		tableMigrationSQL = strings.ReplaceAll(tableMigrationSQL, "{$engine}", "")
+		tableMigrationSQL = strings.ReplaceAll(tableMigrationSQL, string(db.DataTypeEngine), "")
 	case db.MYSQL:
-		tableMigrationSQL = strings.ReplaceAll(tableMigrationSQL, "{$id}", "id bigint not null AUTO_INCREMENT PRIMARY KEY")
+		tableMigrationSQL = strings.ReplaceAll(tableMigrationSQL, string(db.DataTypeId), "id bigint not null AUTO_INCREMENT PRIMARY KEY")
 		tableMigrationSQL = strings.ReplaceAll(tableMigrationSQL, "$binaryblobtype", "MEDIUMBLOB")
 		if engine == "xpand-allnodes" {
-			tableMigrationSQL = strings.ReplaceAll(tableMigrationSQL, "{$engine}", "engine = xpand")
+			tableMigrationSQL = strings.ReplaceAll(tableMigrationSQL, string(db.DataTypeEngine), "engine = xpand")
 		} else {
-			tableMigrationSQL = strings.ReplaceAll(tableMigrationSQL, "{$engine}", "engine = "+engine)
+			tableMigrationSQL = strings.ReplaceAll(tableMigrationSQL, string(db.DataTypeEngine), "engine = "+engine)
 		}
 		tableMigrationSQL = strings.ReplaceAll(tableMigrationSQL, "{$json_type}", "json")
 		tableMigrationSQL = strings.ReplaceAll(tableMigrationSQL, "{$json_index}",
@@ -505,13 +511,13 @@ func getTableMigrationSQL(tableMigrationSQL string, dialect db.DialectName, engi
 				"CREATE INDEX acronis_db_bench_json_idx_data_f0f0 ON acronis_db_bench_json(_data_f0f0);"+
 				"CREATE INDEX acronis_db_bench_json_idx_data_f0f0f0 ON acronis_db_bench_json(_data_f0f0f0);")
 	case db.MSSQL:
-		tableMigrationSQL = strings.ReplaceAll(tableMigrationSQL, "{$id}", "id bigint IDENTITY(1,1) PRIMARY KEY")
+		tableMigrationSQL = strings.ReplaceAll(tableMigrationSQL, string(db.DataTypeId), "id bigint IDENTITY(1,1) PRIMARY KEY")
 		tableMigrationSQL = strings.ReplaceAll(tableMigrationSQL, "$binaryblobtype", "varbinary(max)")
-		tableMigrationSQL = strings.ReplaceAll(tableMigrationSQL, "{$engine}", "")
+		tableMigrationSQL = strings.ReplaceAll(tableMigrationSQL, string(db.DataTypeEngine), "")
 	case db.POSTGRES:
-		tableMigrationSQL = strings.ReplaceAll(tableMigrationSQL, "{$id}", "id bigserial not null PRIMARY KEY")
+		tableMigrationSQL = strings.ReplaceAll(tableMigrationSQL, string(db.DataTypeId), "id bigserial not null PRIMARY KEY")
 		tableMigrationSQL = strings.ReplaceAll(tableMigrationSQL, "$binaryblobtype", "BYTEA")
-		tableMigrationSQL = strings.ReplaceAll(tableMigrationSQL, "{$engine}", "")
+		tableMigrationSQL = strings.ReplaceAll(tableMigrationSQL, string(db.DataTypeEngine), "")
 		tableMigrationSQL = strings.ReplaceAll(tableMigrationSQL, "{$json_type}", "jsonb")
 		tableMigrationSQL = strings.ReplaceAll(tableMigrationSQL, "{$json_index}",
 			"CREATE INDEX acronis_db_bench_json_idx_data ON acronis_db_bench_json USING GIN (json_data jsonb_path_ops)")

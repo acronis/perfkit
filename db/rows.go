@@ -20,6 +20,15 @@ type Rows interface {
 	Dump() string
 }
 
+// EmptyRows is a struct for storing DB rows (as a slice of dbRow) and current index
+type EmptyRows struct{}
+
+func (r *EmptyRows) Next() bool                     { return false }
+func (r *EmptyRows) Err() error                     { return nil }
+func (r *EmptyRows) Scan(dest ...interface{}) error { return nil }
+func (r *EmptyRows) Close() error                   { return nil }
+func (r *EmptyRows) Dump() string                   { return "" }
+
 type surrogateRowsRow []interface{}
 
 // SurrogateRows is a struct for storing DB rows (as a slice of dbRow) and current index

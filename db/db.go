@@ -7,6 +7,24 @@ import (
 	"time"
 )
 
+// Supported dialect
+const (
+	SQLITE        DialectName = "sqlite"        // SQLITE is the SQLite driver name
+	SQLITE3       DialectName = "sqlite3"       // SQLITE3 is the SQLite driver name
+	POSTGRES      DialectName = "postgres"      // POSTGRES is the PostgreSQL driver name
+	MYSQL         DialectName = "mysql"         // MYSQL is the MySQL driver name
+	MSSQL         DialectName = "mssql"         // MSSQL is the Microsoft SQL Server driver name
+	CLICKHOUSE    DialectName = "clickhouse"    // CLICKHOUSE is the ClickHouse driver name
+	CASSANDRA     DialectName = "cassandra"     // CASSANDRA is the Cassandra driver name
+	ELASTICSEARCH DialectName = "elasticsearch" // ELASTICSEARCH is the Elasticsearch driver name
+)
+
+// Special conditions for searching
+const (
+	SpecialConditionIsNull    = "isnull()"
+	SpecialConditionIsNotNull = "notnull()"
+)
+
 // Connector is an interface for registering database connectors without knowing the specific connector implementations
 type Connector interface {
 	ConnectionPool(cfg Config) (Database, error)
@@ -40,6 +58,9 @@ type Config struct {
 	MaxPacketSize   int
 	DryRun          bool
 	UseTruncate     bool
+
+	TLSEnabled bool
+	TLSCACert  []byte
 
 	QueryLogger      Logger
 	ReadedRowsLogger Logger
@@ -93,10 +114,38 @@ type databaseQueryRegistrator interface {
 	StatementExit(statement string, startTime time.Time, err error, showRowsAffected bool, result Result, format string, args []interface{}, rows Rows, dest []interface{})
 }
 
+// Page is a struct for storing pagination information
+type Page struct {
+	Limit  int64
+	Offset int64
+}
+
+// SelectCtrl is a struct for storing select control information
+type SelectCtrl struct {
+	Fields []string // empty means select count
+	Where  map[string][]string
+	Order  []string
+	Page   Page
+
+	OptimizeConditions bool
+}
+
 // databaseSearcher is an interface for searching the database
 type databaseSearcher interface {
-	Search(from string, what string, where string, orderBy string, limit int, explain bool, args ...interface{}) (Rows, error)
-	Aggregate(from string, what string, where string, groupBy string, orderBy string, limit int, explain bool, args ...interface{}) (Rows, error)
+	SearchRaw(from string, what string, where string, orderBy string, limit int, explain bool, args ...interface{}) (Rows, error)
+	Search(tableName string, c *SelectCtrl) (Rows, error)
+}
+
+// InsertStats is a struct for storing insert statistics
+type InsertStats struct {
+	Successful        int64
+	Failed            int64
+	Total             int64
+	ExpectedSuccesses int64
+}
+
+func (s *InsertStats) String() string {
+	return fmt.Sprintf("successful: %d, failed: %d, total: %d", s.Successful, s.Failed, s.Total)
 }
 
 // databaseInserter is an interface for inserting data into the database
@@ -149,14 +198,22 @@ type Session interface {
 
 type TableRow struct {
 	Name    string
-	Type    string
+	Type    DataType
 	NotNull bool
+	Indexed bool // only for Elasticsearch
+}
+
+type ResilienceSettings struct {
+	NumberOfShards   int
+	NumberOfReplicas int
 }
 
 type TableDefinition struct {
 	TableRows  []TableRow
 	PrimaryKey []string
 	Engine     string
+	Resilience ResilienceSettings
+	LMPolicy   string // only for Elasticsearch
 }
 
 type IndexType string
@@ -235,9 +292,41 @@ type Database interface {
 	Close() error
 }
 
+type DataType string
+
+const (
+	DataTypeId                DataType = "{$id}"
+	DataTypeInt               DataType = "{$int}"
+	DataTypeString            DataType = "{$string}"
+	DataTypeString256         DataType = "{$string256}"
+	DataTypeBigIntAutoIncPK   DataType = "{$bigint_autoinc_pk}"
+	DataTypeBigIntAutoInc     DataType = "{$bigint_autoinc}"
+	DataTypeAscii             DataType = "{$ascii}"
+	DataTypeUUID              DataType = "{$uuid}"
+	DataTypeVarCharUUID       DataType = "{$varchar_uuid}"
+	DataTypeLongBlob          DataType = "{$longblob}"
+	DataTypeHugeBlob          DataType = "{$hugeblob}"
+	DataTypeDateTime          DataType = "{$datetime}"
+	DataTypeDateTime6         DataType = "{$datetime6}"
+	DataTypeTimestamp6        DataType = "{$timestamp6}"
+	DataTypeCurrentTimeStamp6 DataType = "{$current_timestamp6}"
+	DataTypeBinary20          DataType = "{$binary20}"
+	DataTypeBinaryBlobType    DataType = "{$binaryblobtype}"
+	DataTypeBoolean           DataType = "{$boolean}"
+	DataTypeBooleanFalse      DataType = "{$boolean_false}"
+	DataTypeBooleanTrue       DataType = "{$boolean_true}"
+	DataTypeTinyInt           DataType = "{$tinyint}"
+	DataTypeLongText          DataType = "{$longtext}"
+	DataTypeUnique            DataType = "{$unique}"
+	DataTypeEngine            DataType = "{$engine}"
+	DataTypeNotNull           DataType = "{$notnull}"
+	DataTypeNull              DataType = "{$null}"
+	DataTypeTenantUUIDBoundID DataType = "{$tenant_uuid_bound_id}"
+)
+
 // Dialect is an interface for database dialects
 type Dialect interface {
-	GetType(id string) string
+	GetType(id DataType) string
 }
 
 // Recommendation is a struct for storing DB recommendation
@@ -267,6 +356,7 @@ func GetDatabases() []DBType {
 	ret = append(ret, DBType{Driver: CLICKHOUSE, Symbol: "C", Name: "ClickHouse"})
 	// "A" is used as the latest symbol of the "Cassandra" due to duplicate with ClickHouse "C"
 	ret = append(ret, DBType{Driver: CASSANDRA, Symbol: "A", Name: "Cassandra"})
+	ret = append(ret, DBType{Driver: ELASTICSEARCH, Symbol: "E", Name: "Elasticsearch"})
 
 	return ret
 }

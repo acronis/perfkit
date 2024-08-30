@@ -327,13 +327,24 @@ func (e *EventBus) DoAlign() (bool, error) {
 		 * step #1 - get fresh events
 		 */
 
-		var rows, err = tx.Search("acronis_db_bench_eventbus_events",
-			"internal_id, topic_internal_id, event_type_internal_id, event_id, source, sequence, tenant_id, client_id, trace_parent, "+
-				"subject_id, data_ref, data, data_base64, created_at",
-			"",
-			"internal_id",
-			e.batchSize,
-			false)
+		var rows, err = tx.Query(fmt.Sprintf(`
+			SELECT internal_id,
+				   topic_internal_id,
+				   event_type_internal_id,
+				   event_id,
+				   source,
+				   sequence,
+				   tenant_id,
+				   client_id,
+				   trace_parent,
+				   subject_id,
+				   data_ref,
+				   data,
+				   data_base64,
+				   created_at
+			FROM acronis_db_bench_eventbus_events
+			ORDER BY internal_id
+			LIMIT %d;`, e.batchSize))
 		if err != nil {
 			return err
 		}
@@ -501,13 +512,16 @@ func (e *EventBus) DoFetch() (bool, error) {
 			return false, err
 		}
 
-		var rows, err = sess.Search("acronis_db_bench_eventbus_stream s INNER JOIN acronis_db_bench_eventbus_data d ON s.int_id = d.int_id",
-			"s.int_id, s.topic_id, d.type_id, s.seq, s.seq_time, d.data",
-			"s.topic_id = $1 AND s.seq IS NOT NULL AND s.seq > $2",
-			"s.seq",
-			e.batchSize,
-			false,
-			t, cur64)
+		var rows, err = sess.Query(fmt.Sprintf(`
+			SELECT s.int_id, s.topic_id, d.type_id, s.seq, s.seq_time, d.data
+			FROM acronis_db_bench_eventbus_stream s
+					 INNER JOIN acronis_db_bench_eventbus_data d ON s.int_id = d.int_id
+			WHERE s.topic_id = %s
+			  AND s.seq IS NOT NULL
+			  AND s.seq > %d
+			ORDER BY s.seq
+			LIMIT %d;`,
+			t, cur64, e.batchSize))
 		if err != nil {
 			return false, err
 		}

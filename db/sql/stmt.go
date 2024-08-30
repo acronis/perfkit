@@ -8,7 +8,7 @@ import (
 )
 
 // StatementEnter is called before executing a statement
-func (a *gateway) StatementEnter(query string, args ...interface{}) time.Time { //nolint:revive
+func (g *sqlGateway) StatementEnter(query string, args ...interface{}) time.Time { //nolint:revive
 	var startTime time.Time
 
 	/*
@@ -26,7 +26,7 @@ func (a *gateway) StatementEnter(query string, args ...interface{}) time.Time { 
 }
 
 // StatementExit is called after executing a statement
-func (a *gateway) StatementExit(statement string, startTime time.Time, err error, showRowsAffected bool, result db.Result, format string, args []interface{}, rows db.Rows, dest []interface{}) {
+func (g *sqlGateway) StatementExit(statement string, startTime time.Time, err error, showRowsAffected bool, result db.Result, format string, args []interface{}, rows db.Rows, dest []interface{}) {
 	/*
 		if a.Logger.LogLevel < c.logLevel && err == nil {
 			return
@@ -86,8 +86,8 @@ func (s *sqlStmt) Close() error {
 	return s.stmt.Close()
 }
 
-func (a *gateway) Prepare(query string) (db.Stmt, error) {
-	var stmt, err = a.rw.PrepareContext(a.ctx, query)
+func (g *sqlGateway) Prepare(query string) (db.Stmt, error) {
+	var stmt, err = g.rw.prepareContext(g.ctx, query)
 	if err != nil {
 		return nil, err
 	}

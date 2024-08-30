@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"reflect"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // TernaryStr returns trueVal if cond is true, falseVal otherwise
@@ -110,33 +112,33 @@ func DumpRecursive(i interface{}, indent string) string {
 func DefaultCreateQueryPatchFunc(table string, query string, dialect Dialect) (string, error) {
 	query = strings.ReplaceAll(query, "{table}", table)
 
-	for _, logicalType := range []string{
-		"{$bigint_autoinc_pk}",
-		"{$bigint_autoinc}",
-		"{$ascii}",
-		"{$uuid}",
-		"{$varchar_uuid}",
-		"{$tenant_uuid_bound_id}",
-		"{$longblob}",
-		"{$hugeblob}",
-		"{$datetime}",
-		"{$datetime6}",
-		"{$timestamp6}",
-		"{$current_timestamp6}",
-		"{$binary20}",
-		"{$binaryblobtype}",
-		"{$boolean}",
-		"{$boolean_false}",
-		"{$boolean_true}",
-		"{$tinyint}",
-		"{$longtext}",
-		"{$unique}",
-		"{$notnull}",
-		"{$null}",
-		"{$engine}",
+	for _, logicalType := range []DataType{
+		DataTypeBigIntAutoIncPK,
+		DataTypeBigIntAutoInc,
+		DataTypeAscii,
+		DataTypeUUID,
+		DataTypeVarCharUUID,
+		DataTypeTenantUUIDBoundID,
+		DataTypeLongBlob,
+		DataTypeHugeBlob,
+		DataTypeDateTime,
+		DataTypeDateTime6,
+		DataTypeTimestamp6,
+		DataTypeCurrentTimeStamp6,
+		DataTypeBinary20,
+		DataTypeBinaryBlobType,
+		DataTypeBoolean,
+		DataTypeBooleanFalse,
+		DataTypeBooleanTrue,
+		DataTypeTinyInt,
+		DataTypeLongText,
+		DataTypeUnique,
+		DataTypeNotNull,
+		DataTypeNull,
+		DataTypeEngine,
 	} {
 		var specificType = dialect.GetType(logicalType)
-		query = strings.ReplaceAll(query, logicalType, specificType)
+		query = strings.ReplaceAll(query, string(logicalType), specificType)
 	}
 
 	return query, nil
@@ -200,6 +202,71 @@ func WithAutoInc(name DialectName) bool {
 	}
 }
 
+func DedupStrings(ss []string) []string {
+	var idx = map[string]struct{}{}
+	var dd []string
+	for _, s := range ss {
+		if _, ok := idx[s]; !ok {
+			idx[s] = struct{}{}
+			dd = append(dd, s)
+		}
+	}
+
+	return dd
+}
+
+func ParseFunc(s string) (fName string, arg string, err error) {
+	argOpen, argClose := strings.Index(s, "("), strings.Index(s, ")")
+	if argOpen == -1 && argClose == -1 {
+		return "", s, nil
+	}
+	if argOpen == -1 {
+		return "", "", fmt.Errorf("bad function '%v', no opening bracket", s)
+	}
+	if argClose == -1 {
+		return "", "", fmt.Errorf("bad function '%v', no closing bracket", s)
+	}
+
+	if argClose <= argOpen {
+		return "", "", fmt.Errorf("bad function '%v', closing bracket placed before opening bracket", s)
+	}
+
+	return s[:argOpen], s[argOpen+1 : argClose], nil
+}
+
+func ParseTimeUTC(s string) (time.Time, error) {
+	if s == "" {
+		return time.Time{}, fmt.Errorf("empty time value")
+	}
+
+	if strings.HasSuffix(s, "ns") {
+		ns, err := strconv.ParseInt(strings.TrimSuffix(s, "ns"), 10, 64)
+		if err != nil {
+			return time.Time{}, fmt.Errorf("incorrect UNIX-TIMESTAMP-NANO format")
+		}
+
+		return time.Unix(0, ns).UTC(), nil
+	}
+
+	sec, err := strconv.ParseInt(s, 10, 64)
+	if err == nil {
+		return time.Unix(sec, 0).UTC(), nil
+	}
+
+	var t time.Time
+	if t, err = time.Parse(time.RFC3339, s); err != nil {
+		if t, err = time.Parse(time.RFC1123, s); err != nil {
+			if t, err = time.Parse(time.RFC850, s); err != nil {
+				if t, err = time.Parse(time.ANSIC, s); err != nil {
+					return time.Time{}, fmt.Errorf("incorrect time format, must be one of (UNIX-TIMESTAMP-NANO, UNIX-TIMESTAMP, RFC3339, RFC1123, RFC850, ANSI-C)")
+				}
+			}
+		}
+	}
+
+	return t.UTC(), nil
+}
+
 func ParseScheme(s string) (scheme string, uri string, err error) {
 	const schemeSeparator = "://"
 	parts := strings.Split(s, schemeSeparator)
@@ -208,6 +275,26 @@ func ParseScheme(s string) (scheme string, uri string, err error) {
 	}
 
 	return parts[0], parts[1], nil
+}
+
+// Cond represents a condition
+type Cond struct {
+	Col  string
+	Vals []string
+}
+
+// SortFields sorts fields by column name
+func SortFields(fields map[string][]string) []Cond {
+	var cs []Cond
+	for k, v := range fields {
+		cs = append(cs, Cond{k, v})
+	}
+
+	sort.Slice(cs, func(i, j int) bool {
+		return cs[i].Col < cs[j].Col
+	})
+
+	return cs
 }
 
 // GenDBParameterPlaceholders generates placeholders for given start and count

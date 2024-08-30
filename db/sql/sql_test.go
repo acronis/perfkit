@@ -2,6 +2,9 @@ package sql
 
 import (
 	"context"
+	"fmt"
+	"github.com/MichaelS11/go-cql-driver"
+	"github.com/gocql/gocql"
 	"testing"
 	"time"
 
@@ -64,18 +67,18 @@ func testTableDefinition(dia db.DialectName) *db.TableDefinition {
 	if dia == db.CASSANDRA {
 		tableSpec = &db.TableDefinition{
 			TableRows: []db.TableRow{
-				{Name: "origin", Type: "INT"},
-				{Name: "type", Type: "INT"},
-				{Name: "name", Type: "TEXT"},
+				{Name: "origin", Type: db.DataTypeInt},
+				{Name: "type", Type: db.DataTypeInt},
+				{Name: "name", Type: db.DataTypeLongText},
 			},
 			PrimaryKey: []string{"origin", "type", "name"},
 		}
 	} else {
 		tableSpec = &db.TableDefinition{
 			TableRows: []db.TableRow{
-				{Name: "origin", Type: "INT", NotNull: true},
-				{Name: "type", Type: "INTEGER", NotNull: true},
-				{Name: "name", Type: "VARCHAR(256)", NotNull: false},
+				{Name: "origin", Type: db.DataTypeInt, NotNull: true},
+				{Name: "type", Type: db.DataTypeInt, NotNull: true},
+				{Name: "name", Type: db.DataTypeString256, NotNull: false},
 			},
 			PrimaryKey: []string{"origin", "type", "name"},
 		}
@@ -98,7 +101,7 @@ func (suite *TestingSuite) makeTestSession() (db.Database, db.Session, *db.Conte
 		QueryLogger:     logger,
 	})
 
-	require.NoError(suite.T(), err, "making test session")
+	require.NoError(suite.T(), err, "making test esSession")
 
 	var tableSpec = testTableDefinition(dbo.DialectName())
 
@@ -129,6 +132,39 @@ func cleanup(t *testing.T, dbo db.Database) {
 	if err := dbo.DropTable("perf_table"); err != nil {
 		t.Error("drop table", err)
 		return
+	}
+}
+
+func dbDialect(connString string) (dialect, error) {
+	scheme, _, err := db.ParseScheme(connString)
+	if err != nil {
+		return nil, fmt.Errorf("cannot parse connection string scheme '%v', error: %v", connString, err)
+	}
+
+	switch scheme {
+	case "sqlite":
+		return &sqliteDialect{}, nil
+	case "mysql":
+		return &mysqlDialect{}, nil
+	case "pg", "postgres", "postgresql":
+		if _, schemaName, err := postgresSchemaAndConnString(connString); err != nil {
+			return nil, fmt.Errorf("db: postgres: %v", err)
+		} else {
+			return &pgDialect{schemaName: schemaName}, nil
+		}
+	case "mssql", "sqlserver":
+		return &msDialect{}, nil
+	case "cql":
+		var cassandraConfig *gocql.ClusterConfig
+		if cassandraConfig, err = cql.ConfigStringToClusterConfig(connString); err != nil {
+			return nil, fmt.Errorf("db: cannot convert cassandra dsn: %s: err: %v", sanitizeConn(connString), err)
+		}
+
+		return &cassandraDialect{keySpace: cassandraConfig.Keyspace}, nil
+	case "clickhouse":
+		return &clickHouseDialect{}, nil
+	default:
+		return nil, fmt.Errorf("db: unsupported backend '%v'", scheme)
 	}
 }
 

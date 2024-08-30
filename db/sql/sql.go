@@ -17,41 +17,41 @@ import (
  */
 
 type querier interface {
-	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
-	QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row
-	QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
-	PrepareContext(ctx context.Context, query string) (*sql.Stmt, error)
+	execContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
+	queryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row
+	queryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
+	prepareContext(ctx context.Context, query string) (*sql.Stmt, error)
 }
 
 type accessor interface {
 	querier
 
-	Ping(ctx context.Context) error
-	Stats() sql.DBStats
-	RawSession() interface{}
-	Close() error
+	ping(ctx context.Context) error
+	stats() sql.DBStats
+	rawSession() interface{}
+	close() error
 }
 
 type transaction interface {
 	querier
 
-	Commit() error
-	Rollback() error
+	commit() error
+	rollback() error
 }
 
 type transactor interface {
-	Begin(ctx context.Context) (transaction, error)
+	begin(ctx context.Context) (transaction, error)
 }
 
 func inTx(ctx context.Context, t transactor, d dialect, fn func(q querier, d dialect) error) error {
-	tx, err := t.Begin(ctx)
+	tx, err := t.begin(ctx)
 	if err != nil {
 		return err
 	}
 
 	if err = fn(tx, d); err != nil {
 		if err != driver.ErrBadConn && d.canRollback(err) {
-			if rErr := tx.Rollback(); rErr != nil {
+			if rErr := tx.rollback(); rErr != nil {
 				if err == context.Canceled && (rErr == sql.ErrTxDone || rErr == context.Canceled) {
 					return err
 				} else {
@@ -62,7 +62,7 @@ func inTx(ctx context.Context, t transactor, d dialect, fn func(q querier, d dia
 		return err
 	}
 
-	if err = tx.Commit(); err == sql.ErrTxDone {
+	if err = tx.commit(); err == sql.ErrTxDone {
 		select {
 		case <-ctx.Done():
 			// Context has been closed after end of executing and before commit.
@@ -75,7 +75,7 @@ func inTx(ctx context.Context, t transactor, d dialect, fn func(q querier, d dia
 	return err
 }
 
-type gateway struct {
+type sqlGateway struct {
 	ctx        context.Context
 	rw         querier
 	dialect    dialect
@@ -85,12 +85,12 @@ type gateway struct {
 	queryLogger db.Logger
 }
 
-type session struct {
-	gateway
+type esSession struct {
+	sqlGateway
 	t transactor
 }
 
-func (s *session) Transact(fn func(tx db.DatabaseAccessor) error) error {
+func (s *esSession) Transact(fn func(tx db.DatabaseAccessor) error) error {
 	var err error
 	var maxRetries = s.MaxRetries
 	if maxRetries == 0 {
@@ -99,7 +99,7 @@ func (s *session) Transact(fn func(tx db.DatabaseAccessor) error) error {
 
 	for i := 0; i < maxRetries; i++ {
 		err = inTx(s.ctx, s.t, s.dialect, func(q querier, dl dialect) error {
-			gw := gateway{s.ctx, q, dl, true, s.MaxRetries, s.queryLogger}
+			gw := sqlGateway{s.ctx, q, dl, true, s.MaxRetries, s.queryLogger}
 			return fn(&gw) // bad but will work for now?
 		})
 
@@ -126,7 +126,7 @@ type sqlDatabase struct {
 
 // Ping pings the DB
 func (d *sqlDatabase) Ping(ctx context.Context) error {
-	var err = d.rw.Ping(ctx)
+	var err = d.rw.ping(ctx)
 	if err != nil && d.queryLogger != nil {
 		d.queryLogger.Log("ping failed: %v", err)
 	}
@@ -235,44 +235,44 @@ type timedQuerier struct {
 	queryLogger db.Logger
 }
 
-func (tq timedQuerier) ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
+func (tq timedQuerier) execContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
 	defer accountTime(tq.dbtime, time.Now())
 
 	if tq.queryLogger != nil {
 		tq.queryLogger.Log(query)
 	}
 
-	return tq.q.ExecContext(ctx, query, args...)
+	return tq.q.execContext(ctx, query, args...)
 }
 
-func (tq timedQuerier) QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row {
+func (tq timedQuerier) queryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row {
 	defer accountTime(tq.dbtime, time.Now())
 
 	if tq.queryLogger != nil {
 		tq.queryLogger.Log(query)
 	}
 
-	return tq.q.QueryRowContext(ctx, query, args...)
+	return tq.q.queryRowContext(ctx, query, args...)
 }
 
-func (tq timedQuerier) QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
+func (tq timedQuerier) queryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
 	defer accountTime(tq.dbtime, time.Now())
 
 	if tq.queryLogger != nil {
 		tq.queryLogger.Log(query, args...)
 	}
 
-	return tq.q.QueryContext(ctx, query, args...)
+	return tq.q.queryContext(ctx, query, args...)
 }
 
-func (tq timedQuerier) PrepareContext(ctx context.Context, query string) (*sql.Stmt, error) {
+func (tq timedQuerier) prepareContext(ctx context.Context, query string) (*sql.Stmt, error) {
 	defer accountTime(tq.dbtime, time.Now())
 
 	if tq.queryLogger != nil {
 		tq.queryLogger.Log(query)
 	}
 
-	return tq.q.PrepareContext(ctx, query)
+	return tq.q.prepareContext(ctx, query)
 }
 
 type timedTransaction struct {
@@ -283,64 +283,64 @@ type timedTransaction struct {
 	queryLogger db.Logger
 }
 
-func (ttx timedTransaction) ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
+func (ttx timedTransaction) execContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
 	defer accountTime(ttx.dbtime, time.Now())
 
 	if ttx.queryLogger != nil {
 		ttx.queryLogger.Log(query)
 	}
 
-	return ttx.tx.ExecContext(ctx, query, args...)
+	return ttx.tx.execContext(ctx, query, args...)
 }
 
-func (ttx timedTransaction) QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row {
+func (ttx timedTransaction) queryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row {
 	defer accountTime(ttx.dbtime, time.Now())
 
 	if ttx.queryLogger != nil {
 		ttx.queryLogger.Log(query)
 	}
 
-	return ttx.tx.QueryRowContext(ctx, query, args...)
+	return ttx.tx.queryRowContext(ctx, query, args...)
 }
 
-func (ttx timedTransaction) QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
+func (ttx timedTransaction) queryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
 	defer accountTime(ttx.dbtime, time.Now())
 
 	if ttx.queryLogger != nil {
 		ttx.queryLogger.Log(query)
 	}
 
-	return ttx.tx.QueryContext(ctx, query, args...)
+	return ttx.tx.queryContext(ctx, query, args...)
 }
 
-func (ttx timedTransaction) PrepareContext(ctx context.Context, query string) (*sql.Stmt, error) {
+func (ttx timedTransaction) prepareContext(ctx context.Context, query string) (*sql.Stmt, error) {
 	defer accountTime(ttx.dbtime, time.Now())
 
 	if ttx.queryLogger != nil {
 		ttx.queryLogger.Log(query)
 	}
 
-	return ttx.tx.PrepareContext(ctx, query)
+	return ttx.tx.prepareContext(ctx, query)
 }
 
-func (ttx timedTransaction) Commit() error {
+func (ttx timedTransaction) commit() error {
 	defer accountTime(ttx.committime, time.Now())
 
 	if ttx.queryLogger != nil {
 		ttx.queryLogger.Log("COMMIT")
 	}
 
-	return ttx.tx.Commit()
+	return ttx.tx.commit()
 }
 
-func (ttx timedTransaction) Rollback() error {
+func (ttx timedTransaction) rollback() error {
 	defer accountTime(ttx.committime, time.Now())
 
 	if ttx.queryLogger != nil {
 		ttx.queryLogger.Log("ROLLBACK")
 	}
 
-	return ttx.tx.Rollback()
+	return ttx.tx.rollback()
 }
 
 type timedTransactor struct {
@@ -352,14 +352,14 @@ type timedTransactor struct {
 	queryLogger db.Logger
 }
 
-func (tt timedTransactor) Begin(ctx context.Context) (transaction, error) {
+func (tt timedTransactor) begin(ctx context.Context) (transaction, error) {
 	defer accountTime(tt.begintime, time.Now())
 
 	if tt.queryLogger != nil {
 		tt.queryLogger.Log("BEGIN")
 	}
 
-	var t, err = tt.t.Begin(ctx)
+	var t, err = tt.t.begin(ctx)
 
 	if err != nil {
 		return t, err
@@ -378,8 +378,8 @@ func (d *sqlDatabase) Context(ctx context.Context) *db.Context {
 }
 
 func (d *sqlDatabase) Session(c *db.Context) db.Session {
-	return &session{
-		gateway: gateway{
+	return &esSession{
+		sqlGateway: sqlGateway{
 			ctx:         c.Ctx,
 			rw:          timedQuerier{q: d.rw, dbtime: atomic.NewInt64(c.DBtime.Nanoseconds()), queryLogger: d.queryLogger},
 			dialect:     d.dialect,
@@ -398,22 +398,22 @@ func (d *sqlDatabase) Session(c *db.Context) db.Session {
 
 func (d *sqlDatabase) RawSession() interface{} {
 	if d.queryLogger != nil && d.rw != nil {
-		stats := d.rw.Stats()
+		stats := d.rw.stats()
 		if stats.OpenConnections > 1 {
 			d.queryLogger.Log("Potential connections leak detected, ensure the previous DB query closed the connection: %s", d.lastQuery)
 		}
 	}
 
-	return d.rw.RawSession()
+	return d.rw.rawSession()
 }
 
 func (d *sqlDatabase) Stats() *db.Stats {
-	sqlStats := d.rw.Stats()
+	sqlStats := d.rw.stats()
 	return &db.Stats{OpenConnections: sqlStats.OpenConnections, Idle: sqlStats.Idle, InUse: sqlStats.InUse}
 }
 
 func (d *sqlDatabase) Close() error {
-	var err = d.rw.Close()
+	var err = d.rw.close()
 	if err != nil {
 		return fmt.Errorf("close failed: %w", err)
 	}
@@ -423,7 +423,10 @@ func (d *sqlDatabase) Close() error {
 
 type dialect interface {
 	name() db.DialectName
-	getType(id string) string
+	encodeString(s string) string
+	encodeBool(b bool) string
+	encodeBytes(bs []byte) string
+	getType(dataType db.DataType) string
 	randFunc() string
 	isRetriable(err error) bool
 	canRollback(err error) bool
