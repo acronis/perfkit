@@ -9,8 +9,12 @@ import (
 	"sort"
 	"strings"
 
+	_ "net/http/pprof"
+
 	"github.com/acronis/perfkit/benchmark"
-	embeddedpostgres "github.com/fergusstrange/embedded-postgres" // embedder postgres
+	"github.com/acronis/perfkit/db"
+
+	_ "github.com/acronis/perfkit/db/sql" // sql drivers
 )
 
 // Version is a version of the acronis-db-bench
@@ -29,11 +33,10 @@ func printVersion() {
 
 // TestOpts is a structure to store all the test options
 type TestOpts struct {
-	DBOpts               benchmark.DatabaseOpts
-	BenchOpts            BenchOpts
-	EmbeddedPostgresOpts EmbeddedPostgresOpts
-	TestcaseOpts         TestcaseOpts
-	CTIOpts              CTIOpts
+	DBOpts       DatabaseOpts
+	BenchOpts    BenchOpts
+	TestcaseOpts TestcaseOpts
+	CTIOpts      CTIOpts
 }
 
 // BenchOpts is a structure to store all the benchmark options
@@ -70,17 +73,17 @@ type TestcaseOpts struct {
 
 // DBTestData is a structure to store all the test data
 type DBTestData struct {
-	TestDesc         *TestDesc
-	EventBus         *EventBus
-	EmbeddedPostgres *embeddedpostgres.EmbeddedPostgres
-	EffectiveBatch   int // EffectiveBatch reflects the default value if the --batch option is not set, it can be different for different tests
+	TestDesc       *TestDesc
+	EventBus       *EventBus
+	TenantsCache   *TenantsCache
+	EffectiveBatch int // EffectiveBatch reflects the default value if the --batch option is not set, it can be different for different tests
 
 	scores map[string][]benchmark.Score
 }
 
 // DBWorkerData is a structure to store all the worker data
 type DBWorkerData struct {
-	conn *benchmark.DBConnector
+	conn *DBConnector
 }
 
 var header = strings.Repeat("=", 120) + "\n"
@@ -97,15 +100,10 @@ func Main() {
 		var testOpts TestOpts
 		b.Cli.AddFlagGroup("Database options", "", &testOpts.DBOpts)
 		b.Cli.AddFlagGroup("acronis-db-bench specific options", "", &testOpts.BenchOpts)
-		b.Cli.AddFlagGroup("Embedded Postgres specific options", "", &testOpts.EmbeddedPostgresOpts)
 		b.Cli.AddFlagGroup("Testcase specific options", "", &testOpts.TestcaseOpts)
 		b.Cli.AddFlagGroup("CTI-pattern simulation test options", "", &testOpts.CTIOpts)
 
 		return &testOpts
-	}
-
-	b.PreExit = func() {
-		finiEmbeddedPostgres(b)
 	}
 
 	b.PrintScore = func(score benchmark.Score) {
@@ -148,15 +146,22 @@ func Main() {
 		b.Vault.(*DBTestData).EffectiveBatch = 1
 	}
 
+	var dialectName, err = db.GetDialectName(b.TestOpts.(*TestOpts).DBOpts.ConnString)
+	if err != nil {
+		b.Exit(err)
+	}
+
 	if testOpts.BenchOpts.List {
 		groups, _ := GetTests()
 		fmt.Printf(header) //nolint:staticcheck
 		for _, g := range groups {
+
 			str := fmt.Sprintf("  -- %s", g.name) //nolint:perfsprint
 			fmt.Printf("\n%s %s\n\n", str, strings.Repeat("-", 130-len(str)))
+
 			var testsOutput []string
 			for _, t := range g.tests {
-				if testOpts.DBOpts.Driver != "" && !t.dbIsSupported(testOpts.DBOpts.Driver) {
+				if dialectName != "" && !t.dbIsSupported(dialectName) {
 					continue
 				}
 				testsOutput = append(testsOutput, fmt.Sprintf("  %-39s : %s : %s\n", t.name, t.getDBs(), t.description))
@@ -166,14 +171,12 @@ func Main() {
 		}
 		fmt.Printf("\n")
 		fmt.Printf("Databases symbol legend:\n\n ")
-		for _, db := range benchmark.GetDatabases() {
+		for _, db := range db.GetDatabases() {
 			fmt.Printf(" %s - %s;", db.Symbol, db.Name)
 		}
 		fmt.Printf("\n\n")
 		b.Exit()
 	}
-
-	initEmbeddedPostgres(b)
 
 	if testOpts.BenchOpts.Describe {
 		describeTest(b, testOpts)
@@ -198,17 +201,24 @@ func Main() {
 	if testOpts.DBOpts.Reconnect {
 		b.PreWorker = func(workerId int) {
 			conn := b.WorkerData[workerId].(*DBWorkerData).conn
-			conn.Close()
+			conn.database.Close()
 		}
 	}
 
 	c := dbConnector(b)
 
-	driver, version := c.GetVersion()
+	driver, version, err := c.database.GetVersion()
+	if err != nil {
+		b.Exit("Failed to get database version: %v", err)
+	}
+
 	fmt.Printf("Connected to '%s' database: %s\n", driver, version)
 	fmt.Printf(header) //nolint:staticcheck
 
-	content, dbInfo := c.GetInfo(version)
+	content, dbInfo, err := c.database.GetInfo(version)
+	if err != nil {
+		b.Exit("Failed to get database info: %v", err)
+	}
 
 	if testOpts.BenchOpts.Info || b.Logger.LogLevel > benchmark.LogInfo {
 		if testOpts.BenchOpts.Info {
@@ -222,7 +232,7 @@ func Main() {
 
 	if testOpts.BenchOpts.ProfilerPort > 0 {
 		go func() {
-			err := http.ListenAndServe(fmt.Sprintf("localhost:%d", testOpts.BenchOpts.ProfilerPort), nil)
+			err = http.ListenAndServe(fmt.Sprintf("localhost:%d", testOpts.BenchOpts.ProfilerPort), nil)
 			if err != nil {
 				b.Exit("Failed to start profiler server: %v", err)
 			}
@@ -232,8 +242,10 @@ func Main() {
 	}
 
 	b.Init = func() {
-		b.TenantsCache.SetTenantsWorkingSet(b.TestOpts.(*TestOpts).BenchOpts.TenantsWorkingSet)
-		b.TenantsCache.SetCTIsWorkingSet(b.TestOpts.(*TestOpts).BenchOpts.CTIsWorkingSet)
+		b.Vault.(*DBTestData).TenantsCache = NewTenantsCache(b)
+
+		b.Vault.(*DBTestData).TenantsCache.SetTenantsWorkingSet(b.TestOpts.(*TestOpts).BenchOpts.TenantsWorkingSet)
+		b.Vault.(*DBTestData).TenantsCache.SetCTIsWorkingSet(b.TestOpts.(*TestOpts).BenchOpts.CTIsWorkingSet)
 
 		if b.Logger.LogLevel > benchmark.LogInfo && !testOpts.BenchOpts.Info {
 			b.Log(benchmark.LogTrace, 0, getDBInfo(b, content))
@@ -298,9 +310,15 @@ func executeTests(b *benchmark.Benchmark, testOpts *TestOpts) {
 	if !exists {
 		b.Exit(fmt.Sprintf("Test: '%s' doesn't exist, see the list of available tests using --list option\n", testOpts.BenchOpts.Test))
 	}
+
+	var dialectName, err = db.GetDialectName(testOpts.DBOpts.ConnString)
+	if err != nil {
+		b.Exit(err)
+	}
+
 	test := tests[testOpts.BenchOpts.Test]
-	if !test.dbIsSupported(testOpts.DBOpts.Driver) {
-		b.Exit(fmt.Sprintf("Test: '%s' doesn't support '%s' database\n", testOpts.BenchOpts.Test, testOpts.DBOpts.Driver))
+	if !test.dbIsSupported(dialectName) {
+		b.Exit(fmt.Sprintf("Test: '%s' doesn't support '%s' database\n", testOpts.BenchOpts.Test, dialectName))
 	}
 	test.launcherFunc(b, test)
 }

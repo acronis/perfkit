@@ -1,0 +1,21 @@
+version: '3.4'
+
+x-logging:
+  &logging
+  driver: gelf
+  options:
+    gelf-address: udp://${GELF_IP}:${GELF_PORT}
+
+services:
+  postgres:
+    image: postgres:13-alpine
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: root
+      POSTGRES_DB: perfkit_db_ci
+    logging: *logging
+    ports:
+      - "5432:5432"
+
+volumes:
+  postgres:

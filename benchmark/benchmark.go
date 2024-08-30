@@ -7,13 +7,6 @@ import (
 	"os/signal"
 	"sync"
 	"time"
-
-	_ "github.com/ClickHouse/clickhouse-go/v2" // clickhouse driver
-	_ "github.com/MichaelS11/go-cql-driver"    // cassandra driver
-	_ "github.com/denisenkom/go-mssqldb"       // mssql driver
-	_ "github.com/go-sql-driver/mysql"         // mysql driver
-	_ "github.com/lib/pq"                      // postgres driver
-	_ "github.com/mattn/go-sqlite3"            // sqlite3 driver
 )
 
 // TestOpts represents all user specified flags
@@ -79,7 +72,6 @@ type Benchmark struct {
 	OptsInitialized bool
 	ReadOnly        bool
 	Logger          *Logger
-	TenantsCache    *TenantsCache
 	Randomizer      *Randomizer
 
 	NeedToExit bool
@@ -228,7 +220,6 @@ func (b *Benchmark) Run() {
 	}()
 
 	b.Randomizer = NewRandomizer(b.CommonOpts.RandSeed, b.CommonOpts.Workers)
-	b.TenantsCache = NewTenantsCache(b)
 	b.Init()
 
 	b.WorkerData = make([]WorkerData, b.CommonOpts.Workers)

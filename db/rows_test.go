@@ -1,4 +1,4 @@
-package benchmark
+package db
 
 import (
 	"testing"
@@ -6,8 +6,8 @@ import (
 
 // TestScanWithValidData tests Scan() function
 func TestScanWithValidData(t *testing.T) {
-	rows := &DBRows{
-		data: []dbRow{
+	rows := &SurrogateRows{
+		data: []surrogateRowsRow{
 			{"test", 1, true},
 		},
 		idx: 1,
@@ -23,8 +23,8 @@ func TestScanWithValidData(t *testing.T) {
 
 // TestScanWithInvalidData tests Scan() function
 func TestScanWithInvalidData(t *testing.T) {
-	rows := &DBRows{
-		data: []dbRow{
+	rows := &SurrogateRows{
+		data: []surrogateRowsRow{
 			{"test", "invalid", true},
 		},
 		idx: 1,
@@ -40,8 +40,8 @@ func TestScanWithInvalidData(t *testing.T) {
 
 // TestNextWithRemainingData tests Next() function
 func TestNextWithRemainingData(t *testing.T) {
-	rows := &DBRows{
-		data: []dbRow{
+	rows := &SurrogateRows{
+		data: []surrogateRowsRow{
 			{"test", 1, true},
 			{"test2", 2, false},
 		},
@@ -54,8 +54,8 @@ func TestNextWithRemainingData(t *testing.T) {
 
 // TestNextWithoutRemainingData tests Next() function
 func TestNextWithoutRemainingData(t *testing.T) {
-	rows := &DBRows{
-		data: []dbRow{
+	rows := &SurrogateRows{
+		data: []surrogateRowsRow{
 			{"test", 1, true},
 		},
 		idx: 1,
@@ -67,7 +67,7 @@ func TestNextWithoutRemainingData(t *testing.T) {
 
 // TestClose tests Close() function
 func TestClose(t *testing.T) {
-	rows := &DBRows{}
+	rows := &SurrogateRows{}
 	err := rows.Close()
 	if err != nil {
 		t.Errorf("Close() error, expected no error but got: %v", err)
@@ -76,8 +76,8 @@ func TestClose(t *testing.T) {
 
 // TestDumpWithMultipleRows tests Dump() function
 func TestDumpWithMultipleRows(t *testing.T) {
-	rows := &DBRows{
-		data: []dbRow{
+	rows := &SurrogateRows{
+		data: []surrogateRowsRow{
 			{"test", 1, true},
 			{"test2", 2, false},
 		},
@@ -90,8 +90,8 @@ func TestDumpWithMultipleRows(t *testing.T) {
 
 // TestDumpWithSingleRow tests Dump() function
 func TestDumpWithSingleRow(t *testing.T) {
-	rows := &DBRows{
-		data: []dbRow{
+	rows := &SurrogateRows{
+		data: []surrogateRowsRow{
 			{"test", 1, true},
 		},
 	}

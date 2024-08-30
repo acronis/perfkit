@@ -1,6 +1,7 @@
-package benchmark
+package main
 
 import (
+	"context"
 	_ "embed"
 	"encoding/json"
 	"errors"
@@ -10,6 +11,9 @@ import (
 	"sync/atomic"
 
 	guuid "github.com/google/uuid"
+
+	"github.com/acronis/perfkit/benchmark"
+	"github.com/acronis/perfkit/db"
 )
 
 // TenantUUID is a type for tenant uuid
@@ -57,8 +61,8 @@ const (
 type TenantsCache struct {
 	tenantsWorkingSetLimit    int
 	ctisWorkingSetLimit       int
-	logger                    *Logger
-	benchmark                 *Benchmark
+	logger                    *benchmark.Logger
+	benchmark                 *benchmark.Benchmark
 	uuids                     []TenantUUID
 	ctiUuids                  []CTIUUID
 	tenantStructureRandomizer *tenantStructureRandomizer
@@ -66,13 +70,21 @@ type TenantsCache struct {
 }
 
 // NewTenantsCache creates a new TenantsCache instance
-func NewTenantsCache(benchmark *Benchmark) *TenantsCache {
-	return &TenantsCache{
+func NewTenantsCache(bench *benchmark.Benchmark) *TenantsCache {
+	var tenantCache = &TenantsCache{
 		tenantsWorkingSetLimit: 0,
-		logger:                 benchmark.Logger,
-		benchmark:              benchmark,
+		logger:                 bench.Logger,
+		benchmark:              bench,
 		uuids:                  []TenantUUID{},
 	}
+
+	if bench.Randomizer == nil {
+		bench.Randomizer = benchmark.NewRandomizer(bench.CommonOpts.RandSeed, bench.CommonOpts.Workers)
+	}
+
+	bench.Randomizer.RegisterPlugin("tenant", tenantCache)
+
+	return tenantCache
 }
 
 // SetTenantsWorkingSet allows to limit the number of effective tenants used for other tests queries
@@ -84,7 +96,7 @@ func (tc *TenantsCache) SetTenantsWorkingSet(limit int) {
 	if limit < 1 {
 		limit = 1
 	}
-	tc.logger.Log(LogTrace, 0, fmt.Sprintf("adjust tenants working set to: %d", limit))
+	tc.logger.Log(benchmark.LogTrace, 0, fmt.Sprintf("adjust tenants working set to: %d", limit))
 	tc.tenantsWorkingSetLimit = limit
 }
 
@@ -93,7 +105,7 @@ func (tc *TenantsCache) SetCTIsWorkingSet(limit int) {
 	if limit < 1 {
 		limit = 1
 	}
-	tc.logger.Log(LogTrace, 0, fmt.Sprintf("adjust CTI working set to: %d", limit))
+	tc.logger.Log(benchmark.LogTrace, 0, fmt.Sprintf("adjust CTI working set to: %d", limit))
 	tc.ctisWorkingSetLimit = limit
 }
 
@@ -281,121 +293,200 @@ var ctiProvisioningDDLClickhouse = fmt.Sprintf(`CREATE TABLE %[1]s
 engine = MergeTree() ORDER BY (tenant_id, cti_entity_uuid);`, TableNameCtiProvisioning)
 
 // Init initializes tenants cache and creates tables if needed
-func (tc *TenantsCache) Init(c *DBConnector) {
+func (tc *TenantsCache) Init(database db.Database) {
 	var eventData []tenantStructureData
 	if err := json.Unmarshal(tenantStructure, &eventData); err != nil {
-		c.Exit(err.Error())
+		tc.logger.Log(benchmark.LogTrace, 0, fmt.Sprintf("error unmarshalling tenant_structure.json: %v", err))
+		return
 	}
 
-	c.Log(LogTrace, fmt.Sprintf("tenants probablity config: %v", eventData))
+	tc.logger.Log(benchmark.LogTrace, 0, fmt.Sprintf("tenants probablity config: %v", eventData))
 	tc.tenantStructureRandomizer = newTenantStructureRandomizer(eventData)
 
-	c.Log(LogTrace, "init")
-	tc.CreateTables(c)
-	tc.PopulateUuidsFromDB(c)
-	c.Log(LogTrace, fmt.Sprintf("loaded %d uuids", len(tc.uuids)))
-	c.Log(LogTrace, fmt.Sprintf("loaded %d cti uuids", len(tc.ctiUuids)))
+	tc.logger.Log(benchmark.LogTrace, 0, "init")
+	tc.CreateTables(database)
+	tc.PopulateUuidsFromDB(database)
+	tc.logger.Log(benchmark.LogTrace, 0, fmt.Sprintf("loaded %d uuids", len(tc.uuids)))
+	tc.logger.Log(benchmark.LogTrace, 0, fmt.Sprintf("loaded %d cti uuids", len(tc.ctiUuids)))
 }
 
 // CreateTables checks if tables created, run migrations otherwise
-func (tc *TenantsCache) CreateTables(c *DBConnector) {
-	c.Log(LogTrace, "create tenant tables")
+func (tc *TenantsCache) CreateTables(database db.Database) {
+	tc.logger.Log(benchmark.LogTrace, 0, "create tenant tables")
 
-	if !c.TableExists(TableNameTenants) {
-		if c.DbOpts.Driver == CLICKHOUSE {
-			c.ApplyMigrations("", TenantsDDLClickhouse)
-		} else if c.DbOpts.Driver == CASSANDRA {
-			c.ApplyMigrations("", TenantsDDLCassandra)
-		} else {
-			c.ApplyMigrations("", TenantsDDLSQL)
+	if exists, existsErr := database.TableExists(TableNameTenants); existsErr != nil {
+		tc.logger.Log(benchmark.LogTrace, 0, fmt.Sprintf("error checking table %s: %v", TableNameTenants, existsErr))
+		return
+	} else if !exists {
+		var ddlQuery string
+		switch database.DialectName() {
+		case db.CLICKHOUSE:
+			ddlQuery = TenantsDDLClickhouse
+		case db.CASSANDRA:
+			ddlQuery = TenantsDDLCassandra
+		default:
+			ddlQuery = TenantsDDLSQL
 		}
-		c.ExecOrExit(fmt.Sprintf("INSERT INTO %s (id, uuid, name, kind, parent_id, nesting_level) VALUES (1, '', '/', 'r', 1, 0)", TableNameTenants))
-	}
 
-	if !c.TableExists(TableNameTenantClosure) {
-		if c.DbOpts.Driver == CLICKHOUSE {
-			c.ApplyMigrations("", TenantClosureDDLClickhouse)
-		} else if c.DbOpts.Driver == CASSANDRA {
-			c.ApplyMigrations("", TenantClosureDDLCassandra)
-		} else {
-			c.ApplyMigrations("", TenantClosureDDLSQL)
+		if err := database.ApplyMigrations("", ddlQuery); err != nil {
+			tc.logger.Log(benchmark.LogTrace, 0, fmt.Sprintf("error creating table %s: %v", TableNameTenants, err))
+			return
 		}
-		c.ExecOrExit(fmt.Sprintf("INSERT INTO %s (parent_id, child_id, parent_kind, barrier) VALUES (1, 1, 'r', 0)", TableNameTenantClosure))
-	}
 
-	if !c.TableExists(TableNameCtiEntities) {
-		if c.DbOpts.Driver == CLICKHOUSE {
-			c.ApplyMigrations("", ctiEntitiesDDLClickhouse)
-		} else if c.DbOpts.Driver == CASSANDRA {
-			c.ApplyMigrations("", ctiEntitiesDDLSQLCassandra)
-		} else {
-			c.ApplyMigrations("", ctiEntitiesDDLSQL)
+		var session = database.Session(database.Context(context.Background()))
+		if txErr := session.Transact(func(tx db.DatabaseAccessor) error {
+			_, err := tx.Exec(fmt.Sprintf("INSERT INTO %s (id, uuid, name, kind, parent_id, nesting_level) VALUES (1, '', '/', 'r', 1, 0)", TableNameTenants))
+			return err
+		}); txErr != nil {
+			tc.logger.Log(benchmark.LogTrace, 0, fmt.Sprintf("error inserting into table %s: %v", TableNameTenants, txErr))
+			return
 		}
 	}
 
-	if !c.TableExists(TableNameCtiProvisioning) {
-		if c.DbOpts.Driver == CLICKHOUSE {
-			c.ApplyMigrations("", ctiProvisioningDDLClickhouse)
-		} else if c.DbOpts.Driver == CASSANDRA {
-			c.ApplyMigrations("", ctiProvisioningDDLSQLCassandra)
-		} else {
-			c.ApplyMigrations("", ctiProvisioningDDLSQL)
+	if exists, existsErr := database.TableExists(TableNameTenantClosure); existsErr != nil {
+		tc.logger.Log(benchmark.LogTrace, 0, fmt.Sprintf("error checking table %s: %v", TableNameTenantClosure, existsErr))
+		return
+	} else if !exists {
+		var ddlQuery string
+		switch database.DialectName() {
+		case db.CLICKHOUSE:
+			ddlQuery = TenantClosureDDLClickhouse
+		case db.CASSANDRA:
+			ddlQuery = TenantClosureDDLCassandra
+		default:
+			ddlQuery = TenantClosureDDLSQL
+		}
+
+		if err := database.ApplyMigrations("", ddlQuery); err != nil {
+			tc.logger.Log(benchmark.LogTrace, 0, fmt.Sprintf("error creating table %s: %v", TableNameTenantClosure, err))
+			return
+		}
+
+		var session = database.Session(database.Context(context.Background()))
+		if txErr := session.Transact(func(tx db.DatabaseAccessor) error {
+			_, err := tx.Exec(fmt.Sprintf("INSERT INTO %s (parent_id, child_id, parent_kind, barrier) VALUES (1, 1, 'r', 0)", TableNameTenantClosure))
+			return err
+		}); txErr != nil {
+			tc.logger.Log(benchmark.LogTrace, 0, fmt.Sprintf("error inserting into table %s: %v", TableNameTenantClosure, txErr))
+			return
+		}
+	}
+
+	if exists, existsErr := database.TableExists(TableNameCtiEntities); existsErr != nil {
+		tc.logger.Log(benchmark.LogTrace, 0, fmt.Sprintf("error checking table %s: %v", TableNameCtiEntities, existsErr))
+		return
+	} else if !exists {
+		var ddlQuery string
+		switch database.DialectName() {
+		case db.CLICKHOUSE:
+			ddlQuery = ctiEntitiesDDLClickhouse
+		case db.CASSANDRA:
+			ddlQuery = ctiEntitiesDDLSQLCassandra
+		default:
+			ddlQuery = ctiEntitiesDDLSQL
+		}
+
+		if err := database.ApplyMigrations("", ddlQuery); err != nil {
+			tc.logger.Log(benchmark.LogTrace, 0, fmt.Sprintf("error creating table %s: %v", TableNameCtiEntities, err))
+			return
+		}
+	}
+
+	if exists, existsErr := database.TableExists(TableNameCtiProvisioning); existsErr != nil {
+		tc.logger.Log(benchmark.LogTrace, 0, fmt.Sprintf("error checking table %s: %v", TableNameCtiProvisioning, existsErr))
+		return
+	} else if !exists {
+		var ddlQuery string
+		switch database.DialectName() {
+		case db.CLICKHOUSE:
+			ddlQuery = ctiProvisioningDDLClickhouse
+		case db.CASSANDRA:
+			ddlQuery = ctiProvisioningDDLSQLCassandra
+		default:
+			ddlQuery = ctiProvisioningDDLSQL
+		}
+
+		if err := database.ApplyMigrations("", ddlQuery); err != nil {
+			tc.logger.Log(benchmark.LogTrace, 0, fmt.Sprintf("error creating table %s: %v", TableNameCtiProvisioning, err))
+			return
 		}
 	}
 }
 
 // InitTables initializes tables for tenants cache
-func (tc *TenantsCache) InitTables(c *DBConnector) {
-	c.Log(LogTrace, "init tenant tables")
+func (tc *TenantsCache) InitTables(database db.Database) {
+	tc.logger.Log(benchmark.LogTrace, 0, "init tenant tables")
 
-	c.ExecOrExit(fmt.Sprintf("INSERT INTO %s (id, uuid, name, kind, parent_id, nesting_level) VALUES (1, '', '/', 'r', 1, 0)", TableNameTenants))
-	c.ExecOrExit(fmt.Sprintf("INSERT INTO %s (parent_id, child_id, parent_kind, barrier) VALUES (1, 1, 'r', 0)", TableNameTenantClosure))
+	var session = database.Session(database.Context(context.Background()))
+	if txErr := session.Transact(func(tx db.DatabaseAccessor) error {
+		if _, err := tx.Exec(fmt.Sprintf("INSERT INTO %s (id, uuid, name, kind, parent_id, nesting_level) VALUES (1, '', '/', 'r', 1, 0)", TableNameTenants)); err != nil {
+			return err
+		}
+
+		if _, err := tx.Exec(fmt.Sprintf("INSERT INTO %s (parent_id, child_id, parent_kind, barrier) VALUES (1, 1, 'r', 0)", TableNameTenantClosure)); err != nil {
+			return err
+		}
+
+		return nil
+	}); txErr != nil {
+		tc.logger.Log(benchmark.LogTrace, 0, fmt.Sprintf("error creating table %s: %v", TableNameTenants, txErr))
+	}
 }
 
 // DropTables drops all tables created by this test
-func (tc *TenantsCache) DropTables(c *DBConnector) {
-	c.Log(LogTrace, "drop tenant tables")
+func (tc *TenantsCache) DropTables(database db.Database) {
+	tc.logger.Log(benchmark.LogTrace, 0, "drop tenant tables")
 
-	c.DropTable(TableNameTenants)
-	c.DropTable(TableNameTenantClosure)
-	c.DropTable(TableNameCtiEntities)
-	c.DropTable(TableNameCtiProvisioning)
-
-	if c.DbOpts.UseTruncate {
-		tc.InitTables(c)
+	for _, table := range []string{TableNameTenants, TableNameTenantClosure, TableNameCtiEntities, TableNameCtiProvisioning} {
+		if droppedErr := database.DropTable(table); droppedErr != nil {
+			tc.logger.Log(benchmark.LogTrace, 0, fmt.Sprintf("error dropping table %s: %v", table, droppedErr))
+		}
+	}
+	if database.UseTruncate() {
+		tc.InitTables(database)
 	}
 }
 
 // PopulateUuidsFromDB populates uuids from DB table acronis_db_bench_cybercache_tenants
-func (tc *TenantsCache) PopulateUuidsFromDB(c *DBConnector) {
-	c.Log(LogTrace, "populating tenant uuids from DB")
+func (tc *TenantsCache) PopulateUuidsFromDB(database db.Database) {
+	tc.logger.Log(benchmark.LogTrace, 0, "populating tenant uuids from DB")
 
-	rows := c.Select(TableNameTenants, "uuid, id, kind, nesting_level", "", "", 0, false)
+	var session = database.Session(database.Context(context.Background()))
+
+	var rows, err = session.Search(TableNameTenants, "uuid, id, kind, nesting_level", "", "", 0, false)
+	if err != nil {
+		return
+	}
 
 	rand := tc.tenantStructureRandomizer
 	for rows.Next() {
 		var t TenantObj
-		err := rows.Scan(&t.UUID, &t.ID, &t.Kind, &t.NestingLevel)
-		if err != nil {
-			c.Exit(err.Error())
+		if err = rows.Scan(&t.UUID, &t.ID, &t.Kind, &t.NestingLevel); err != nil {
+			tc.logger.Log(benchmark.LogTrace, 0, fmt.Sprintf("error scanning row: %v", err))
+			return
 		}
 		tc.uuids = append(tc.uuids, t.UUID)
 
 		rand.storeCreatedTenant(&t)
 	}
 
-	rand.currentID = int64(getMax(c, "id"))
-	rand.maxLevel = getMax(c, "nesting_level")
+	rand.currentID = int64(getMax(database, "id"))
+	rand.maxLevel = getMax(database, "nesting_level")
 	if rand.maxLevel >= len(rand.levelTotal) {
 		rand.maxLevel = len(rand.levelTotal) - 1
 	}
 
-	ctiRows := c.Select(TableNameCtiEntities, "uuid", "", "", 0, false)
+	var ctiRows db.Rows
+	if ctiRows, err = session.Search(TableNameCtiEntities, "uuid", "", "", 0, false); err != nil {
+		return
+	}
+
 	for ctiRows.Next() {
 		var uuid CTIUUID
-		err := ctiRows.Scan(&uuid)
+		err = ctiRows.Scan(&uuid)
 		if err != nil {
-			c.Exit(err.Error())
+			tc.logger.Log(benchmark.LogTrace, 0, fmt.Sprintf("error scanning row: %v", err))
+			return
 		}
 		tc.ctiUuids = append(tc.ctiUuids, uuid)
 	}
@@ -410,60 +501,79 @@ type TenantClosureObj struct {
 }
 
 // CreateTenant creates a new tenant and inserts it into DB
-func (tc *TenantsCache) CreateTenant(rw *RandomizerWorker, c *DBConnector) TenantUUID {
+func (tc *TenantsCache) CreateTenant(rw *benchmark.RandomizerWorker, tx db.DatabaseAccessor) (TenantUUID, error) {
 	t, err := tc.createRandomTenant(rw)
 	if err != nil {
-		c.Exit(err.Error())
+		tc.logger.Log(benchmark.LogTrace, 0, fmt.Sprintf("error creating tenant: %v", err))
+		return "", err
 	}
 
-	c.InsertInto(TableNameTenants, *t, []string{"id", "uuid", "name", "kind", "parent_id", "nesting_level", "is_deleted", "parent_has_access"})
+	if err = tx.InsertInto(TableNameTenants, *t, []string{"id", "uuid", "name", "kind", "parent_id", "nesting_level", "is_deleted", "parent_has_access"}); err != nil {
+		tc.logger.Log(benchmark.LogTrace, 0, fmt.Sprintf("error inserting into table %s: %v", TableNameTenants, err))
+		return "", err
+	}
 
 	tc.uuids = append(tc.uuids, t.UUID)
-	c.Log(LogTrace, fmt.Sprintf("creating a tenant: %v", t))
+	tc.logger.Log(benchmark.LogTrace, 0, fmt.Sprintf("creating a tenant: %v", t))
 
 	var tcToCreate []TenantClosureObj
 	newTenantClosure := TenantClosureObj{ParentID: t.ID, ChildID: t.ID, ParentKind: t.Kind, Barrier: 0}
 	tcToCreate = append(tcToCreate, newTenantClosure)
-	rows := c.Select(TableNameTenantClosure, "parent_id, parent_kind, barrier", fmt.Sprintf("child_id = %d", t.ParentID), "", 0, false)
 
-	for rows.Next() {
-		var tc TenantClosureObj
-		err := rows.Scan(&tc.ParentID, &tc.ParentKind, &tc.Barrier)
-		if err != nil {
-			c.Exit(err.Error())
-		}
-		tc.ChildID = t.ID
-		// get maximum of tc.Barrier, newTenantClosure.Barrier
-		tc.Barrier = Max(tc.Barrier, newTenantClosure.Barrier)
-
-		tcToCreate = append(tcToCreate, tc)
+	rows, err := tx.Search(TableNameTenantClosure, "parent_id, parent_kind, barrier", fmt.Sprintf("child_id = %d", t.ParentID), "", 0, false)
+	if err != nil {
+		tc.logger.Log(benchmark.LogTrace, 0, fmt.Sprintf("error selecting from table %s: %v", TableNameTenantClosure, err))
+		return "", err
 	}
 
-	c.InsertInto(TableNameTenantClosure, tcToCreate, []string{"parent_id", "child_id", "parent_kind", "barrier"})
+	for rows.Next() {
+		var tco TenantClosureObj
+		err = rows.Scan(&tco.ParentID, &tco.ParentKind, &tco.Barrier)
+		if err != nil {
+			tc.logger.Log(benchmark.LogTrace, 0, fmt.Sprintf("error scanning row: %v", err))
+			return "", err
+		}
+		tco.ChildID = t.ID
+		// get maximum of tc.Barrier, newTenantClosure.Barrier
+		tco.Barrier = Max(tco.Barrier, newTenantClosure.Barrier)
+
+		tcToCreate = append(tcToCreate, tco)
+	}
+
+	if err = tx.InsertInto(TableNameTenantClosure, tcToCreate, []string{"parent_id", "child_id", "parent_kind", "barrier"}); err != nil {
+		tc.logger.Log(benchmark.LogTrace, 0, fmt.Sprintf("error inserting into table %s: %v", TableNameTenantClosure, err))
+		return "", err
+	}
+
 	tc.tenantStructureRandomizer.storeCreatedTenant(t)
 
-	return t.UUID
+	return t.UUID, nil
 }
 
 // CreateCTIEntity creates a new CTI entity and inserts it into DB
-func (tc *TenantsCache) CreateCTIEntity(rw *RandomizerWorker, c *DBConnector) {
+func (tc *TenantsCache) CreateCTIEntity(rw *benchmark.RandomizerWorker, tx db.DatabaseAccessor) error {
 	cti, err := tc.createRandomCtiEntity(rw)
-	tc.logger.Log(LogTrace, 0, fmt.Sprintf("creating a cti entity: %v", cti))
+	tc.logger.Log(benchmark.LogTrace, 0, fmt.Sprintf("creating a cti entity: %v", cti))
 	if err != nil {
-		c.Exit(err.Error())
+		return fmt.Errorf("error creating cti entity: %v", err)
 	}
 
 	cti.GlobalState = 1
 
-	c.InsertInto(TableNameCtiEntities, *cti, []string{"uuid", "cti", "final", "global_state", "entity_schema", "annotations", "traits", "traits_schema", "traits_annotations"})
+	if err = tx.InsertInto(TableNameCtiEntities, *cti, []string{"uuid", "cti", "final", "global_state", "entity_schema", "annotations", "traits", "traits_schema", "traits_annotations"}); err != nil {
+		return fmt.Errorf("error inserting into table %s: %v", TableNameCtiEntities, err)
+	}
+
 	tc.ctiUuids = append(tc.ctiUuids, cti.UUID)
+
+	return nil
 }
 
 // letterBytesCTI is a set of letters for generating random CTI
 const letterBytesCTI = "abcdefghijklmnopqrstuvwxyz....._____~~~~~-0123456789"
 
 // genRandCtiStr generates random CTI string with prefix
-func (tc *TenantsCache) genRandCtiStr(rw *RandomizerWorker) string {
+func (tc *TenantsCache) genRandCtiStr(rw *benchmark.RandomizerWorker) string {
 	prefix := "cti.a.p."
 	prefixLen := len(prefix)
 
@@ -476,7 +586,7 @@ func (tc *TenantsCache) genRandCtiStr(rw *RandomizerWorker) string {
 }
 
 // createRandomCtiEntity creates a new CTI entity and inserts it into DB
-func (tc *TenantsCache) createRandomCtiEntity(rw *RandomizerWorker) (*CtiEntityObj, error) { //nolint:unparam
+func (tc *TenantsCache) createRandomCtiEntity(rw *benchmark.RandomizerWorker) (*CtiEntityObj, error) { //nolint:unparam
 	cti := CtiEntityObj{
 		UUID: CTIUUID(rw.UUID()),
 		CTI:  tc.genRandCtiStr(rw),
@@ -486,15 +596,20 @@ func (tc *TenantsCache) createRandomCtiEntity(rw *RandomizerWorker) (*CtiEntityO
 }
 
 // getMax returns max value of given field from DB table acronis_db_bench_cybercache_tenants
-func getMax(c *DBConnector, field string) int {
-	maxRows := c.Select(TableNameTenants, fmt.Sprintf("COALESCE(MAX(%s),0)", field), "", "", 0, false)
+func getMax(database db.Database, field string) int {
+	var session = database.Session(database.Context(context.Background()))
+
+	var maxRows, err = session.Search(TableNameTenants, fmt.Sprintf("COALESCE(MAX(%s),0)", field), "", "", 0, false)
+	if err != nil {
+		return 0
+	}
 
 	var vMax int
 	for maxRows.Next() {
-		err := maxRows.Scan(&vMax)
+		err = maxRows.Scan(&vMax)
 		if err != nil {
 			maxRows.Close() //nolint:errcheck,gosec
-			c.Exit(err.Error())
+			return 0
 		}
 		maxRows.Close() //nolint:errcheck,gosec
 
@@ -556,7 +671,7 @@ func newTenantStructureRandomizer(data []tenantStructureData) *tenantStructureRa
 }
 
 // getRandomTenantStructure returns random tenant structure
-func (r *tenantStructureRandomizer) getRandomTenantStructure(rw *RandomizerWorker) tenantStructureData {
+func (r *tenantStructureRandomizer) getRandomTenantStructure(rw *benchmark.RandomizerWorker) tenantStructureData {
 	randomWeight := rw.Intn(r.levelTotal[r.maxLevel])
 	// use binary search to find the first element in weightSums that is greater than randomWeight
 	// then return the corresponding tenant structure
@@ -590,7 +705,7 @@ func (r *tenantStructureRandomizer) storeCreatedTenant(t *TenantObj) {
 }
 
 // findParent finds parent for tenant
-func (r *tenantStructureRandomizer) findParent(rw *RandomizerWorker, level int, kind string) int64 {
+func (r *tenantStructureRandomizer) findParent(rw *benchmark.RandomizerWorker, level int, kind string) int64 {
 	possibleParents, ok := r.levelKindIDMap.Load(level - 1)
 	if !ok {
 		return -1
@@ -619,7 +734,7 @@ func (r *tenantStructureRandomizer) findParent(rw *RandomizerWorker, level int, 
 }
 
 // createRandomTenant creates a new tenant and inserts it into DB
-func (tc *TenantsCache) createRandomTenant(rw *RandomizerWorker) (*TenantObj, error) {
+func (tc *TenantsCache) createRandomTenant(rw *benchmark.RandomizerWorker) (*TenantObj, error) {
 	rnd := tc.tenantStructureRandomizer
 	var kind string
 	var err error
@@ -648,10 +763,10 @@ func (tc *TenantsCache) createRandomTenant(rw *RandomizerWorker) (*TenantObj, er
 		}
 	}
 	if parentID == -1 {
-		tc.logger.Log(LogTrace, 0, fmt.Sprintf("could not find parent for kind %s, nesting level: %d, randomizer: %+v", kind, r.NestingLevel, rnd))
-		tc.logger.Log(LogTrace, 0, fmt.Sprintf("weightSums: %+v", rnd.weightSums))
-		tc.logger.Log(LogTrace, 0, fmt.Sprintf("maxLevel: %+v", rnd.maxLevel))
-		tc.logger.Log(LogTrace, 0, fmt.Sprintf("currentID: %+v", rnd.currentID))
+		tc.logger.Log(benchmark.LogTrace, 0, fmt.Sprintf("could not find parent for kind %s, nesting level: %d, randomizer: %+v", kind, r.NestingLevel, rnd))
+		tc.logger.Log(benchmark.LogTrace, 0, fmt.Sprintf("weightSums: %+v", rnd.weightSums))
+		tc.logger.Log(benchmark.LogTrace, 0, fmt.Sprintf("maxLevel: %+v", rnd.maxLevel))
+		tc.logger.Log(benchmark.LogTrace, 0, fmt.Sprintf("currentID: %+v", rnd.currentID))
 
 		return nil, errors.New("could not find parent")
 	}
@@ -714,7 +829,7 @@ func convertIntToKind(kind int) (string, error) {
 }
 
 // GetRandomTenantUUID returns random tenant uuid from cache
-func (tc *TenantsCache) GetRandomTenantUUID(rw *RandomizerWorker, testCardinality int) (TenantUUID, error) {
+func (tc *TenantsCache) GetRandomTenantUUID(rw *benchmark.RandomizerWorker, testCardinality int) (TenantUUID, error) {
 	var cardinality int
 	if testCardinality == 0 {
 		cardinality = tc.tenantsWorkingSetLimit
@@ -742,7 +857,7 @@ func (tc *TenantsCache) GetRandomTenantUUID(rw *RandomizerWorker, testCardinalit
  * Generate a new UUID based on the UUID prefix coming from the TenantUUID
  * This logic is required to simulate a low cardinality objects associated with a tenant
  */
-func (tc *TenantsCache) GetTenantUuidBoundId(rw *RandomizerWorker, tenantUuid TenantUUID, cardinality int) TenantUUID { //nolint:revive
+func (tc *TenantsCache) GetTenantUuidBoundId(rw *benchmark.RandomizerWorker, tenantUuid TenantUUID, cardinality int) TenantUUID { //nolint:revive
 	s := string(tenantUuid)
 	if len(s) > 0 {
 		return TenantUUID(s[:len(s)-12] + fmt.Sprintf("%012d", rw.Intn(cardinality)))
@@ -752,7 +867,7 @@ func (tc *TenantsCache) GetTenantUuidBoundId(rw *RandomizerWorker, tenantUuid Te
 }
 
 // GetRandomCTIUUID returns random CTI uuid from cache
-func (tc *TenantsCache) GetRandomCTIUUID(rw *RandomizerWorker, testCardinality int) (CTIUUID, error) {
+func (tc *TenantsCache) GetRandomCTIUUID(rw *benchmark.RandomizerWorker, testCardinality int) (CTIUUID, error) {
 	var cardinality int
 	if testCardinality == 0 {
 		cardinality = tc.ctisWorkingSetLimit
@@ -774,4 +889,41 @@ func (tc *TenantsCache) GetRandomCTIUUID(rw *RandomizerWorker, testCardinality i
 	}
 
 	return tc.ctiUuids[rw.IntnExp(cardinality)], nil
+}
+
+func (tc *TenantsCache) GenCommonFakeValue(columnType string, rw *benchmark.RandomizerWorker, cardinality int) (bool, interface{}) {
+	if columnType != "tenant_uuid" {
+		return false, nil
+	}
+
+	var tenantUUID, err = tc.GetRandomTenantUUID(rw, cardinality)
+	if err != nil {
+		tc.benchmark.Exit(err.Error())
+	}
+
+	return true, tenantUUID
+}
+
+func (tc *TenantsCache) GenFakeValue(columnType string, rw *benchmark.RandomizerWorker, cardinality int, preGenerated map[string]interface{}) (bool, interface{}) {
+	var tenantUUID TenantUUID
+	if preGenerated != nil {
+		var rawTenantUUID = preGenerated["tenant_uuid"]
+		tenantUUID = rawTenantUUID.(TenantUUID)
+	}
+
+	switch columnType {
+	case "tenant_uuid":
+		return true, tenantUUID
+	case "tenant_uuid_bound_id":
+		return true, tc.GetTenantUuidBoundId(rw, tenantUUID, cardinality)
+	case "cti_uuid":
+		ret, err := tc.GetRandomCTIUUID(rw, cardinality)
+		if err != nil {
+			tc.benchmark.Exit(err.Error())
+		}
+
+		return true, ret
+	default:
+		return false, nil
+	}
 }
