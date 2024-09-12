@@ -1,4 +1,4 @@
-package main
+package event_bus
 
 // EventBusDDL is a DDL for Acronis EventBus tables
 var EventBusDDL = `

@@ -31,7 +31,7 @@ func createSearchQueryBuilder(idxName string, tableRows []db.TableRow) error {
 		case db.DataTypeUUID:
 			queryBuilder.queryable[row.Name] = uuidCond()
 		case db.DataTypeString:
-			queryBuilder.queryable[row.Name] = stringCond(256, false)
+			queryBuilder.queryable[row.Name] = stringCond(256, true)
 		case db.DataTypeDateTime:
 			queryBuilder.queryable[row.Name] = timeCond()
 		}
@@ -173,6 +173,18 @@ func (r *SearchRequest) String() string {
 	return string(b)
 }
 
+type CountRequest struct {
+	Query *SearchQuery `json:"query"`
+}
+
+func (r *CountRequest) String() string {
+	b, err := json.MarshalIndent(r, "", "   ")
+	if err != nil {
+		return "{}"
+	}
+	return string(b)
+}
+
 type SearchHit struct {
 	ID     string                 `json:"_id"`
 	Index  string                 `json:"_index"`
@@ -188,6 +200,8 @@ type ShardResult struct {
 }
 
 type SearchResponse struct {
+	Count int64 `json:"count"`
+
 	Shards ShardResult `json:"_shards"`
 
 	Hits struct {
@@ -202,9 +216,18 @@ type SearchResponse struct {
 	Took     int64 `json:"took"`
 }
 
-func (b searchQueryBuilder) searchRequest(c *db.SelectCtrl) (*SearchRequest, bool, error) {
+type queryType int
+
+const (
+	queryTypeError  queryType = 0
+	queryTypeSearch queryType = 1
+	queryTypeCount  queryType = 2
+	queryTypeAggs   queryType = 3
+)
+
+func (b searchQueryBuilder) searchRequest(c *db.SelectCtrl) (*SearchRequest, queryType, bool, error) {
 	if c == nil {
-		return nil, true, nil
+		return nil, queryTypeSearch, true, nil
 	}
 	var (
 		q     *SearchQuery
@@ -216,11 +239,11 @@ func (b searchQueryBuilder) searchRequest(c *db.SelectCtrl) (*SearchRequest, boo
 	}
 	q, empty, err = b.searchQuery(c.OptimizeConditions, c.Where)
 	if err != nil {
-		return nil, false, fmt.Errorf("failed to create search request: %v", err)
+		return nil, queryTypeError, false, fmt.Errorf("failed to create search request: %v", err)
 	}
 
 	if empty {
-		return nil, true, nil
+		return nil, queryTypeSearch, true, nil
 	}
 
 	req := &SearchRequest{
@@ -230,15 +253,18 @@ func (b searchQueryBuilder) searchRequest(c *db.SelectCtrl) (*SearchRequest, boo
 		Query:  q,
 	}
 
-	if req.Fields, err = b.fields(c.Fields); err != nil {
-		return nil, false, fmt.Errorf("failed to set request fields: %v", err)
+	var count bool
+	if req.Fields, count, err = b.fields(c.Fields); err != nil {
+		return nil, queryTypeSearch, false, fmt.Errorf("failed to set request fields: %v", err)
+	} else if count {
+		return req, queryTypeCount, false, nil
 	}
 
 	if req.Sort, err = b.order(c.Order); err != nil {
-		return nil, false, fmt.Errorf("failed to parse order fields for request: %v", err)
+		return nil, queryTypeSearch, false, fmt.Errorf("failed to parse order fields for request: %v", err)
 	}
 
-	return req, false, nil
+	return req, queryTypeSearch, false, nil
 }
 
 func (b searchQueryBuilder) searchQuery(optimizeConditions bool, filter map[string][]string) (*SearchQuery, bool, error) {
@@ -394,6 +420,9 @@ func uuidCond() filterFunction {
 		}
 
 		if len(terms) != 0 {
+			if field == "tenant_vis_list" {
+				field = "tenant_vis_list.keyword"
+			}
 			bl.Filter.addTermsSelector(field, terms)
 		}
 
@@ -726,26 +755,29 @@ func (b searchQueryBuilder) order(sortFields []string) ([]map[string]json.RawMes
 	return orderQuery, nil
 }
 
-func (b searchQueryBuilder) fields(selectedFields []string) ([]string, error) {
+func (b searchQueryBuilder) fields(selectedFields []string) ([]string, bool, error) {
 	if len(selectedFields) == 0 {
-		return []string{}, nil // count(0)
+		return []string{}, false, nil
 	}
+
+	if len(selectedFields) == 1 && selectedFields[0] == "COUNT(0)" {
+		return []string{}, true, nil
+	}
+
 	var result []string
 
 	switch {
-	case len(selectedFields) == 1 && selectedFields[0] == "*":
-		return []string{"*"}, nil
 	default:
 		for _, fld := range selectedFields {
 			if fld == "" {
-				return nil, fmt.Errorf("empty request field")
+				return nil, false, fmt.Errorf("empty request field")
 			}
 
 			result = append(result, fld)
 		}
 	}
 
-	return result, nil
+	return result, false, nil
 }
 
 func (b searchQueryBuilder) filter(optimizeConditions bool, filterFields map[string][]string) (*conditions, bool, error) {
@@ -790,11 +822,7 @@ func (b searchQueryBuilder) filter(optimizeConditions bool, filterFields map[str
 	return &bl, false, nil
 }
 
-func (g *esGateway) SearchRaw(from string, what string, where string, orderBy string, limit int, explain bool, args ...interface{}) (db.Rows, error) {
-	return nil, nil
-}
-
-func (g *esGateway) Search(idxName string, sc *db.SelectCtrl) (db.Rows, error) {
+func (g *esGateway) Select(idxName string, sc *db.SelectCtrl) (db.Rows, error) {
 	var index = indexName(idxName)
 
 	var queryBuilder, ok = indexQueryBuilders[index]
@@ -802,7 +830,7 @@ func (g *esGateway) Search(idxName string, sc *db.SelectCtrl) (db.Rows, error) {
 		return nil, fmt.Errorf("index %s is not supported", index)
 	}
 
-	var query, empty, err = queryBuilder.searchRequest(sc)
+	var query, qType, empty, err = queryBuilder.searchRequest(sc)
 	if err != nil {
 		return nil, err
 	}
@@ -812,18 +840,38 @@ func (g *esGateway) Search(idxName string, sc *db.SelectCtrl) (db.Rows, error) {
 	}
 
 	var resp *SearchResponse
-	if resp, err = g.q.search(g.ctx.Ctx, index, query); err != nil {
-		return nil, fmt.Errorf("failed to load tasks: %v", err)
+	switch qType {
+	case queryTypeSearch:
+		if resp, err = g.q.search(g.ctx.Ctx, index, query); err != nil {
+			return nil, fmt.Errorf("failed to search: %v", err)
+		}
+	case queryTypeCount:
+		var countQuery = &CountRequest{
+			Query: query.Query,
+		}
+
+		if resp, err = g.q.count(g.ctx.Ctx, index, countQuery); err != nil {
+			return nil, fmt.Errorf("failed to count: %v", err)
+		}
+	default:
+		return nil, fmt.Errorf("unsupported query type %v", qType)
 	}
 
 	if resp == nil {
 		return &db.EmptyRows{}, nil
 	}
 
-	var fields []map[string]interface{}
-	for _, hit := range resp.Hits.Hits {
-		fields = append(fields, hit.Fields)
-	}
+	switch qType {
+	case queryTypeSearch:
+		var fields []map[string]interface{}
+		for _, hit := range resp.Hits.Hits {
+			fields = append(fields, hit.Fields)
+		}
 
-	return &esRows{data: fields, requestedColumns: sc.Fields}, nil
+		return &esRows{data: fields, requestedColumns: sc.Fields}, nil
+	case queryTypeCount:
+		return &db.CountRows{Count: resp.Count}, nil
+	default:
+		return &db.EmptyRows{}, nil
+	}
 }

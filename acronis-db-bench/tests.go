@@ -7,13 +7,17 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	mssql "github.com/denisenkom/go-mssqldb"
+	es8 "github.com/elastic/go-elasticsearch/v8"
 	"github.com/gocraft/dbr/v2"
 	"github.com/lib/pq"
 
 	"github.com/acronis/perfkit/benchmark"
 	"github.com/acronis/perfkit/db"
+
+	tenants "github.com/acronis/perfkit/acronis-db-bench/tenants-cache"
 )
 
 const (
@@ -87,9 +91,9 @@ func (t *TestDesc) dbIsSupported(db db.DialectName) bool {
 func (t *TestDesc) getDBs() string {
 	ret := "["
 
-	for _, db := range db.GetDatabases() {
-		if t.dbIsSupported(db.Driver) {
-			ret += db.Symbol
+	for _, database := range db.GetDatabases() {
+		if t.dbIsSupported(database.Driver) {
+			ret += database.Symbol
 		} else {
 			ret += "-"
 		}
@@ -101,7 +105,7 @@ func (t *TestDesc) getDBs() string {
 
 var (
 	// ALL is a list of all supported databases
-	ALL = []db.DialectName{db.POSTGRES, db.MYSQL, db.MSSQL, db.SQLITE, db.CLICKHOUSE, db.CASSANDRA}
+	ALL = []db.DialectName{db.POSTGRES, db.MYSQL, db.MSSQL, db.SQLITE, db.CLICKHOUSE, db.CASSANDRA, db.ELASTICSEARCH}
 	// RELATIONAL is a list of all supported relational databases
 	RELATIONAL = []db.DialectName{db.POSTGRES, db.MYSQL, db.MSSQL, db.SQLITE}
 	// PMWSA is a list of all supported databases except ClickHouse
@@ -127,8 +131,7 @@ var TestPing = TestDesc{
 	databases:   ALL,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
 		worker := func(b *benchmark.Benchmark, c *DBConnector, testDesc *TestDesc, batch int) (loops int) { //nolint:revive
-			err := c.database.Ping(context.Background())
-			if err != nil {
+			if err := c.database.Ping(context.Background()); err != nil {
 				return 0
 			}
 
@@ -166,11 +169,11 @@ var TestRawQuery = TestDesc{
 				}
 				if strings.Contains(query, "{TENANT}") {
 					rw := b.Randomizer.GetWorker(c.WorkerID)
-					tenantUUID, err := b.Vault.(*DBTestData).TenantsCache.GetRandomTenantUUID(rw, 0)
+					tenantUUID, err := b.Vault.(*DBTestData).TenantsCache.GetRandomTenantUUID(rw, 0, "")
 					if err != nil {
 						b.Exit(err)
 					}
-					q = strings.Replace(q, "{TENANT}", "'"+string(tenantUUID)+"'", -1)
+					q = strings.Replace(q, "{TENANT}", "'"+tenantUUID.String()+"'", -1)
 				}
 				fmt.Printf("query %s\n", q)
 
@@ -206,8 +209,6 @@ var TestSelectOne = TestDesc{
 	databases:   ALL,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
 		worker := func(b *benchmark.Benchmark, c *DBConnector, testDesc *TestDesc, batch int) (loops int) { //nolint:revive
-			var _ = b.TestOpts.(*TestOpts).BenchOpts.Explain
-
 			var ret int
 			switch rawSession := c.database.RawSession().(type) {
 			case *dbr.Session:
@@ -217,6 +218,27 @@ var TestSelectOne = TestDesc{
 			case *sql.DB:
 				if err := rawSession.QueryRow("SELECT 1").Scan(&ret); err != nil {
 					b.Exit("can't do 'SELECT 1': %v", err)
+				}
+			case *es8.Client:
+				var res, err = rawSession.Search(
+					rawSession.Search.WithContext(context.Background()),
+					rawSession.Search.WithBody(strings.NewReader(`{"size": 1}`)),
+				)
+				if err != nil {
+					b.Exit("can't do 'SELECT 1': %v", err)
+				}
+
+				// nolint: errcheck // Need to have logger here for deferred errors
+				defer res.Body.Close()
+
+				if res.IsError() {
+					if res.StatusCode != 404 {
+						b.Exit("failed to perform search: %s", res.String())
+					}
+				}
+
+				if res.StatusCode != 200 {
+					b.Exit("failed to perform search: %s", res.String())
 				}
 			default:
 				b.Exit("unknown driver: '%v', supported drivers are: postgres|sqlite|mysql|mssql", c.database.DialectName())
@@ -265,8 +287,8 @@ var TestSelectMediumLast = TestDesc{
 	databases:   ALL,
 	table:       TestTableMedium,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
-		orderby := func(b *benchmark.Benchmark) string { return "id DESC" } //nolint:revive
-		testSelect(b, testDesc, nil, "id", nil, orderby, 1)
+		var orderBy = func(b *benchmark.Benchmark) []string { return []string{"desc(id)"} } //nolint:revive
+		testSelect(b, testDesc, nil, []string{"id"}, nil, orderBy, 1)
 	},
 }
 
@@ -281,8 +303,8 @@ var TestSelectMediumLastDBR = TestDesc{
 	databases:   RELATIONAL,
 	table:       TestTableMedium,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
-		orderby := func(b *benchmark.Benchmark) string { return "id DESC" } //nolint:revive
-		testSelect(b, testDesc, nil, "id", nil, orderby, 1)
+		var orderBy = func(b *benchmark.Benchmark) []string { return []string{"desc(id)"} } //nolint:revive
+		testSelect(b, testDesc, nil, []string{"id"}, nil, orderBy, 1)
 	},
 }
 
@@ -297,15 +319,17 @@ var TestSelectMediumRand = TestDesc{
 	databases:   ALL,
 	table:       TestTableMedium,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
-		where := func(b *benchmark.Benchmark, workerId int) string {
+		var where = func(b *benchmark.Benchmark, workerId int) map[string][]string {
 			id := b.Randomizer.GetWorker(workerId).Uintn64(testDesc.table.RowsCount - 1)
 
-			return fmt.Sprintf("id > %d", id)
+			return map[string][]string{"id": {fmt.Sprintf("ge(%d)", id)}}
 		}
-		orderby := func(b *benchmark.Benchmark) string { //nolint:revive
-			return "id ASC"
+
+		var orderBy = func(b *benchmark.Benchmark) []string { //nolint:revive
+			return []string{"asc(id)"}
 		}
-		testSelect(b, testDesc, nil, "id", where, orderby, 1)
+
+		testSelect(b, testDesc, nil, []string{"id"}, where, orderBy, 1)
 	},
 }
 
@@ -320,15 +344,16 @@ var TestSelectMediumRandDBR = TestDesc{
 	databases:   RELATIONAL,
 	table:       TestTableMedium,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
-		where := func(b *benchmark.Benchmark, workerId int) string {
-			id := b.Randomizer.GetWorker(workerId).Uintn64(testDesc.table.RowsCount - 1)
+		var where = func(b *benchmark.Benchmark, workerId int) map[string][]string {
+			var id = b.Randomizer.GetWorker(workerId).Uintn64(testDesc.table.RowsCount - 1)
 
-			return fmt.Sprintf("id > %d", id)
+			return map[string][]string{"id": {fmt.Sprintf("gt(%d)", id)}}
 		}
-		orderby := func(b *benchmark.Benchmark) string { //nolint:revive
-			return "id ASC"
+
+		var orderBy = func(b *benchmark.Benchmark) []string { //nolint:revive
+			return []string{"asc(id)"}
 		}
-		testSelect(b, testDesc, nil, "id", where, orderby, 1)
+		testSelect(b, testDesc, nil, []string{"id"}, where, orderBy, 1)
 	},
 }
 
@@ -343,8 +368,9 @@ var TestSelectHeavyLast = TestDesc{
 	databases:   RELATIONAL,
 	table:       TestTableHeavy,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
-		orderby := func(b *benchmark.Benchmark) string { return "id DESC" } //nolint:revive
-		testSelect(b, testDesc, nil, "id", nil, orderby, 1)
+		var orderBy = func(b *benchmark.Benchmark) []string { return []string{"desc(id)"} } //nolint:revive
+
+		testSelect(b, testDesc, nil, []string{"id"}, nil, orderBy, 1)
 	},
 }
 
@@ -359,8 +385,8 @@ var TestSelectHeavyLastDBR = TestDesc{
 	databases:   RELATIONAL,
 	table:       TestTableHeavy,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
-		orderby := func(b *benchmark.Benchmark) string { return "id DESC" } //nolint:revive
-		testSelect(b, testDesc, nil, "id", nil, orderby, 1)
+		var orderBy = func(b *benchmark.Benchmark) []string { return []string{"desc(id)"} } //nolint:revive
+		testSelect(b, testDesc, nil, []string{"id"}, nil, orderBy, 1)
 	},
 }
 
@@ -375,15 +401,16 @@ var TestSelectHeavyRand = TestDesc{
 	databases:   RELATIONAL,
 	table:       TestTableHeavy,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
-		where := func(b *benchmark.Benchmark, workerId int) string {
+		var where = func(b *benchmark.Benchmark, workerId int) map[string][]string {
 			id := b.Randomizer.GetWorker(workerId).Uintn64(testDesc.table.RowsCount - 1)
 
-			return fmt.Sprintf("id > %d", id)
+			return map[string][]string{"id": {fmt.Sprintf("gt(%d)", id)}}
 		}
-		orderby := func(b *benchmark.Benchmark) string { //nolint:revive
-			return "id ASC"
+
+		var orderBy = func(b *benchmark.Benchmark) []string { //nolint:revive
+			return []string{"asc(id)"}
 		}
-		testSelect(b, testDesc, nil, "id", where, orderby, 1)
+		testSelect(b, testDesc, nil, []string{"id"}, where, orderBy, 1)
 	},
 }
 
@@ -398,15 +425,16 @@ var TestSelectHeavyRandDBR = TestDesc{
 	databases:   RELATIONAL,
 	table:       TestTableHeavy,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
-		where := func(b *benchmark.Benchmark, workerId int) string {
+		var where = func(b *benchmark.Benchmark, workerId int) map[string][]string {
 			id := b.Randomizer.GetWorker(workerId).Uintn64(testDesc.table.RowsCount - 1)
 
-			return fmt.Sprintf("id > %d", id)
+			return map[string][]string{"id": {fmt.Sprintf("gt(%d)", id)}}
 		}
-		orderby := func(b *benchmark.Benchmark) string { //nolint:revive
-			return "id ASC"
+
+		var orderBy = func(b *benchmark.Benchmark) []string { //nolint:revive
+			return []string{"asc(id)"}
 		}
-		testSelect(b, testDesc, nil, "id", where, orderby, 1)
+		testSelect(b, testDesc, nil, []string{"id"}, where, orderBy, 1)
 	},
 }
 
@@ -421,18 +449,21 @@ var TestSelectHeavyRandTenantLike = TestDesc{
 	databases:   RELATIONAL,
 	table:       TestTableHeavy,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
+		var colConfs = testDesc.table.GetColumnsConf([]string{"tenant_id"}, false)
 
-		colConfs := testDesc.table.GetColumnsConf([]string{"tenant_id"}, false)
-
-		where := func(b *benchmark.Benchmark, workerId int) string {
+		var where = func(b *benchmark.Benchmark, workerId int) map[string][]string {
 			w := b.GenFakeDataAsMap(workerId, colConfs, false)
 
-			return fmt.Sprintf("tenant_id = '%s' AND resource_name LIKE '%s'", (*w)["tenant_id"], "%a%")
+			return map[string][]string{
+				"tenant_id":     {fmt.Sprintf("%s", (*w)["tenant_id"])},
+				"resource_name": {"like(a)"},
+			}
 		}
-		orderby := func(b *benchmark.Benchmark) string { //nolint:revive
-			return "id DESC"
+
+		var orderBy = func(b *benchmark.Benchmark) []string { //nolint:revive
+			return []string{"desc(id)"}
 		}
-		testSelect(b, testDesc, nil, "id", where, orderby, 1)
+		testSelect(b, testDesc, nil, []string{"id"}, where, orderBy, 1)
 	},
 }
 
@@ -447,15 +478,14 @@ var TestSelectHeavyMinMaxTenant = TestDesc{
 	databases:   RELATIONAL,
 	table:       TestTableHeavy,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
+		var colConfs = testDesc.table.GetColumnsConf([]string{"tenant_id"}, false)
 
-		colConfs := testDesc.table.GetColumnsConf([]string{"tenant_id"}, false)
-
-		where := func(b *benchmark.Benchmark, workerId int) string {
+		var where = func(b *benchmark.Benchmark, workerId int) map[string][]string {
 			w := b.GenFakeDataAsMap(workerId, colConfs, false)
 
-			return fmt.Sprintf("tenant_id = '%s'", (*w)["tenant_id"])
+			return map[string][]string{"tenant_id": {fmt.Sprintf("%s", (*w)["tenant_id"])}}
 		}
-		testSelect(b, testDesc, nil, "min(completion_time_ns), max(completion_time_ns)", where, nil, 1)
+		testSelect(b, testDesc, nil, []string{"min(completion_time_ns)", "max(completion_time_ns)"}, where, nil, 1)
 	},
 }
 
@@ -471,14 +501,251 @@ var TestSelectHeavyMinMaxTenantAndState = TestDesc{
 	table:       TestTableHeavy,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
 
-		colConfs := testDesc.table.GetColumnsConf([]string{"tenant_id", "state"}, false)
+		var colConfs = testDesc.table.GetColumnsConf([]string{"tenant_id", "state"}, false)
 
-		where := func(b *benchmark.Benchmark, workerId int) string {
+		var where = func(b *benchmark.Benchmark, workerId int) map[string][]string {
 			w := b.GenFakeDataAsMap(workerId, colConfs, false)
 
-			return fmt.Sprintf("tenant_id = '%s' AND state = '%d'", (*w)["tenant_id"], (*w)["state"])
+			return map[string][]string{
+				"tenant_id": {fmt.Sprintf("%s", (*w)["tenant_id"])},
+				"state":     {fmt.Sprintf("%s", (*w)["state"])},
+			}
 		}
-		testSelect(b, testDesc, nil, "min(completion_time_ns), max(completion_time_ns)", where, nil, 1)
+
+		testSelect(b, testDesc, nil, []string{"min(completion_time_ns)", "max(completion_time_ns)"}, where, nil, 1)
+	},
+}
+
+// TestSelectHeavyRandPageByUUID selects random N rows from the 'heavy' table WHERE uuid IN (...)
+var TestSelectHeavyRandPageByUUID = TestDesc{
+	name:        "select-heavy-rand-page-by-uuid",
+	metric:      "rows/sec",
+	description: "select page from the 'heavy' table WHERE uuid IN (...)",
+	category:    TestSelect,
+	isReadonly:  true,
+	isDBRTest:   false,
+	databases:   ALL,
+	table:       TestTableHeavy,
+	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
+
+		var batchSize = b.Vault.(*DBTestData).EffectiveBatch
+
+		var colConfs []benchmark.DBFakeColumnConf
+		for i := 0; i < batchSize; i++ {
+			colConfs = append(colConfs, benchmark.DBFakeColumnConf{ColumnName: "uuid", ColumnType: "uuid"})
+		}
+
+		var where = func(b *benchmark.Benchmark, workerId int) map[string][]string {
+			_, values := b.GenFakeData(workerId, &colConfs, false)
+
+			var valuesToSearch []string
+			for _, v := range values {
+				valuesToSearch = append(valuesToSearch, fmt.Sprintf("%s", v))
+			}
+
+			return map[string][]string{"uuid": valuesToSearch}
+		}
+
+		testSelect(b, testDesc, nil, []string{"id"}, where, nil, 1)
+	},
+}
+
+// TestSelectHeavyRandCustomerRecent selects random page from the 'heavy' table WHERE tenant_id = {} AND ordered by enqueue_time DESC
+var TestSelectHeavyRandCustomerRecent = TestDesc{
+	name:        "select-heavy-rand-in-customer-recent",
+	metric:      "rows/sec",
+	description: "select first page from the 'heavy' table WHERE tenant_id = {} ORDER BY enqueue_time DESC",
+	category:    TestSelect,
+	isReadonly:  true,
+	isDBRTest:   false,
+	databases:   ALL,
+	table:       TestTableHeavy,
+	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
+
+		// colConfs := testDesc.table.GetColumnsConf([]string{"tenant_id"}, false)
+
+		var colConfs = &[]benchmark.DBFakeColumnConf{{ColumnName: "customer_id", ColumnType: "customer_uuid"}}
+
+		var where = func(b *benchmark.Benchmark, workerId int) map[string][]string {
+			w := b.GenFakeDataAsMap(workerId, colConfs, false)
+
+			return map[string][]string{
+				"tenant_vis_list": {fmt.Sprintf("%s", (*w)["customer_id"])},
+			}
+		}
+
+		var orderBy = func(b *benchmark.Benchmark) []string { //nolint:revive
+			return []string{"desc(enqueue_time)"}
+		}
+
+		testSelect(b, testDesc, nil, []string{"id"}, where, orderBy, 1)
+	},
+}
+
+// TestSelectHeavyRandCustomerRecentLike selects random page from the 'heavy' table WHERE tenant_id = {} AND policy_name LIKE '%k%' AND ordered by enqueue_time DESC
+var TestSelectHeavyRandCustomerRecentLike = TestDesc{
+	name:        "select-heavy-rand-in-customer-recent-like",
+	metric:      "rows/sec",
+	description: "select first page from the 'heavy' table WHERE tenant_id = {} AND policy_name LIKE '%k%' ORDER BY enqueue_time DESC",
+	category:    TestSelect,
+	isReadonly:  true,
+	isDBRTest:   false,
+	databases:   ALL,
+	table:       TestTableHeavy,
+	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
+
+		// colConfs := testDesc.table.GetColumnsConf([]string{"tenant_id"}, false)
+
+		var colConfs = &[]benchmark.DBFakeColumnConf{{ColumnName: "customer_id", ColumnType: "customer_uuid"}}
+
+		var where = func(b *benchmark.Benchmark, workerId int) map[string][]string {
+			w := b.GenFakeDataAsMap(workerId, colConfs, false)
+
+			return map[string][]string{
+				"tenant_vis_list": {fmt.Sprintf("%s", (*w)["customer_id"])},
+				"policy_name":     {"like(k)"},
+			}
+		}
+
+		var orderBy = func(b *benchmark.Benchmark) []string { //nolint:revive
+			return []string{"desc(enqueue_time)"}
+		}
+
+		testSelect(b, testDesc, nil, []string{"id"}, where, orderBy, 1)
+	},
+}
+
+// TestSelectHeavyRandCustomerUpdateTimePage selects random page from the 'heavy' table WHERE tenant_id = {} AND ordered by enqueue_time DESC
+var TestSelectHeavyRandCustomerUpdateTimePage = TestDesc{
+	name:        "select-heavy-rand-customer-update-time-page",
+	metric:      "rows/sec",
+	description: "select first page from the 'heavy' table WHERE customer_id = {} AND update_time_ns in 1h interval ORDER BY update_time DESC",
+	category:    TestSelect,
+	isReadonly:  true,
+	isDBRTest:   false,
+	databases:   ALL,
+	table:       TestTableHeavy,
+	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
+
+		var colConfs = []benchmark.DBFakeColumnConf{{ColumnName: "customer_id", ColumnType: "customer_uuid"}}
+		colConfs = append(colConfs, benchmark.DBFakeColumnConf{ColumnName: "update_time", ColumnType: "time", Cardinality: 30})
+
+		var where = func(b *benchmark.Benchmark, workerId int) map[string][]string {
+			w := b.GenFakeDataAsMap(workerId, &colConfs, false)
+
+			var pageStart = (*w)["update_time"].(time.Time)
+			var pageEnd = pageStart.Add(time.Hour)
+
+			return map[string][]string{
+				"tenant_vis_list": {fmt.Sprintf("%s", (*w)["customer_id"])},
+				"update_time": {
+					fmt.Sprintf("ge(%s)", pageStart.Format(time.RFC3339)),
+					fmt.Sprintf("lt(%s)", pageEnd.Format(time.RFC3339)),
+				},
+			}
+		}
+
+		var orderBy = func(b *benchmark.Benchmark) []string { //nolint:revive
+			return []string{"asc(update_time)"}
+		}
+
+		testSelect(b, testDesc, nil, []string{"id"}, where, orderBy, 1)
+	},
+}
+
+// TestSelectHeavyRandCustomerCount selects random count of rows from the 'heavy' table WHERE tenant_id = {}
+var TestSelectHeavyRandCustomerCount = TestDesc{
+	name:        "select-heavy-rand-in-customer-count",
+	metric:      "rows/sec",
+	description: "select COUNT(0) from the 'heavy' table WHERE tenant_id = {}",
+	category:    TestSelect,
+	isReadonly:  true,
+	isDBRTest:   false,
+	databases:   ALL,
+	table:       TestTableHeavy,
+	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
+		var colConfs = &[]benchmark.DBFakeColumnConf{{ColumnName: "customer_id", ColumnType: "customer_uuid"}}
+
+		var where = func(b *benchmark.Benchmark, workerId int) map[string][]string {
+			w := b.GenFakeDataAsMap(workerId, colConfs, false)
+
+			return map[string][]string{
+				"tenant_vis_list": {fmt.Sprintf("%s", (*w)["customer_id"])},
+			}
+		}
+
+		testSelect(b, testDesc, nil, []string{"COUNT(0)"}, where, nil, 1)
+	},
+}
+
+// TestSelectHeavyRandPartnerRecent selects random page from the 'heavy' table WHERE tenant_id = {} AND ordered by enqueue_time DESC
+var TestSelectHeavyRandPartnerRecent = TestDesc{
+	name:        "select-heavy-rand-in-partner-recent",
+	metric:      "rows/sec",
+	description: "select first page from the 'heavy' table WHERE partner_id = {} ORDER BY enqueue_time DESC",
+	category:    TestSelect,
+	isReadonly:  true,
+	isDBRTest:   false,
+	databases:   ALL,
+	table:       TestTableHeavy,
+	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
+		var colConfs = &[]benchmark.DBFakeColumnConf{{ColumnName: "partner_id", ColumnType: "partner_uuid"}}
+
+		var where = func(b *benchmark.Benchmark, workerId int) map[string][]string {
+			w := b.GenFakeDataAsMap(workerId, colConfs, false)
+
+			return map[string][]string{
+				"tenant_vis_list": {fmt.Sprintf("%s", (*w)["partner_id"])},
+			}
+		}
+
+		var orderBy = func(b *benchmark.Benchmark) []string { //nolint:revive
+			return []string{"desc(enqueue_time)"}
+		}
+
+		testSelect(b, testDesc, nil, []string{"id"}, where, orderBy, 1)
+	},
+}
+
+// TestSelectHeavyRandPartnerStartUpdateTimePage selects random page from the 'heavy' table WHERE tenant_id = {} AND ordered by enqueue_time DESC
+var TestSelectHeavyRandPartnerStartUpdateTimePage = TestDesc{
+	name:        "select-heavy-rand-partner-start-update-time-page",
+	metric:      "rows/sec",
+	description: "select first page from the 'heavy' table WHERE partner_id = {} ORDER BY enqueue_time DESC",
+	category:    TestSelect,
+	isReadonly:  true,
+	isDBRTest:   false,
+	databases:   ALL,
+	table:       TestTableHeavy,
+	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
+		var colConfs = []benchmark.DBFakeColumnConf{{ColumnName: "partner_id", ColumnType: "partner_uuid"}}
+		colConfs = append(colConfs, benchmark.DBFakeColumnConf{ColumnName: "update_time", ColumnType: "time", Cardinality: 30})
+
+		var where = func(b *benchmark.Benchmark, workerId int) map[string][]string {
+			w := b.GenFakeDataAsMap(workerId, &colConfs, false)
+
+			var pageStart = (*w)["update_time"].(time.Time)
+			var pageEnd = pageStart.Add(2 * 24 * time.Hour)
+
+			var pageStartStr = pageStart.Add(-time.Hour)
+
+			return map[string][]string{
+				"tenant_vis_list": {fmt.Sprintf("%s", (*w)["partner_id"])},
+				"update_time": {
+					fmt.Sprintf("ge(%s)", pageStart.Format(time.RFC3339)),
+					fmt.Sprintf("lt(%s)", pageEnd.Format(time.RFC3339)),
+				},
+				"start_time": {
+					fmt.Sprintf("ge(%s)", pageStartStr.Format(time.RFC3339)),
+				},
+			}
+		}
+
+		var orderBy = func(b *benchmark.Benchmark) []string { //nolint:revive
+			return []string{"asc(update_time)"}
+		}
+
+		testSelect(b, testDesc, nil, []string{"id"}, where, orderBy, 1)
 	},
 }
 
@@ -613,61 +880,21 @@ func insertMultiValueDataWorker(b *benchmark.Benchmark, c *DBConnector, testDesc
 	workerID := c.WorkerID
 
 	columns, _ := b.GenFakeData(workerID, colConfs, db.WithAutoInc(c.database.DialectName()))
-	switch c.database.DialectName() {
-	case db.CASSANDRA:
-		var values []interface{}
-		var sql string
 
-		sqlInsertTpl := fmt.Sprintf("INSERT INTO %s (%s) VALUES ", testDesc.table.TableName, strings.Join(columns, ","))
-
-		for i := 0; i < batch; i++ {
-			sql = fmt.Sprintf("%s\n%s (%s);", sql, sqlInsertTpl, db.GenDBParameterPlaceholdersCassandra(i*len(*colConfs), len(*colConfs)))
-		}
-
-		sql = formatSQL(sql, c.database.DialectName())
-
-		for i := 0; i < batch; i++ {
-			_, vals := b.GenFakeData(workerID, colConfs, db.WithAutoInc(c.database.DialectName()))
-			values = append(values, vals...)
-		}
-
-		sql = fmt.Sprintf("BEGIN BATCH%s\nAPPLY BATCH;", sql)
-		if _, err := c.database.Session(c.database.Context(context.Background())).Exec(sql, values...); err != nil {
-			c.Exit(err.Error())
-		}
-
-		return batch
-
-	default:
-		var values []interface{}
-
-		sql := fmt.Sprintf("INSERT INTO %s (%s) VALUES ", testDesc.table.TableName, strings.Join(columns, ","))
-
-		for i := 0; i < batch; i++ {
-			if i == 0 {
-				sql = fmt.Sprintf("%s (%s)", sql, db.GenDBParameterPlaceholders(i*len(*colConfs), len(*colConfs)))
-			} else {
-				sql = fmt.Sprintf("%s, (%s)", sql, db.GenDBParameterPlaceholders(i*len(*colConfs), len(*colConfs)))
-			}
-		}
-
-		sql = formatSQL(sql, c.database.DialectName())
-
-		for i := 0; i < batch; i++ {
-			_, vals := b.GenFakeData(workerID, colConfs, db.WithAutoInc(c.database.DialectName()))
-			values = append(values, vals...)
-		}
-
-		var session = c.database.Session(c.database.Context(context.Background()))
-		if txErr := session.Transact(func(tx db.DatabaseAccessor) error {
-			_, err := tx.Exec(sql, values...)
-			return err
-		}); txErr != nil {
-			c.Exit(txErr.Error())
-		}
-
-		return batch
+	var values [][]interface{}
+	for i := 0; i < batch; i++ {
+		_, vals := b.GenFakeData(workerID, colConfs, db.WithAutoInc(c.database.DialectName()))
+		values = append(values, vals)
 	}
+
+	var session = c.database.Session(c.database.Context(context.Background()))
+	if txErr := session.Transact(func(tx db.DatabaseAccessor) error {
+		return tx.BulkInsert(testDesc.table.TableName, values, columns)
+	}); txErr != nil {
+		b.Exit(txErr.Error())
+	}
+
+	return batch
 }
 
 // TestInsertLightMultiValue inserts a row into the 'light' table using INSERT INTO t (x, y, z) VALUES (..., ..., ...)
@@ -678,7 +905,7 @@ var TestInsertLightMultiValue = TestDesc{
 	category:    TestInsert,
 	isReadonly:  false,
 	isDBRTest:   false,
-	databases:   PMWSA,
+	databases:   ALL,
 	table:       TestTableLight,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
 		testGeneric(b, testDesc, insertMultiValueDataWorker, 0)
@@ -968,7 +1195,7 @@ var TestInsertHeavy = TestDesc{
 	category:    TestInsert,
 	isReadonly:  false,
 	isDBRTest:   false,
-	databases:   RELATIONAL,
+	databases:   ALL,
 	table:       TestTableHeavy,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
 		testInsertGeneric(b, testDesc)
@@ -998,7 +1225,7 @@ var TestInsertHeavyMultivalue = TestDesc{
 	category:    TestInsert,
 	isReadonly:  false,
 	isDBRTest:   false,
-	databases:   RELATIONAL,
+	databases:   ALL,
 	table:       TestTableHeavy,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
 		testGeneric(b, testDesc, insertMultiValueDataWorker, 0)
@@ -1076,7 +1303,7 @@ var TestSelectJSONByIndexedValue = TestDesc{
 	databases:   RELATIONAL,
 	table:       TestTableJSON,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
-		where := func(b *benchmark.Benchmark, workerId int) string {
+		var where = func(b *benchmark.Benchmark, workerId int) map[string][]string {
 			id := b.Randomizer.GetWorker(workerId).Uintn64(testDesc.table.RowsCount - 1)
 
 			var dialectName, err = db.GetDialectName(b.TestOpts.(*TestOpts).DBOpts.ConnString)
@@ -1084,21 +1311,27 @@ var TestSelectJSONByIndexedValue = TestDesc{
 				b.Exit(err)
 			}
 
+			var selector = map[string][]string{
+				"id": {fmt.Sprintf("gt(%s)", strconv.FormatUint(id, 10))},
+			}
+
 			switch dialectName {
 			case db.MYSQL:
-				return "_data_f0f0 = '10' AND id > " + strconv.FormatUint(id, 10)
+				selector["_data_f0f0"] = []string{"10"}
 			case db.POSTGRES:
-				return "json_data @> '{\"field0\": {\"field0\": 10}}' AND id > " + strconv.FormatUint(id, 10)
+				// return "json_data @> '{\"field0\": {\"field0\": 10}}' AND id > " + strconv.FormatUint(id, 10)
 			default:
 				b.Exit("The %s test is not supported on driver: %s", testDesc.name, dialectName)
 			}
 
-			return ""
+			return selector
 		}
-		orderby := func(b *benchmark.Benchmark) string { //nolint:revive
-			return "id ASC"
+
+		var orderBy = func(b *benchmark.Benchmark) []string { //nolint:revive
+			return []string{"asc(id)"}
 		}
-		testSelect(b, testDesc, nil, "id", where, orderby, 1)
+
+		testSelect(b, testDesc, nil, []string{"id"}, where, orderBy, 1)
 	},
 }
 
@@ -1113,7 +1346,7 @@ var TestSearchJSONByIndexedValue = TestDesc{
 	databases:   RELATIONAL,
 	table:       TestTableJSON,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
-		where := func(b *benchmark.Benchmark, workerId int) string {
+		var where = func(b *benchmark.Benchmark, workerId int) map[string][]string {
 			id := b.Randomizer.GetWorker(workerId).Uintn64(testDesc.table.RowsCount - 1)
 
 			var dialectName, err = db.GetDialectName(b.TestOpts.(*TestOpts).DBOpts.ConnString)
@@ -1121,21 +1354,26 @@ var TestSearchJSONByIndexedValue = TestDesc{
 				b.Exit(err)
 			}
 
+			var selector = map[string][]string{
+				"id": {fmt.Sprintf("gt(%s)", strconv.FormatUint(id, 10))},
+			}
+
 			switch dialectName {
 			case db.MYSQL:
-				return "_data_f0f0f0 LIKE '%eedl%' AND id > " + strconv.FormatUint(id, 10)
+				selector["_data_f0f0f0"] = []string{"like(eedl)"}
 			case db.POSTGRES:
-				return "json_data->'field0'->'field0'->>'field0' LIKE '%eedl%' AND id > " + strconv.FormatUint(id, 10) // searching for the 'needle' word
+				selector["json_data->'field0'->'field0'->>'field0'"] = []string{"like(eedl)"}
 			default:
 				b.Exit("The %s test is not supported on driver: %s", testDesc.name, dialectName)
 			}
 
-			return ""
+			return selector
 		}
-		orderby := func(b *benchmark.Benchmark) string { //nolint:revive
-			return "id ASC"
+
+		var orderBy = func(b *benchmark.Benchmark) []string { //nolint:revive
+			return []string{"asc(id)"}
 		}
-		testSelect(b, testDesc, nil, "id", where, orderby, 1)
+		testSelect(b, testDesc, nil, []string{"id"}, where, orderBy, 1)
 	},
 }
 
@@ -1150,7 +1388,7 @@ var TestSelectJSONByNonIndexedValue = TestDesc{
 	databases:   RELATIONAL,
 	table:       TestTableJSON,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
-		where := func(b *benchmark.Benchmark, workerId int) string {
+		var where = func(b *benchmark.Benchmark, workerId int) map[string][]string {
 			id := b.Randomizer.GetWorker(workerId).Uintn64(testDesc.table.RowsCount - 1)
 
 			var dialectName, err = db.GetDialectName(b.TestOpts.(*TestOpts).DBOpts.ConnString)
@@ -1158,21 +1396,27 @@ var TestSelectJSONByNonIndexedValue = TestDesc{
 				b.Exit(err)
 			}
 
+			var selector = map[string][]string{
+				"id": {fmt.Sprintf("gt(%s)", strconv.FormatUint(id, 10))},
+			}
+
 			switch dialectName {
 			case db.MYSQL:
-				return "JSON_EXTRACT(json_data, '$.field0.field1') = '10' AND id > " + strconv.FormatUint(id, 10)
+				selector["JSON_EXTRACT(json_data, '$.field0.field1')"] = []string{"10"}
 			case db.POSTGRES:
-				return "json_data @> '{\"field0\": {\"field1\": 10}}' AND id > " + strconv.FormatUint(id, 10)
+				// return "json_data @> '{\"field0\": {\"field1\": 10}}' AND id > " + strconv.FormatUint(id, 10)
 			default:
 				b.Exit("The %s test is not supported on driver: %s", testDesc.name, dialectName)
 			}
 
-			return ""
+			return selector
 		}
-		orderby := func(b *benchmark.Benchmark) string { //nolint:revive
-			return "id ASC"
+
+		var orderBy = func(b *benchmark.Benchmark) []string { //nolint:revive
+			return []string{"asc(id)"}
 		}
-		testSelect(b, testDesc, nil, "id", where, orderby, 1)
+
+		testSelect(b, testDesc, nil, []string{"id"}, where, orderBy, 1)
 	},
 }
 
@@ -1187,7 +1431,7 @@ var TestSearchJSONByNonIndexedValue = TestDesc{
 	databases:   RELATIONAL,
 	table:       TestTableJSON,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
-		where := func(b *benchmark.Benchmark, workerId int) string {
+		var where = func(b *benchmark.Benchmark, workerId int) map[string][]string {
 			id := b.Randomizer.GetWorker(workerId).Uintn64(testDesc.table.RowsCount - 1)
 
 			var dialectName, err = db.GetDialectName(b.TestOpts.(*TestOpts).DBOpts.ConnString)
@@ -1195,21 +1439,27 @@ var TestSearchJSONByNonIndexedValue = TestDesc{
 				b.Exit(err)
 			}
 
+			var selector = map[string][]string{
+				"id": {fmt.Sprintf("gt(%s)", strconv.FormatUint(id, 10))},
+			}
+
 			switch dialectName {
 			case db.MYSQL:
-				return "JSON_EXTRACT(json_data, '$.field0.field1') LIKE '%eedl%' AND id > " + strconv.FormatUint(id, 10)
+				selector["JSON_EXTRACT(json_data, '$.field0.field1')"] = []string{"like(eedl)"}
 			case db.POSTGRES:
-				return "json_data->'field0'->'field0'->>'field0' LIKE '%eedl%' AND id > " + strconv.FormatUint(id, 10) // searching for the 'needle' word
+				selector["json_data->'field0'->'field1'->>'field0'"] = []string{"like(eedl)"}
 			default:
 				b.Exit("The %s test is not supported on driver: %s", testDesc.name, dialectName)
 			}
 
-			return ""
+			return selector
 		}
-		orderby := func(b *benchmark.Benchmark) string { //nolint:revive
-			return "id ASC"
+
+		var orderBy = func(b *benchmark.Benchmark) []string { //nolint:revive
+			return []string{"asc(id)"}
 		}
-		testSelect(b, testDesc, nil, "id", where, orderby, 1)
+
+		testSelect(b, testDesc, nil, []string{"id"}, where, orderBy, 1)
 	},
 }
 
@@ -1431,18 +1681,23 @@ var TestSelectTimeSeriesSQL = TestDesc{
 			b.Vault.(*DBTestData).EffectiveBatch = 256
 		}
 
-		colConfs := testDesc.table.GetColumnsConf([]string{"tenant_id", "device_id", "metric_id"}, false)
+		var colConfs = testDesc.table.GetColumnsConf([]string{"tenant_id", "device_id", "metric_id"}, false)
 
-		where := func(b *benchmark.Benchmark, workerId int) string {
+		var where = func(b *benchmark.Benchmark, workerId int) map[string][]string {
 			w := b.GenFakeDataAsMap(workerId, colConfs, false)
 
-			return fmt.Sprintf("tenant_id = '%s' AND device_id = '%s' AND metric_id = '%s'", (*w)["tenant_id"], (*w)["device_id"], (*w)["metric_id"])
-		}
-		orderby := func(b *benchmark.Benchmark) string { //nolint:revive
-			return "id DESC"
+			return map[string][]string{
+				"tenant_id": {fmt.Sprintf("%s", (*w)["tenant_id"])},
+				"device_id": {fmt.Sprintf("%s", (*w)["device_id"])},
+				"metric_id": {fmt.Sprintf("%s", (*w)["metric_id"])},
+			}
 		}
 
-		testSelect(b, testDesc, nil, "id", where, orderby, 1)
+		var orderBy = func(b *benchmark.Benchmark) []string { //nolint:revive
+			return []string{"desc(id)"}
+		}
+
+		testSelect(b, testDesc, nil, []string{"id"}, where, orderBy, 1)
 
 		b.Vault.(*DBTestData).EffectiveBatch = origBatch
 	},
@@ -1478,13 +1733,16 @@ var TestSelectAdvmTasksLast = TestDesc{
 	databases:   []db.DialectName{db.POSTGRES},
 	table:       TestTableAdvmTasks,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
-		where := func(b *benchmark.Benchmark, workerId int) string { //nolint:revive
-			return "origin in (1, 2, 3)"
+		var where = func(b *benchmark.Benchmark, workerId int) map[string][]string { //nolint:revive
+			return map[string][]string{
+				"origin": {"1", "2", "3"},
+			}
 		}
-		orderby := func(b *benchmark.Benchmark) string { //nolint:revive
-			return "id ASC"
+
+		var orderBy = func(b *benchmark.Benchmark) []string { //nolint:revive
+			return []string{"asc(id)"}
 		}
-		testSelect(b, testDesc, nil, "id", where, orderby, 1)
+		testSelect(b, testDesc, nil, []string{"id"}, where, orderBy, 1)
 	},
 }
 
@@ -1700,7 +1958,7 @@ func tenantAwareCTIAwareWorker(b *benchmark.Benchmark, c *DBConnector, testDesc 
 			"LEFT JOIN `%[3]s` as `cti_prov` "+
 			"ON `cti_prov`.`tenant_id` = `tenants_child`.`id` AND `cti_prov`.`cti_entity_uuid` = `%[2]s`.`cti_entity_uuid` "+
 			"WHERE `cti_prov`.`state` = 1 OR `cti_ent`.`global_state` = 1",
-		TableNameCtiEntities, tableName, TableNameCtiProvisioning, string(ctiUUID))
+		tenants.TableNameCtiEntities, tableName, tenants.TableNameCtiProvisioning, string(ctiUUID))
 
 	return tenantAwareGenericWorker(b, c, ctiAwareQuery, orderBy)
 }
@@ -1717,13 +1975,13 @@ func buildTenantAwareQuery(tableName string) string {
 		"JOIN `%[3]s` AS `tenants_closure` ON ((`tenants_closure`.`child_id` = `tenants_child`.`id`) AND (`tenants_closure`.`barrier` <= 0)) "+
 		"JOIN `%[2]s` AS `tenants_parent` ON ((`tenants_parent`.`id` = `tenants_closure`.`parent_id`) "+
 		"AND (`tenants_parent`.`uuid` IN ('{tenant_uuid}')) AND (`tenants_parent`.`is_deleted` != {true}))",
-		tableName, TableNameTenants, TableNameTenantClosure)
+		tableName, tenants.TableNameTenants, tenants.TableNameTenantClosure)
 }
 
 func tenantAwareGenericWorker(b *benchmark.Benchmark, c *DBConnector, query string, orderBy string) (loops int) {
 	c.Log(benchmark.LogTrace, "tenant-aware SELECT test iteration")
 
-	uuid, err := b.Vault.(*DBTestData).TenantsCache.GetRandomTenantUUID(b.Randomizer.GetWorker(c.WorkerID), 0)
+	uuid, err := b.Vault.(*DBTestData).TenantsCache.GetRandomTenantUUID(b.Randomizer.GetWorker(c.WorkerID), 0, "")
 	if err != nil {
 		b.Exit(err)
 	}
@@ -1736,7 +1994,7 @@ func tenantAwareGenericWorker(b *benchmark.Benchmark, c *DBConnector, query stri
 		valTrue = "1"
 	}
 	query = strings.ReplaceAll(query, "{true}", valTrue)
-	query = strings.ReplaceAll(query, "{tenant_uuid}", string(uuid))
+	query = strings.ReplaceAll(query, "{tenant_uuid}", uuid.String())
 	if orderBy != "" {
 		query += " " + orderBy
 	}
@@ -1871,6 +2129,16 @@ func GetTests() ([]*TestGroup, map[string]*TestDesc) {
 	tg.add(&TestSelectHeavyRand)
 	tg.add(&TestSelectHeavyMinMaxTenant)
 	tg.add(&TestSelectHeavyMinMaxTenantAndState)
+	tg.add(&TestSelectHeavyRandPageByUUID)
+
+	tg.add(&TestSelectHeavyRandCustomerRecent)
+	tg.add(&TestSelectHeavyRandCustomerRecentLike)
+	tg.add(&TestSelectHeavyRandCustomerUpdateTimePage)
+	tg.add(&TestSelectHeavyRandCustomerCount)
+
+	tg.add(&TestSelectHeavyRandPartnerRecent)
+	tg.add(&TestSelectHeavyRandPartnerStartUpdateTimePage)
+
 	tg.add(&TestBaseAll)
 
 	tg = NewTestGroup("Advanced tests group")

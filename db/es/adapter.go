@@ -200,3 +200,34 @@ func (q *esQuerier) search(ctx context.Context, idxName indexName, request *Sear
 
 	return &resp, nil
 }
+
+func (q *esQuerier) count(ctx context.Context, idxName indexName, request *CountRequest) (*SearchResponse, error) {
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(request); err != nil {
+		return nil, fmt.Errorf("request encode error: %v", err)
+	}
+
+	var res, err = q.es.Count(
+		q.es.Count.WithContext(ctx),
+		q.es.Count.WithIndex(string(idxName)),
+		q.es.Count.WithBody(&buf))
+	if err != nil {
+		return nil, fmt.Errorf("failed to perform count: %v", err)
+	}
+
+	// nolint: errcheck // Need to have logger here for deferred errors
+	defer res.Body.Close()
+
+	if res.IsError() {
+		return nil, fmt.Errorf("failed to perform count: %s", res.String())
+	}
+
+	var resp = SearchResponse{}
+	var decoder = json.NewDecoder(res.Body)
+	decoder.UseNumber()
+	if err = decoder.Decode(&resp); err != nil {
+		return nil, fmt.Errorf("count response decode err: %v", err)
+	}
+
+	return &resp, nil
+}

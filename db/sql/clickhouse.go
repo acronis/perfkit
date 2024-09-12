@@ -6,6 +6,8 @@ import (
 	"math"
 	"strings"
 
+	"github.com/google/uuid"
+
 	_ "github.com/ClickHouse/clickhouse-go/v2" // clickhouse driver
 
 	"github.com/acronis/perfkit/db"
@@ -27,6 +29,10 @@ func (d *clickHouseDialect) encodeString(s string) string {
 	// borrowed from dbr
 	// http://www.postgresql.org/docs/9.2/static/sql-syntax-lexical.html
 	return `'` + strings.Replace(s, `'`, `''`, -1) + `'`
+}
+
+func (d *clickHouseDialect) encodeUUID(s uuid.UUID) string {
+	return d.encodeString(s.String())
 }
 
 func (d *clickHouseDialect) encodeBool(b bool) string {

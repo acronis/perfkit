@@ -9,6 +9,8 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/google/uuid"
+
 	"github.com/lib/pq"
 
 	"github.com/acronis/perfkit/db"
@@ -36,6 +38,10 @@ func (d *pgDialect) encodeString(s string) string {
 	// borrowed from dbr
 	// http://www.postgresql.org/docs/9.2/static/sql-syntax-lexical.html
 	return `'` + strings.Replace(s, `'`, `''`, -1) + `'`
+}
+
+func (d *pgDialect) encodeUUID(s uuid.UUID) string {
+	return d.encodeString(s.String())
 }
 
 func (d *pgDialect) encodeBool(b bool) string {

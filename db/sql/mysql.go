@@ -7,6 +7,8 @@ import (
 	"math"
 	"strconv"
 	"strings"
+	
+	"github.com/google/uuid"
 
 	"github.com/go-sql-driver/mysql" // mysql driver
 
@@ -61,6 +63,10 @@ func (d *mysqlDialect) encodeString(s string) string {
 
 	buf.WriteByte('\'')
 	return buf.String()
+}
+
+func (d *mysqlDialect) encodeUUID(s uuid.UUID) string {
+	return d.encodeString(s.String())
 }
 
 func (d *mysqlDialect) encodeBool(b bool) string {

@@ -47,14 +47,28 @@ func (suite *TestingSuite) TestInsert() {
 		},
 	}
 
-	if err := s.InsertInto("perf_table", testStructs, []string{"@timestamp", "id", "uuid", "type", "policy_name", "resource_name", "accessors", "start_time"}); err != nil {
+	var toInsert [][]interface{}
+	for _, ts := range testStructs {
+		toInsert = append(toInsert, []interface{}{
+			ts.Timestamp,
+			ts.Id,
+			ts.Uuid,
+			ts.TestType,
+			ts.PolicyName,
+			ts.ResourceName,
+			ts.Accessors,
+			ts.StartTime,
+		})
+	}
+
+	if err := s.BulkInsert("perf_table", toInsert, []string{"@timestamp", "id", "uuid", "type", "policy_name", "resource_name", "accessors", "start_time"}); err != nil {
 		suite.T().Error(err)
 		return
 	}
 
 	time.Sleep(2 * time.Second)
 
-	if rows, err := s.Search("perf_table", &db.SelectCtrl{
+	if rows, err := s.Select("perf_table", &db.SelectCtrl{
 		Fields: []string{"id", "uuid", "type", "policy_name", "accessors", "start_time"},
 		Where: map[string][]string{
 			"accessors": {"tenant_2"},

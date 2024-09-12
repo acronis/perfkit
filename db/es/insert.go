@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"reflect"
+	"time"
 
 	"github.com/acronis/perfkit/db"
 )
@@ -15,7 +15,7 @@ type BulkIndexRequest struct {
 }
 
 type bulkIndexHeaderMetadata struct {
-	ID    int64  `json:"_id"`
+	ID    int64  `json:"_id,omitempty"`
 	Index string `json:"_index"`
 }
 
@@ -74,53 +74,42 @@ func (bi *BulkIndexResult) GetInsertStats(expectedSuccesses int) db.InsertStats 
 	return dbs
 }
 
-func (g *esGateway) InsertInto(tableName string, data interface{}, columnNames []string) error {
-	var valuesList []reflect.Value
-	var v = reflect.ValueOf(data)
-	var fields reflect.Type
-
-	// var
-	if v.Kind() == reflect.Slice {
-		s := reflect.ValueOf(data)
-		for i := 0; i < s.Len(); i++ {
-			valuesList = append(valuesList, s.Index(i))
-			if i == 0 {
-				fields = s.Index(i).Type()
-			}
-		}
-	} else {
-		valuesList = append(valuesList, reflect.ValueOf(data))
-		fields = reflect.TypeOf(data)
-	}
-
-	if len(valuesList) == 0 {
+func (g *esGateway) BulkInsert(tableName string, rows [][]interface{}, columnNames []string) error {
+	if len(rows) == 0 {
 		return nil
 	}
-
-	var numFields = fields.NumField()
-	var column2val = make(map[string]interface{})
 
 	var idxName = indexName(tableName)
 	var req = &BulkIndexRequest{
 		data: []json.RawMessage{},
 	}
 
-	var columnValues []json.RawMessage
-	for _, values := range valuesList {
-		for i := 0; i < numFields; i++ {
-			columnName := fields.Field(i).Tag.Get("db")
-			if columnName == "" {
-				continue
-			}
-			column2val[columnName] = values.Field(i).Interface()
+	var timeStampFieldPresented bool
+	for _, columnName := range columnNames {
+		if columnName == "@timestamp" {
+			timeStampFieldPresented = true
+			break
+		}
+	}
+
+	for _, row := range rows {
+		if len(row) != len(columnNames) {
+			return fmt.Errorf("row length doesn't match column names length")
+		}
+
+		var column2val = make(map[string]interface{})
+		if !timeStampFieldPresented {
+			column2val["@timestamp"] = time.Now().UTC().Format(timeStoreFormatPrecise)
+		}
+
+		for i, col := range row {
+			column2val[columnNames[i]] = col
 		}
 
 		var serialized, err = json.Marshal(column2val)
 		if err != nil {
 			return fmt.Errorf("failed to marshal elem: %v", err)
 		}
-
-		columnValues = append(columnValues, serialized)
 
 		var id int64
 		if idVal, ok := column2val["id"]; ok {

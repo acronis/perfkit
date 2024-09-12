@@ -9,6 +9,9 @@ import (
 
 	"github.com/acronis/perfkit/benchmark"
 	"github.com/acronis/perfkit/db"
+
+	events "github.com/acronis/perfkit/acronis-db-bench/event-bus"
+	tenants "github.com/acronis/perfkit/acronis-db-bench/tenants-cache"
 )
 
 // FatalError prints error message and exits with code 127
@@ -45,11 +48,17 @@ func createTables(b *benchmark.Benchmark) {
 			tableDesc.Create(c, b)
 		}
 	}
-	b.Vault.(*DBTestData).TenantsCache.CreateTables(c.database)
+
+	var tc = b.Vault.(*DBTestData).TenantsCache
+	if tc == nil {
+		tc = tenants.NewTenantsCache(b)
+		b.Vault.(*DBTestData).TenantsCache = tc
+	}
+	tc.CreateTables(c.database)
 	c.database.CreateSequence(SequenceName)
 	c.Release()
 
-	eb := NewEventBus(&dbOpts, b.Logger)
+	eb := events.NewEventBus(c.database, b.Logger)
 	eb.CreateTables()
 
 	fmt.Printf("done\n")
@@ -82,14 +91,14 @@ func cleanupTables(b *benchmark.Benchmark) {
 	}
 
 	if b.Vault.(*DBTestData).TenantsCache == nil {
-		b.Vault.(*DBTestData).TenantsCache = NewTenantsCache(b)
+		b.Vault.(*DBTestData).TenantsCache = tenants.NewTenantsCache(b)
 	}
 
 	b.Vault.(*DBTestData).TenantsCache.DropTables(c.database)
 	c.database.DropSequence(SequenceName)
 	c.Release()
 
-	eb := NewEventBus(&b.TestOpts.(*TestOpts).DBOpts, b.Logger)
+	eb := events.NewEventBus(c.database, b.Logger)
 	eb.DropTables()
 
 	fmt.Printf("done\n")

@@ -1,4 +1,4 @@
-package main
+package event_bus
 
 import (
 	"context"
@@ -51,35 +51,32 @@ var MaxTopics = 8
 
 // EventBus is a helper structure to simulate event bus
 type EventBus struct {
-	workerConn      *DBConnector
+	workerConn      db.Database
 	workerStarted   bool
 	stopCh          chan bool
 	wg              sync.WaitGroup
 	batchSize       int
 	sleepMsec       int
 	workerIteration uint64
+	logger          *benchmark.Logger
 }
 
 // NewEventBus creates a new event bus worker instance
-func NewEventBus(dbOpts *DatabaseOpts, logger *benchmark.Logger) *EventBus {
-	var conn, err = NewDBConnector(dbOpts, -1, logger, 1)
-	if err != nil {
-		return nil
-	}
-
+func NewEventBus(conn db.Database, logger *benchmark.Logger) *EventBus {
 	return &EventBus{
 		workerConn:    conn,
 		workerStarted: false,
 		stopCh:        make(chan bool),
 		batchSize:     500,
 		sleepMsec:     10,
+		logger:        logger,
 	}
 }
 
 // Log is a helper function to log event bus messages
 func (e *EventBus) Log(LogLevel int, format string, args ...interface{}) {
 	msg := "eventbus: " + fmt.Sprintf(format, args...)
-	e.workerConn.Log(LogLevel, msg)
+	e.logger.Log(LogLevel, -1, msg)
 }
 
 // MainLoop is the main worker loop for the event bus
@@ -109,7 +106,7 @@ func (e *EventBus) MainLoop() {
 // QueueIsEmpty returns true if the event bus queue is empty
 func (e *EventBus) QueueIsEmpty() (bool, error) {
 	c := e.workerConn
-	session := c.database.Session(c.database.Context(context.Background()))
+	session := c.Session(c.Context(context.Background()))
 
 	var rowNum uint64
 	if err := session.QueryRow("SELECT COUNT(*) FROM acronis_db_bench_eventbus_events;").Scan(&rowNum); err != nil {
@@ -120,19 +117,17 @@ func (e *EventBus) QueueIsEmpty() (bool, error) {
 }
 
 // Start starts the event bus worker
-func (e *EventBus) Start() {
-	c := e.workerConn
-
-	var dialectName = e.workerConn.database.DialectName()
+func (e *EventBus) Start() error {
+	var dialectName = e.workerConn.DialectName()
 
 	if dialectName == db.CLICKHOUSE {
-		c.Exit("event bus is not supported for ClickHouse DB")
+		return fmt.Errorf("event bus is not supported for ClickHouse DB")
 	}
 	if dialectName == db.CASSANDRA {
-		c.Exit("event bus is not supported for Cassandra DB")
+		return fmt.Errorf("event bus is not supported for Cassandra DB")
 	}
 	if e.workerStarted {
-		return
+		return nil
 	}
 	e.workerStarted = true
 
@@ -140,6 +135,8 @@ func (e *EventBus) Start() {
 
 	e.wg.Add(1)
 	go e.MainLoop()
+
+	return nil
 }
 
 // Stop stops the event bus worker
@@ -156,21 +153,21 @@ func (e *EventBus) Stop() {
 func (e *EventBus) CreateTables() error {
 	c := e.workerConn
 
-	if exists, err := c.database.TableExists("acronis_db_bench_eventbus_events"); err != nil {
+	if exists, err := c.TableExists("acronis_db_bench_eventbus_events"); err != nil {
 		return fmt.Errorf("eventbus: cannot check if table '%s' exists: %v", "acronis_db_bench_eventbus_events", err)
 	} else if exists {
 		return nil
 	}
 
-	if c.database.DialectName() == db.CLICKHOUSE || c.database.DialectName() == db.CASSANDRA {
+	if c.DialectName() == db.CLICKHOUSE || c.DialectName() == db.CASSANDRA {
 		return nil
 	}
 
-	if err := c.database.ApplyMigrations("", EventBusDDL); err != nil {
+	if err := c.ApplyMigrations("", EventBusDDL); err != nil {
 		return err
 	}
 
-	var session = c.database.Session(c.database.Context(context.Background()))
+	var session = c.Session(c.Context(context.Background()))
 	if txErr := session.Transact(func(tx db.DatabaseAccessor) error {
 		for i := 1; i < MaxTopics+1; i++ {
 			var eventTopic = EventTopic{
@@ -178,7 +175,9 @@ func (e *EventBus) CreateTables() error {
 				TopicID:    fmt.Sprintf("cti.a.p.em.topic.v1.0~a.p.my_topic.%d.v1.0", i),
 			}
 
-			if err := tx.InsertInto("acronis_db_bench_eventbus_topics", eventTopic, []string{"internal_id", "topic_id"}); err != nil {
+			if err := tx.BulkInsert("acronis_db_bench_eventbus_topics", [][]interface{}{
+				{eventTopic.InternalID, eventTopic.TopicID},
+			}, []string{"internal_id", "topic_id"}); err != nil {
 				return err
 			}
 
@@ -188,7 +187,9 @@ func (e *EventBus) CreateTables() error {
 				EventType:       fmt.Sprintf("cti.a.p.em.event.v1.0~a.p.my_event.%d.v1.0", i),
 			}
 
-			if err := tx.InsertInto("acronis_db_bench_eventbus_event_types", eventType, []string{"internal_id", "topic_internal_id", "event_type"}); err != nil {
+			if err := tx.BulkInsert("acronis_db_bench_eventbus_event_types", [][]interface{}{
+				{eventType.InternalID, eventType.TopicInternalID, eventType.EventType},
+			}, []string{"internal_id", "topic_internal_id", "event_type"}); err != nil {
 				return err
 			}
 		}
@@ -202,7 +203,7 @@ func (e *EventBus) CreateTables() error {
 		return fmt.Errorf("eventbus: cannot create tables: %v", txErr)
 	}
 
-	c.Log(benchmark.LogDebug, "created EventBus tables and indexes")
+	e.Log(benchmark.LogDebug, "created EventBus tables and indexes")
 
 	return nil
 }
@@ -212,13 +213,13 @@ func (e *EventBus) DropTables() error {
 	c := e.workerConn
 	var constraints []db.Constraint
 
-	if c.DbOpts.UseTruncate {
+	if c.UseTruncate() {
 		var err error
-		if constraints, err = c.database.ReadConstraints(); err != nil {
+		if constraints, err = c.ReadConstraints(); err != nil {
 			return fmt.Errorf("db: cannot read constraints: %v", err)
 		}
 
-		if err = c.database.DropConstraints(constraints); err != nil {
+		if err = c.DropConstraints(constraints); err != nil {
 			return fmt.Errorf("eventbus: cannot drop constraints: %v", err)
 		}
 	}
@@ -236,13 +237,13 @@ func (e *EventBus) DropTables() error {
 		"acronis_db_bench_eventbus_event_types",
 		"acronis_db_bench_eventbus_topics",
 	} {
-		if err := c.database.DropTable(table); err != nil {
+		if err := c.DropTable(table); err != nil {
 			return fmt.Errorf("eventbus: cannot drop table '%s': %v", table, err)
 		}
 	}
 
-	if c.DbOpts.UseTruncate {
-		if err := c.database.AddConstraints(constraints); err != nil {
+	if c.UseTruncate() {
+		if err := c.AddConstraints(constraints); err != nil {
 			return fmt.Errorf("eventbus: cannot add constraints: %v", err)
 		}
 	}
@@ -272,7 +273,9 @@ func (e *EventBus) InsertEvent(rw *benchmark.RandomizerWorker, databaseAccessor 
 
 	e.Start()
 
-	return databaseAccessor.InsertInto("acronis_db_bench_eventbus_events", d,
+	return databaseAccessor.BulkInsert("acronis_db_bench_eventbus_events", [][]interface{}{
+		{d.TopicInternalID, d.EventTypeInternalID, d.EventID, d.Source, d.TenantID, d.ConsolidationKey, d.Data},
+	},
 		[]string{"topic_internal_id", "event_type_internal_id", "event_id", "source", "tenant_id", "consolidation_key", "data"})
 }
 
@@ -303,7 +306,7 @@ func (e *EventBus) Step(msg string, dofunc func() (bool, error)) bool {
 	e.Log(benchmark.LogTrace, msg+" start")
 	ret, err := dofunc()
 	if err != nil {
-		e.workerConn.Exit(fmt.Sprintf("%s: %v", msg, err))
+		e.Log(benchmark.LogError, fmt.Sprintf("%s: %v", msg, err))
 	}
 	e.Log(benchmark.LogTrace, msg+" end")
 
@@ -320,7 +323,7 @@ func (e *EventBus) DoAlign() (bool, error) {
 	var unused interface{}
 	var newEventsFound bool
 
-	var session = c.database.Session(c.database.Context(context.Background()))
+	var session = c.Session(c.Context(context.Background()))
 	if txErr := session.Transact(func(tx db.DatabaseAccessor) error {
 
 		/*
@@ -397,7 +400,7 @@ func (e *EventBus) DoAlign() (bool, error) {
 
 		var seq64 int64
 
-		switch c.database.DialectName() {
+		switch c.DialectName() {
 		case db.MSSQL:
 			if err = tx.QueryRow("SELECT sequence + 1 FROM acronis_db_bench_eventbus_sequences WITH (UPDLOCK) WHERE int_id = $1;", 1).Scan(&seq64); err != nil {
 				return err
@@ -445,7 +448,7 @@ func (e *EventBus) DoAlign() (bool, error) {
 		values = make([]interface{}, fields*len(data))
 
 		for n := range data {
-			if c.database.DialectName() == db.MSSQL {
+			if c.DialectName() == db.MSSQL {
 				placeholders[n] = fmt.Sprintf("(%s, GETDATE())", db.GenDBParameterPlaceholders(n*fields, fields))
 			} else {
 				placeholders[n] = fmt.Sprintf("(%s, NOW())", db.GenDBParameterPlaceholders(n*fields, fields))
@@ -470,14 +473,14 @@ func (e *EventBus) DoAlign() (bool, error) {
 // DoMaxSeqShifter simulates events max sequence shift
 func (e *EventBus) DoMaxSeqShifter() (bool, error) {
 	var c = e.workerConn
-	var sess = c.database.Session(c.database.Context(context.Background()))
+	var sess = c.Session(c.Context(context.Background()))
 
 	for t := 1; t < MaxTopics+1; t++ {
 		if txErr := sess.Transact(func(tx db.DatabaseAccessor) error {
 			var seq64 int64
 			var err error
 
-			switch c.database.DialectName() {
+			switch c.DialectName() {
 			case db.MSSQL:
 				err = tx.QueryRow("SELECT TOP(1) seq FROM acronis_db_bench_eventbus_stream WHERE topic_id = $1 AND seq IS NOT NULL ORDER BY seq DESC;", t).Scan(&seq64)
 			default:
@@ -504,7 +507,7 @@ func (e *EventBus) DoMaxSeqShifter() (bool, error) {
 // DoFetch simulates events sending
 func (e *EventBus) DoFetch() (bool, error) {
 	var c = e.workerConn
-	var sess = c.database.Session(c.database.Context(context.Background()))
+	var sess = c.Session(c.Context(context.Background()))
 
 	for t := 1; t < MaxTopics+1; t++ {
 		var cur64 int64
@@ -566,7 +569,7 @@ func (e *EventBus) DoFetchConsolidated() bool {
 // DoArchive simulates events archiving
 func (e *EventBus) DoArchive() (bool, error) {
 	var c = e.workerConn
-	var sess = c.database.Session(c.database.Context(context.Background()))
+	var sess = c.Session(c.Context(context.Background()))
 
 	for t := 1; t < MaxTopics+1; t++ {
 		if txErr := sess.Transact(func(tx db.DatabaseAccessor) error {
@@ -576,7 +579,7 @@ func (e *EventBus) DoArchive() (bool, error) {
 			}
 
 			var err error
-			switch c.database.DialectName() {
+			switch c.DialectName() {
 			case db.MSSQL:
 				_, err = tx.Exec(fmt.Sprintf("INSERT INTO acronis_db_bench_eventbus_archive (int_id, topic_id, seq, seq_time) SELECT TOP %d int_id, topic_id, seq, seq_time "+
 					"FROM acronis_db_bench_eventbus_stream WHERE topic_id = %d AND seq IS NOT NULL AND seq <= %d ORDER BY seq ;",
@@ -587,7 +590,7 @@ func (e *EventBus) DoArchive() (bool, error) {
 					t, cur64, e.batchSize)
 			}
 
-			switch c.database.DialectName() {
+			switch c.DialectName() {
 			case db.MYSQL:
 				_, err = tx.Exec("DELETE FROM acronis_db_bench_eventbus_stream WHERE topic_id = $1 AND seq <= $2 ORDER BY seq ASC LIMIT $3;", t, cur64, e.batchSize)
 			case db.MSSQL:

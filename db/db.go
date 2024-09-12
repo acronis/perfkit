@@ -7,6 +7,8 @@ import (
 	"time"
 )
 
+type DialectName string
+
 // Supported dialect
 const (
 	SQLITE        DialectName = "sqlite"        // SQLITE is the SQLite driver name
@@ -130,10 +132,9 @@ type SelectCtrl struct {
 	OptimizeConditions bool
 }
 
-// databaseSearcher is an interface for searching the database
-type databaseSearcher interface {
-	SearchRaw(from string, what string, where string, orderBy string, limit int, explain bool, args ...interface{}) (Rows, error)
-	Search(tableName string, c *SelectCtrl) (Rows, error)
+// databaseSelector is an interface for searching the database
+type databaseSelector interface {
+	Select(tableName string, c *SelectCtrl) (Rows, error)
 }
 
 // InsertStats is a struct for storing insert statistics
@@ -150,7 +151,7 @@ func (s *InsertStats) String() string {
 
 // databaseInserter is an interface for inserting data into the database
 type databaseInserter interface {
-	InsertInto(tableName string, data interface{}, columnNames []string) error
+	BulkInsert(tableName string, rows [][]interface{}, columnNames []string) error
 }
 
 // databaseQuerier is an interface for low-level querying the database
@@ -180,7 +181,7 @@ type databaseQueryPreparer interface {
 // DatabaseAccessor is an interface for accessing the database
 type DatabaseAccessor interface {
 	databaseQueryRegistrator
-	databaseSearcher
+	databaseSelector
 	databaseInserter
 	databaseQuerier
 	databaseQueryPreparer
@@ -197,10 +198,11 @@ type Session interface {
 }
 
 type TableRow struct {
-	Name    string
-	Type    DataType
-	NotNull bool
-	Indexed bool // only for Elasticsearch
+	Name       string
+	Type       DataType
+	PrimaryKey bool
+	NotNull    bool
+	Indexed    bool // only for Elasticsearch
 }
 
 type ResilienceSettings struct {

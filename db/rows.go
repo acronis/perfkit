@@ -29,6 +29,46 @@ func (r *EmptyRows) Scan(dest ...interface{}) error { return nil }
 func (r *EmptyRows) Close() error                   { return nil }
 func (r *EmptyRows) Dump() string                   { return "" }
 
+// CountRows is a struct for storing DB rows (as a slice of dbRow) and current index
+type CountRows struct {
+	Count int64
+	read  bool
+}
+
+func (r *CountRows) Next() bool {
+	if !r.read {
+		r.read = true
+
+		return true
+	}
+
+	return false
+}
+func (r *CountRows) Err() error { return nil }
+func (r *CountRows) Scan(dest ...interface{}) error {
+	if len(dest) != 1 {
+		return fmt.Errorf("internal error: CountRows.Scan() - number of columns in the result set does not match the number of destination fields")
+	}
+
+	dv := reflect.ValueOf(dest[0])
+	if dv.Kind() != reflect.Ptr {
+		return fmt.Errorf("internal error: CountRows.Scan() - non-pointer passed to Scan: %v", dest)
+	}
+
+	var val = r.Count
+
+	switch d := dest[0].(type) {
+	case *int64:
+		*d = val
+	default:
+		return fmt.Errorf("unsupported type to convert (type=%T)", d)
+	}
+
+	return nil
+}
+func (r *CountRows) Close() error { return nil }
+func (r *CountRows) Dump() string { return "" }
+
 type surrogateRowsRow []interface{}
 
 // SurrogateRows is a struct for storing DB rows (as a slice of dbRow) and current index

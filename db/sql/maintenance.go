@@ -158,7 +158,9 @@ func constructSQLDDLQuery(d dialect, tableName string, tableDefinition *db.Table
 	for i, row := range tableDefinition.TableRows {
 		query += fmt.Sprintf("%v %v", row.Name, d.getType(row.Type))
 		if row.NotNull {
-			query += " NOT NULL"
+			if d.name() != db.CASSANDRA {
+				query += " NOT NULL"
+			}
 		}
 		if i < len(tableDefinition.TableRows)-1 {
 			query += ", "
@@ -191,6 +193,12 @@ func createTable(q querier, d dialect, name string, tableDefinition *db.TableDef
 		return nil
 	}
 
+	if tableDefinition != nil {
+		if err := createSelectQueryBuilder(name, tableDefinition.TableRows); err != nil {
+			return err
+		}
+	}
+
 	if exists, err := tableExists(q, d, name); err != nil {
 		return fmt.Errorf("error checking table existence: %v", err)
 	} else if exists {
@@ -203,12 +211,6 @@ func createTable(q querier, d dialect, name string, tableDefinition *db.TableDef
 
 	if ddlQuery == "" {
 		return fmt.Errorf("internal error: table %s needs to be created, but migration query has not been provided", name)
-	}
-
-	if tableDefinition != nil {
-		if err := createSelectQueryBuilder(name, tableDefinition.TableRows); err != nil {
-			return err
-		}
 	}
 
 	if err := applyMigrations(q, d, name, ddlQuery); err != nil {

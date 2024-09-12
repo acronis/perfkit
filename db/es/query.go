@@ -7,9 +7,9 @@ func (g *esGateway) Exec(format string, args ...interface{}) (db.Result, error) 
 }
 
 func (g *esGateway) QueryRow(format string, args ...interface{}) db.Row {
-	return nil
+	return &db.EmptyRows{}
 }
 
 func (g *esGateway) Query(format string, args ...interface{}) (db.Rows, error) {
-	return nil, nil
+	return &db.EmptyRows{}, nil
 }

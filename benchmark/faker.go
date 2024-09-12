@@ -6,6 +6,8 @@ import (
 	"os"
 	"sync"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 /*
@@ -136,23 +138,29 @@ func (rw *RandomizerWorker) Uintn64(max uint64) uint64 {
 }
 
 // UUID returns random UUID	v4 value (RFC 4122)
-func (rw *RandomizerWorker) UUID() string {
+func (rw *RandomizerWorker) UUID() uuid.UUID {
 	r := rw.Unique()
 
-	return fmt.Sprintf("%04x%04x-%04x-%04x-%04x-%04x%04x%04x",
+	var val = fmt.Sprintf("%04x%04x-%04x-%04x-%04x-%04x%04x%04x",
 		r.Int31n(0xffff), r.Int31n(0xffff),
 		r.Int31n(0xffff),
 		r.Int31n(0xffff)&0x0fff|0x4000,
 		r.Int31n(0xffff)&0x3fff|0x8000,
 		r.Int31n(0xffff), r.Int31n(0xffff), r.Int31n(0xffff),
 	)
+
+	var id, _ = uuid.ParseBytes([]byte(val))
+	return id
 }
 
 // UUIDn returns random UUID v4 value (RFC 4122) with given limit
-func (rw *RandomizerWorker) UUIDn(limit int) string {
+func (rw *RandomizerWorker) UUIDn(limit int) uuid.UUID {
 	r := rw.Unique()
 
-	return fmt.Sprintf("01234567-89ab-cdef-0123-0000%08x", r.Intn(limit))
+	var val = fmt.Sprintf("01234567-89ab-cdef-0123-0000%08x", r.Intn(limit))
+
+	var id, _ = uuid.ParseBytes([]byte(val))
+	return id
 }
 
 // RandTime returns random time within the given limit
@@ -297,6 +305,12 @@ func (b *Benchmark) GenFakeValue(workerID int, columnType string, columnName str
 			return rw.UUIDn(cardinality)
 		}
 	case "time":
+		if cardinality == 0 {
+			return time.Now()
+		} else {
+			return rw.RandTime(cardinality)
+		}
+	case "time_string":
 		if cardinality == 0 {
 			return time.Now().String()
 		} else {
