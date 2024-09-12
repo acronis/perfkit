@@ -28,7 +28,7 @@ func (s *sqlRecommendationsSource) Recommendations() ([]db.Recommendation, error
 	case db.POSTGRES:
 		var rowNum uint64
 
-		var row = s.q.QueryRowContext(context.Background(), "SELECT COUNT(*) FROM pg_stat_replication;")
+		var row = s.q.queryRowContext(context.Background(), "SELECT COUNT(*) FROM pg_stat_replication;")
 
 		if err := row.Scan(&rowNum); err != nil {
 			return nil, fmt.Errorf("db: cannot get rows count in table '%s': %v", "pg_stat_replication", err)

@@ -7,7 +7,7 @@ import (
 )
 
 // GetNextVal returns the next value from a sequence
-func (s *session) GetNextVal(sequenceName string) (uint64, error) {
+func (s *esSession) GetNextVal(sequenceName string) (uint64, error) {
 	var nextVal uint64
 
 	switch s.dialect.name() {
@@ -31,11 +31,11 @@ func (s *session) GetNextVal(sequenceName string) (uint64, error) {
 		if txErr := inTx(s.ctx, s.t, s.dialect, func(q querier, dia dialect) error {
 			var value int64
 
-			if err := q.QueryRowContext(s.ctx, "SELECT value FROM "+sequenceName+" WHERE sequence_id = 1;").Scan(&value); err != nil {
+			if err := q.queryRowContext(s.ctx, "SELECT value FROM "+sequenceName+" WHERE sequence_id = 1;").Scan(&value); err != nil {
 				return err
 			}
 
-			if _, err := q.ExecContext(s.ctx, fmt.Sprintf("UPDATE %s SET value = %d WHERE sequence_id = 1", sequenceName, value+1)); err != nil {
+			if _, err := q.execContext(s.ctx, fmt.Sprintf("UPDATE %s SET value = %d WHERE sequence_id = 1", sequenceName, value+1)); err != nil {
 				return err
 			}
 

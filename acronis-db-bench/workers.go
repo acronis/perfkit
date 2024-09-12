@@ -176,7 +176,7 @@ func testSelect(
 		}
 
 		var session = c.database.Session(c.database.Context(context.Background()))
-		var rows, err = session.Search(from, what, where, orderBy, batch, explain)
+		var rows, err = session.SearchRaw(from, what, where, orderBy, batch, explain)
 		if err != nil {
 			b.Exit(err)
 		}

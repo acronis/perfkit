@@ -31,7 +31,7 @@ func getVersion(q querier, d dialect) (db.DialectName, string, error) {
 		return "", "", fmt.Errorf("unsupported driver: %s", d.name())
 	}
 
-	if err := q.QueryRowContext(context.Background(), query).Scan(&version); err != nil {
+	if err := q.queryRowContext(context.Background(), query).Scan(&version); err != nil {
 		return "", "", err
 	}
 
@@ -39,7 +39,7 @@ func getVersion(q querier, d dialect) (db.DialectName, string, error) {
 		var versionComment string
 		query = "SELECT @@VERSION_COMMENT;"
 
-		if err := q.QueryRowContext(context.Background(), query).Scan(&versionComment); err != nil {
+		if err := q.queryRowContext(context.Background(), query).Scan(&versionComment); err != nil {
 			return "", "", err
 		}
 
@@ -57,7 +57,7 @@ func getInfo(q querier, d dialect, version string) ([]string, *db.Info, error) {
 	switch d.name() {
 	case db.POSTGRES:
 		// Execute SHOW ALL command
-		var rows, err = q.QueryContext(context.Background(), "SHOW ALL")
+		var rows, err = q.queryContext(context.Background(), "SHOW ALL")
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to execute query: %s, error: %s", "SHOW ALL", err)
 		}
@@ -88,7 +88,7 @@ func getInfo(q querier, d dialect, version string) ([]string, *db.Info, error) {
 		}
 	case db.MYSQL:
 		query := "SHOW VARIABLES;"
-		rows, err := q.QueryContext(context.Background(), query)
+		rows, err := q.queryContext(context.Background(), query)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to execute query: %s, error: %s", query, err)
 		}
@@ -116,7 +116,7 @@ func getInfo(q querier, d dialect, version string) ([]string, *db.Info, error) {
 		}
 	case db.MSSQL:
 		query := "SELECT * FROM sys.configurations"
-		rows, err := q.QueryContext(context.Background(), query)
+		rows, err := q.queryContext(context.Background(), query)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to execute query: %s, error: %s", query, err)
 		}
@@ -173,7 +173,7 @@ func getInfo(q querier, d dialect, version string) ([]string, *db.Info, error) {
 		}
 	case db.CASSANDRA:
 		// Execute a CQL query
-		rows, err := q.QueryContext(context.Background(), "SELECT * FROM system.local") // Replace with your actual query
+		rows, err := q.queryContext(context.Background(), "SELECT * FROM system.local") // Replace with your actual query
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to execute query: %s, error: %s", "SELECT * FROM system.local", err)
 		}
@@ -245,7 +245,7 @@ func getTablesSchemaInfo(q querier, d dialect, tableNames []string) ([]string, e
 			return nil, fmt.Errorf("unsupported database type: %s", d.name())
 		}
 
-		columns, err := q.QueryContext(context.Background(), listColumnsQuery)
+		columns, err := q.queryContext(context.Background(), listColumnsQuery)
 		if err != nil {
 			return nil, fmt.Errorf("error: %w", err)
 		}
@@ -303,7 +303,7 @@ func getTablesSchemaInfo(q querier, d dialect, tableNames []string) ([]string, e
 			return nil, fmt.Errorf("unsupported database type: %s", d.name())
 		}
 
-		indexes, err := q.QueryContext(context.Background(), listIndexesQuery)
+		indexes, err := q.queryContext(context.Background(), listIndexesQuery)
 		if err != nil {
 			return nil, fmt.Errorf("error: %w", err)
 		}
@@ -397,7 +397,7 @@ func getTableSizeMB(q querier, d dialect, tableName string) (int64, error) {
 
 	var check = fmt.Sprintf(query, args...)
 	var sizeMB int64
-	if err := q.QueryRowContext(context.Background(), check).Scan(&sizeMB); err != nil && err != sql.ErrNoRows {
+	if err := q.queryRowContext(context.Background(), check).Scan(&sizeMB); err != nil && err != sql.ErrNoRows {
 		return 0, err
 	}
 
@@ -420,7 +420,7 @@ func getIndexesSizeMB(q querier, d dialect, tableName string) (int64, error) {
 
 	var check = fmt.Sprintf(query, args...)
 	var sizeMB int64
-	if err := q.QueryRowContext(context.Background(), check).Scan(&sizeMB); err != nil && err != sql.ErrNoRows {
+	if err := q.queryRowContext(context.Background(), check).Scan(&sizeMB); err != nil && err != sql.ErrNoRows {
 		return 0, err
 	}
 
@@ -441,7 +441,7 @@ func getTablesVolumeInfo(q querier, d dialect, tableNames []string) ([]string, e
 			return nil, fmt.Errorf("error checking table existence: %w", err)
 		} else if exists {
 			var rowNum uint64
-			if err = q.QueryRowContext(context.Background(), fmt.Sprintf("SELECT COUNT(*) FROM %s", d.table(tableName))).Scan(&rowNum); err != nil && err != sql.ErrNoRows {
+			if err = q.queryRowContext(context.Background(), fmt.Sprintf("SELECT COUNT(*) FROM %s", d.table(tableName))).Scan(&rowNum); err != nil && err != sql.ErrNoRows {
 				return nil, err
 			}
 

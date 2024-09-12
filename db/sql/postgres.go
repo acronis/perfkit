@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"net/url"
+	"strings"
 
 	"github.com/lib/pq"
 
@@ -31,54 +32,79 @@ func (d *pgDialect) name() db.DialectName {
 	return db.POSTGRES
 }
 
+func (d *pgDialect) encodeString(s string) string {
+	// borrowed from dbr
+	// http://www.postgresql.org/docs/9.2/static/sql-syntax-lexical.html
+	return `'` + strings.Replace(s, `'`, `''`, -1) + `'`
+}
+
+func (d *pgDialect) encodeBool(b bool) string {
+	// borrowed from dbr
+	if b {
+		return "TRUE"
+	}
+	return "FALSE"
+}
+
+func (d *pgDialect) encodeBytes(bs []byte) string {
+	// borrowed from dbr, using string for json fields
+	return d.encodeString(string(bs))
+}
+
 // GetType returns PostgreSQL-specific types
-func (d *pgDialect) getType(id string) string {
+func (d *pgDialect) getType(id db.DataType) string {
 	switch id {
-	case "{$bigint_autoinc_pk}":
+	case db.DataTypeInt:
+		return "INT"
+	case db.DataTypeString:
+		return "VARCHAR"
+	case db.DataTypeString256:
+		return "VARCHAR(256)"
+	case db.DataTypeBigIntAutoIncPK:
 		return "BIGSERIAL PRIMARY KEY"
-	case "{$bigint_autoinc}":
+	case db.DataTypeBigIntAutoInc:
 		return "BIGSERIAL"
-	case "{$ascii}":
+	case db.DataTypeAscii:
 		return ""
-	case "{$uuid}":
+	case db.DataTypeUUID:
 		return "UUID"
-	case "{$varchar_uuid}":
+	case db.DataTypeVarCharUUID:
 		return "VARCHAR(36)"
-	case "{$longblob}":
+	case db.DataTypeLongBlob:
 		return "BYTEA"
-	case "{$hugeblob}":
+	case db.DataTypeHugeBlob:
 		return "BYTEA"
-	case "{$datetime}":
+	case db.DataTypeDateTime:
 		return "TIMESTAMP"
-	case "{$datetime6}":
+	case db.DataTypeDateTime6:
 		return "TIMESTAMP(6)"
-	case "{$timestamp6}":
+	case db.DataTypeTimestamp6:
 		return "TIMESTAMP(6)"
-	case "{$current_timestamp6}":
+	case db.DataTypeCurrentTimeStamp6:
 		return "CURRENT_TIMESTAMP(6)"
-	case "{$binary20}":
+	case db.DataTypeBinary20:
 		return "BYTEA"
-	case "{$binaryblobtype}":
+	case db.DataTypeBinaryBlobType:
 		return "BYTEA"
-	case "{$boolean}":
+	case db.DataTypeBoolean:
 		return "BOOLEAN"
-	case "{$boolean_false}":
+	case db.DataTypeBooleanFalse:
 		return "false"
-	case "{$boolean_true}":
+	case db.DataTypeBooleanTrue:
 		return "true"
-	case "{$tinyint}":
+	case db.DataTypeTinyInt:
 		return "SMALLINT"
-	case "{$longtext}":
+	case db.DataTypeLongText:
 		return "TEXT"
-	case "{$unique}":
+	case db.DataTypeUnique:
 		return "unique"
-	case "{$engine}":
+	case db.DataTypeEngine:
 		return ""
-	case "{$notnull}":
+	case db.DataTypeNotNull:
 		return "not null"
-	case "{$null}":
+	case db.DataTypeNull:
 		return "null"
-	case "{$tenant_uuid_bound_id}":
+	case db.DataTypeTenantUUIDBoundID:
 		return "VARCHAR(64)"
 	default:
 		return ""
@@ -127,7 +153,7 @@ func (d *pgDialect) recommendations() []db.Recommendation {
 		{Setting: "min_wal_size", Meaning: "min WAL size", MinVal: int64(32 * db.MByte), RecommendedVal: int64(64 * db.MByte)},
 		{Setting: "max_connections", Meaning: "max allowed number of DB connections", MinVal: int64(512), RecommendedVal: int64(2048)},
 		{Setting: "random_page_cost", Meaning: "it should be 1.1 as it is typical for SSD", ExpectedValue: "1.1"},
-		{Setting: "track_activities", Meaning: "collects session activities info", ExpectedValue: "on"},
+		{Setting: "track_activities", Meaning: "collects esSession activities info", ExpectedValue: "on"},
 		{Setting: "track_counts", Meaning: "track tables/indexes access count", ExpectedValue: "on"},
 		{Setting: "log_checkpoints", Meaning: "logs information about each checkpoint", ExpectedValue: "on"},
 		{Setting: "jit", Meaning: "JIT compilation feature", ExpectedValue: "off"},

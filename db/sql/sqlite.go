@@ -25,54 +25,81 @@ func (d *sqliteDialect) name() db.DialectName {
 	return db.SQLITE
 }
 
-// GetType returns SQLite-specific types
-func (d *sqliteDialect) getType(id string) string {
-	switch id {
-	case "{$bigint_autoinc_pk}":
-		return "INTEGER PRIMARY KEY AUTOINCREMENT"
-	case "{$bigint_autoinc}":
-		return "INTEGER AUTOINCREMENT"
-	case "{$ascii}":
-		return ""
-	case "{$uuid}":
-		return "TEXT"
-	case "{$varchar_uuid}":
-		return "TEXT"
-	case "{$longblob}":
-		return "BLOB"
-	case "{$hugeblob}":
-		return "BLOB"
-	case "{$datetime}":
-		return "TEXT"
-	case "{$datetime6}":
-		return "TEXT"
-	case "{$timestamp6}":
-		return "TEXT"
-	case "{$current_timestamp6}":
-		return "CURRENT_TIMESTAMP"
-	case "{$binary20}":
-		return "BLOB"
-	case "{$binaryblobtype}":
-		return "MEDIUMBLOB"
-	case "{$boolean}":
-		return "BOOLEAN"
-	case "{$boolean_false}":
-		return "0"
-	case "{$boolean_true}":
+func (d *sqliteDialect) encodeString(s string) string {
+	// borrowed from dbr
+	// https://www.sqlite.org/faq.html
+	return `'` + strings.ReplaceAll(s, `'`, `''`) + `'`
+}
+
+func (d *sqliteDialect) encodeBool(b bool) string {
+	// borrowed from dbr
+	// https://www.sqlite.org/lang_expr.html
+	if b {
 		return "1"
-	case "{$tinyint}":
-		return "SMALLINT"
-	case "{$longtext}":
-		return "TEXT"
-	case "{$unique}":
-		return "unique"
-	case "{$engine}":
+	}
+	return "0"
+}
+
+func (d *sqliteDialect) encodeBytes(bs []byte) string {
+	// borrowed from dbr
+	// https://www.sqlite.org/lang_expr.html
+	return fmt.Sprintf(`X'%x'`, bs)
+}
+
+// GetType returns SQLite-specific types
+func (d *sqliteDialect) getType(id db.DataType) string {
+	switch id {
+	case db.DataTypeInt:
+		return "INT"
+	case db.DataTypeString:
+		return "VARCHAR"
+	case db.DataTypeString256:
+		return "VARCHAR(256)"
+	case db.DataTypeBigIntAutoIncPK:
+		return "INTEGER PRIMARY KEY AUTOINCREMENT"
+	case db.DataTypeBigIntAutoInc:
+		return "INTEGER AUTOINCREMENT"
+	case db.DataTypeAscii:
 		return ""
-	case "{$notnull}":
+	case db.DataTypeUUID:
+		return "TEXT"
+	case db.DataTypeVarCharUUID:
+		return "TEXT"
+	case db.DataTypeLongBlob:
+		return "BLOB"
+	case db.DataTypeHugeBlob:
+		return "BLOB"
+	case db.DataTypeDateTime:
+		return "TEXT"
+	case db.DataTypeDateTime6:
+		return "TEXT"
+	case db.DataTypeTimestamp6:
+		return "TEXT"
+	case db.DataTypeCurrentTimeStamp6:
+		return "CURRENT_TIMESTAMP"
+	case db.DataTypeBinary20:
+		return "BLOB"
+	case db.DataTypeBinaryBlobType:
+		return "MEDIUMBLOB"
+	case db.DataTypeBoolean:
+		return "BOOLEAN"
+	case db.DataTypeBooleanFalse:
+		return "0"
+	case db.DataTypeBooleanTrue:
+		return "1"
+	case db.DataTypeTinyInt:
+		return "SMALLINT"
+	case db.DataTypeLongText:
+		return "TEXT"
+	case db.DataTypeUnique:
+		return "unique"
+	case db.DataTypeEngine:
+		return ""
+	case db.DataTypeNotNull:
 		return "not null"
-	case "{$null}":
+	case db.DataTypeNull:
 		return "null"
-	case "{$tenant_uuid_bound_id}":
+	case db.DataTypeTenantUUIDBoundID:
 		return "TEXT"
 	default:
 		return ""

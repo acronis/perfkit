@@ -12,31 +12,31 @@ type sqlTransaction struct {
 	be *sql.Tx
 }
 
-func (d *sqlQuerier) Ping(ctx context.Context) error {
+func (d *sqlQuerier) ping(ctx context.Context) error {
 	return d.be.PingContext(ctx)
 }
-func (d *sqlQuerier) Stats() sql.DBStats {
+func (d *sqlQuerier) stats() sql.DBStats {
 	return d.be.Stats()
 }
-func (d *sqlQuerier) RawSession() interface{} {
+func (d *sqlQuerier) rawSession() interface{} {
 	return d.be
 }
-func (d *sqlQuerier) Close() error {
+func (d *sqlQuerier) close() error {
 	return d.be.Close()
 }
-func (d *sqlQuerier) ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
+func (d *sqlQuerier) execContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
 	return d.be.ExecContext(ctx, query, args...)
 }
-func (d *sqlQuerier) QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row {
+func (d *sqlQuerier) queryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row {
 	return d.be.QueryRowContext(ctx, query, args...)
 }
-func (d *sqlQuerier) QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
+func (d *sqlQuerier) queryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
 	return d.be.QueryContext(ctx, query, args...)
 }
-func (d *sqlQuerier) PrepareContext(ctx context.Context, query string) (*sql.Stmt, error) {
+func (d *sqlQuerier) prepareContext(ctx context.Context, query string) (*sql.Stmt, error) {
 	return d.be.PrepareContext(ctx, query)
 }
-func (d *sqlQuerier) Begin(ctx context.Context) (transaction, error) {
+func (d *sqlQuerier) begin(ctx context.Context) (transaction, error) {
 	be, err := d.be.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
@@ -45,21 +45,21 @@ func (d *sqlQuerier) Begin(ctx context.Context) (transaction, error) {
 	return &sqlTransaction{be}, nil
 }
 
-func (t *sqlTransaction) ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
+func (t *sqlTransaction) execContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
 	return t.be.ExecContext(ctx, query, args...)
 }
-func (t *sqlTransaction) QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row {
+func (t *sqlTransaction) queryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row {
 	return t.be.QueryRowContext(ctx, query, args...)
 }
-func (t *sqlTransaction) QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
+func (t *sqlTransaction) queryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
 	return t.be.QueryContext(ctx, query, args...)
 }
-func (t *sqlTransaction) PrepareContext(ctx context.Context, query string) (*sql.Stmt, error) {
+func (t *sqlTransaction) prepareContext(ctx context.Context, query string) (*sql.Stmt, error) {
 	return t.be.PrepareContext(ctx, query)
 }
-func (t *sqlTransaction) Commit() error {
+func (t *sqlTransaction) commit() error {
 	return t.be.Commit()
 }
-func (t *sqlTransaction) Rollback() error {
+func (t *sqlTransaction) rollback() error {
 	return t.be.Rollback()
 }

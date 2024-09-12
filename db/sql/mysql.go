@@ -1,6 +1,7 @@
 package sql
 
 import (
+	"bytes"
 	"database/sql"
 	"fmt"
 	"math"
@@ -27,52 +28,106 @@ func (d *mysqlDialect) name() db.DialectName {
 	return db.MYSQL
 }
 
-// GetType returns MySQL-specific types
-func (d *mysqlDialect) getType(id string) string {
-	switch id {
-	case "{$bigint_autoinc_pk}":
-		return "BIGINT AUTO_INCREMENT PRIMARY KEY"
-	case "{$bigint_autoinc}":
-		return "BIGINT AUTO_INCREMENT"
-	case "{$ascii}":
-		return "character set ascii"
-	case "{$uuid}":
-		return "VARCHAR(36)"
-	case "{$varchar_uuid}":
-		return "VARCHAR(36)"
-	case "{$tenant_uuid_bound_id}":
-		return "VARCHAR(64)"
-	case "{$longblob}":
-		return "LONGBLOB"
-	case "{$hugeblob}":
-		return "LONGBLOB"
-	case "{$datetime}":
-		return "DATETIME"
-	case "{$datetime6}":
-		return "DATETIME(6)"
-	case "{$timestamp6}":
-		return "TIMESTAMP(6)"
-	case "{$current_timestamp6}":
-		return "CURRENT_TIMESTAMP(6)"
-	case "{$binary20}":
-		return "BINARY(20)"
-	case "{$binaryblobtype}":
-		return "MEDIUMBLOB"
-	case "{$boolean}":
-		return "BOOLEAN"
-	case "{$boolean_false}":
-		return "0"
-	case "{$boolean_true}":
+func (d *mysqlDialect) encodeString(s string) string {
+	// borrowed from dbr
+	buf := new(bytes.Buffer)
+
+	buf.WriteByte('\'')
+	// https://dev.mysql.com/doc/refman/5.7/en/string-literals.html
+	for i := 0; i < len(s); i++ {
+		switch s[i] {
+		case 0:
+			buf.WriteString(`\0`)
+		case '\'':
+			buf.WriteString(`\'`)
+		case '"':
+			buf.WriteString(`\"`)
+		case '\b':
+			buf.WriteString(`\b`)
+		case '\n':
+			buf.WriteString(`\n`)
+		case '\r':
+			buf.WriteString(`\r`)
+		case '\t':
+			buf.WriteString(`\t`)
+		case 26:
+			buf.WriteString(`\Z`)
+		case '\\':
+			buf.WriteString(`\\`)
+		default:
+			buf.WriteByte(s[i])
+		}
+	}
+
+	buf.WriteByte('\'')
+	return buf.String()
+}
+
+func (d *mysqlDialect) encodeBool(b bool) string {
+	// borrowed from dbr
+	if b {
 		return "1"
-	case "{$tinyint}":
+	}
+	return "0"
+}
+
+func (d *mysqlDialect) encodeBytes(bs []byte) string {
+	// borrowed from dbr
+	return fmt.Sprintf(`0x%x`, bs)
+}
+
+// GetType returns MySQL-specific types
+func (d *mysqlDialect) getType(id db.DataType) string {
+	switch id {
+	case db.DataTypeInt:
+		return "INT"
+	case db.DataTypeString:
+		return "VARCHAR"
+	case db.DataTypeString256:
+		return "VARCHAR(256)"
+	case db.DataTypeBigIntAutoIncPK:
+		return "BIGINT AUTO_INCREMENT PRIMARY KEY"
+	case db.DataTypeBigIntAutoInc:
+		return "BIGINT AUTO_INCREMENT"
+	case db.DataTypeAscii:
+		return "character set ascii"
+	case db.DataTypeUUID:
+		return "VARCHAR(36)"
+	case db.DataTypeVarCharUUID:
+		return "VARCHAR(36)"
+	case db.DataTypeTenantUUIDBoundID:
+		return "VARCHAR(64)"
+	case db.DataTypeLongBlob:
+		return "LONGBLOB"
+	case db.DataTypeHugeBlob:
+		return "LONGBLOB"
+	case db.DataTypeDateTime:
+		return "DATETIME"
+	case db.DataTypeDateTime6:
+		return "DATETIME(6)"
+	case db.DataTypeTimestamp6:
+		return "TIMESTAMP(6)"
+	case db.DataTypeCurrentTimeStamp6:
+		return "CURRENT_TIMESTAMP(6)"
+	case db.DataTypeBinary20:
+		return "BINARY(20)"
+	case db.DataTypeBinaryBlobType:
+		return "MEDIUMBLOB"
+	case db.DataTypeBoolean:
+		return "BOOLEAN"
+	case db.DataTypeBooleanFalse:
+		return "0"
+	case db.DataTypeBooleanTrue:
+		return "1"
+	case db.DataTypeTinyInt:
 		return "TINYINT"
-	case "{$longtext}":
+	case db.DataTypeLongText:
 		return "LONGTEXT"
-	case "{$unique}":
+	case db.DataTypeUnique:
 		return "unique"
-	case "{$notnull}":
+	case db.DataTypeNotNull:
 		return "not null"
-	case "{$null}":
+	case db.DataTypeNull:
 		return "null"
 	}
 

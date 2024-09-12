@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"math"
+	"strings"
 
 	_ "github.com/ClickHouse/clickhouse-go/v2" // clickhouse driver
 
@@ -22,54 +23,79 @@ func (d *clickHouseDialect) name() db.DialectName {
 	return db.CLICKHOUSE
 }
 
+func (d *clickHouseDialect) encodeString(s string) string {
+	// borrowed from dbr
+	// http://www.postgresql.org/docs/9.2/static/sql-syntax-lexical.html
+	return `'` + strings.Replace(s, `'`, `''`, -1) + `'`
+}
+
+func (d *clickHouseDialect) encodeBool(b bool) string {
+	// borrowed from dbr
+	if b {
+		return "TRUE"
+	}
+	return "FALSE"
+}
+
+func (d *clickHouseDialect) encodeBytes(bs []byte) string {
+	// borrowed from dbr, using string for json fields
+	return d.encodeString(string(bs))
+}
+
 // GetType returns ClickHouse-specific types
-func (d *clickHouseDialect) getType(id string) string {
+func (d *clickHouseDialect) getType(id db.DataType) string {
 	switch id {
-	case "{$bigint_autoinc_pk}":
+	case db.DataTypeInt:
+		return "UInt64" // Int for integers
+	case db.DataTypeString:
+		return "String"
+	case db.DataTypeString256:
+		return "String"
+	case db.DataTypeBigIntAutoIncPK:
 		return "UInt64" // ClickHouse does not support auto-increment
-	case "{$bigint_autoinc}":
+	case db.DataTypeBigIntAutoInc:
 		return "UInt64" // Use UInt64 for large integers
-	case "{$ascii}":
+	case db.DataTypeAscii:
 		return "" // Charset specification is not needed in ClickHouse
-	case "{$uuid}":
+	case db.DataTypeUUID:
 		return "UUID" // ClickHouse supports UUID type
-	case "{$varchar_uuid}":
+	case db.DataTypeVarCharUUID:
 		return "FixedString(36)" // ClickHouse supports UUID type
-	case "{$longblob}":
+	case db.DataTypeLongBlob:
 		return "String" // Use String for binary data
-	case "{$hugeblob}":
+	case db.DataTypeHugeBlob:
 		return "String" // Use String for binary data
-	case "{$datetime}":
+	case db.DataTypeDateTime:
 		return "DateTime" // DateTime type for date and time
-	case "{$datetime6}":
+	case db.DataTypeDateTime6:
 		return "DateTime64(6)" // DateTime64 with precision for fractional seconds
-	case "{$timestamp6}":
+	case db.DataTypeTimestamp6:
 		return "DateTime64(6)" // DateTime64 for timestamp with fractional seconds
-	case "{$current_timestamp6}":
+	case db.DataTypeCurrentTimeStamp6:
 		return "now64(6)" // Function for current timestamp
-	case "{$binary20}":
+	case db.DataTypeBinary20:
 		return "FixedString(20)" // FixedString for fixed-length binary data
-	case "{$binaryblobtype}":
+	case db.DataTypeBinaryBlobType:
 		return "String" // Use String for binary data
-	case "{$boolean}":
+	case db.DataTypeBoolean:
 		return "UInt8" // ClickHouse uses UInt8 for boolean values
-	case "{$boolean_false}":
+	case db.DataTypeBooleanFalse:
 		return "0"
-	case "{$boolean_true}":
+	case db.DataTypeBooleanTrue:
 		return "1"
-	case "{$tinyint}":
+	case db.DataTypeTinyInt:
 		return "Int8" // Int8 for small integers
-	case "{$longtext}":
+	case db.DataTypeLongText:
 		return "String" // Use String for long text
-	case "{$unique}":
+	case db.DataTypeUnique:
 		return "" // Unique values are not supported
-	case "{$engine}":
+	case db.DataTypeEngine:
 		return "ENGINE = MergeTree() ORDER BY id;"
-	case "{$notnull}":
+	case db.DataTypeNotNull:
 		return "not null"
-	case "{$null}":
+	case db.DataTypeNull:
 		return "null"
-	case "{$tenant_uuid_bound_id}":
+	case db.DataTypeTenantUUIDBoundID:
 		return "String"
 	default:
 		return ""

@@ -453,7 +453,7 @@ func (tc *TenantsCache) PopulateUuidsFromDB(database db.Database) {
 
 	var session = database.Session(database.Context(context.Background()))
 
-	var rows, err = session.Search(TableNameTenants, "uuid, id, kind, nesting_level", "", "", 0, false)
+	var rows, err = session.Query(fmt.Sprintf("SELECT uuid, id, kind, nesting_level FROM %s", TableNameTenants))
 	if err != nil {
 		return
 	}
@@ -477,7 +477,7 @@ func (tc *TenantsCache) PopulateUuidsFromDB(database db.Database) {
 	}
 
 	var ctiRows db.Rows
-	if ctiRows, err = session.Search(TableNameCtiEntities, "uuid", "", "", 0, false); err != nil {
+	if ctiRows, err = session.Query(fmt.Sprintf("SELECT uuid FROM %s;", TableNameCtiEntities)); err != nil {
 		return
 	}
 
@@ -520,7 +520,7 @@ func (tc *TenantsCache) CreateTenant(rw *benchmark.RandomizerWorker, tx db.Datab
 	newTenantClosure := TenantClosureObj{ParentID: t.ID, ChildID: t.ID, ParentKind: t.Kind, Barrier: 0}
 	tcToCreate = append(tcToCreate, newTenantClosure)
 
-	rows, err := tx.Search(TableNameTenantClosure, "parent_id, parent_kind, barrier", fmt.Sprintf("child_id = %d", t.ParentID), "", 0, false)
+	rows, err := tx.Query(fmt.Sprintf("SELECT parent_id, parent_kind, barrier FROM %s WHERE child_id = %d", TableNameTenantClosure, t.ParentID))
 	if err != nil {
 		tc.logger.Log(benchmark.LogTrace, 0, fmt.Sprintf("error selecting from table %s: %v", TableNameTenantClosure, err))
 		return "", err
@@ -599,7 +599,7 @@ func (tc *TenantsCache) createRandomCtiEntity(rw *benchmark.RandomizerWorker) (*
 func getMax(database db.Database, field string) int {
 	var session = database.Session(database.Context(context.Background()))
 
-	var maxRows, err = session.Search(TableNameTenants, fmt.Sprintf("COALESCE(MAX(%s),0)", field), "", "", 0, false)
+	var maxRows, err = session.Query(fmt.Sprintf("SELECT COALESCE(MAX(%s),0) FROM %s;", field, TableNameTenants))
 	if err != nil {
 		return 0
 	}

@@ -10,7 +10,7 @@ import (
 )
 
 // InsertInto inserts data into a table
-func (a *gateway) InsertInto(tableName string, data interface{}, columnNames []string) error {
+func (g *sqlGateway) InsertInto(tableName string, data interface{}, columnNames []string) error {
 	var valuesList []reflect.Value
 	v := reflect.ValueOf(data)
 	var fields reflect.Type
@@ -53,7 +53,7 @@ func (a *gateway) InsertInto(tableName string, data interface{}, columnNames []s
 			}
 			columnValues = append(columnValues, column2val[col])
 		}
-		if a.dialect.name() == db.CASSANDRA {
+		if g.dialect.name() == db.CASSANDRA {
 			placeholder := db.GenDBParameterPlaceholdersCassandra(n*len(columnNames), len(columnNames))
 			valuesPlaceholders = append(valuesPlaceholders, fmt.Sprintf("(%s)", placeholder))
 		} else {
@@ -70,8 +70,8 @@ func (a *gateway) InsertInto(tableName string, data interface{}, columnNames []s
 	var result sql.Result
 	var err error
 
-	query = a.updatePlaceholders(query)
-	startTime := a.StatementEnter(query, columnValues...)
+	query = g.updatePlaceholders(query)
+	startTime := g.StatementEnter(query, columnValues...)
 
 	/*
 		if a.DbOpts.DryRun {
@@ -81,9 +81,9 @@ func (a *gateway) InsertInto(tableName string, data interface{}, columnNames []s
 
 	*/
 
-	result, err = a.rw.ExecContext(a.ctx, query, columnValues...)
+	result, err = g.rw.execContext(g.ctx, query, columnValues...)
 
-	a.StatementExit("Exec()", startTime, err, true, result, query, columnValues, nil, nil)
+	g.StatementExit("Exec()", startTime, err, true, result, query, columnValues, nil, nil)
 
 	if err != nil {
 		return fmt.Errorf("DB exec failed: %w", err)

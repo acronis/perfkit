@@ -454,7 +454,7 @@ var TestTableTimeSeriesSQL = TestTable{
 	CreateQueryPatchFuncs: []CreateQueryPatchFunc{
 		func(table string, query string, dialect db.DialectName) (string, error) { //nolint:revive
 			if dialect == db.CASSANDRA {
-				query = strings.ReplaceAll(query, "{$bigint_autoinc_pk}", "{$bigint_autoinc}")
+				query = strings.ReplaceAll(query, string(db.DataTypeBigIntAutoIncPK), string(db.DataTypeBigIntAutoInc))
 				query = strings.ReplaceAll(query, "value int {$notnull}", `value int,
 						PRIMARY KEY ((tenant_id, device_id, metric_id), id, ts)
 					`)
