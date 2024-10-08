@@ -38,6 +38,11 @@ func elasticCredentialsAndConnString(cs string, tlsEnabled bool) (string, string
 	var username = u.User.Username()
 	var password, _ = u.User.Password()
 
+	// TODO: This is hack
+	if username != "" || password != "" {
+		tlsEnabled = true
+	}
+
 	var scheme string
 	if tlsEnabled {
 		scheme = "https"

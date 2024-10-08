@@ -7,20 +7,14 @@ func (suite *TestingSuite) TestInsert() {
 	defer logDbTime(suite.T(), c)
 	defer cleanup(suite.T(), d)
 
-	type testStruct struct {
-		Origin   int    `db:"origin"`
-		TestType int    `db:"type"`
-		Name     string `db:"name"`
-	}
-
-	var test = testStruct{2, 2, "test"}
-
-	if err := s.InsertInto("perf_table", test, []string{"origin", "type", "name"}); err != nil {
+	if err := s.BulkInsert("perf_table", [][]interface{}{
+		{2, 2, "test"},
+	}, []string{"origin", "type", "name"}); err != nil {
 		suite.T().Error(err)
 		return
 	}
 
-	if rows, err := s.Search("perf_table",
+	if rows, err := s.Select("perf_table",
 		&db.SelectCtrl{
 			Fields: []string{"origin", "type"},
 			Where: map[string][]string{
@@ -45,7 +39,7 @@ func (suite *TestingSuite) TestInsert() {
 
 }
 
-func (suite *TestingSuite) TestSearch() {
+func (suite *TestingSuite) TestSelect() {
 	d, s, c := suite.makeTestSession()
 	defer logDbTime(suite.T(), c)
 	defer cleanup(suite.T(), d)
@@ -72,15 +66,25 @@ func (suite *TestingSuite) TestSearch() {
 		return
 	}
 
-	var searchCondition string
+	var selectCtrl = &db.SelectCtrl{
+		Fields: []string{"origin"},
+	}
+	selectCtrl.Page.Limit = 2
+
 	switch d.DialectName() {
 	case db.CASSANDRA:
-		searchCondition = "origin = 3 AND type = 4 AND name = 'perf'"
+		selectCtrl.Where = map[string][]string{
+			"origin": {"3"},
+			"type":   {"4"},
+			"name":   {"perf"},
+		}
 	default:
-		searchCondition = "name = 'perf'"
+		selectCtrl.Where = map[string][]string{
+			"name": {"perf"},
+		}
 	}
 
-	if rows, err := s.SearchRaw("perf_table", "origin", searchCondition, "", 2, false); err != nil {
+	if rows, err := s.Select("perf_table", selectCtrl); err != nil {
 		suite.T().Error(err)
 		return
 	} else if rowsErr := rows.Err(); rowsErr != nil {
@@ -104,6 +108,35 @@ func (suite *TestingSuite) TestSearch() {
 		}
 
 		if values[0] != 3 {
+			suite.T().Error("unexpected value", values[0])
+			return
+		}
+	}
+
+	if rows, err := s.Select("perf_table", &db.SelectCtrl{Fields: []string{"COUNT(0)"}}); err != nil {
+		suite.T().Error(err)
+		return
+	} else if rowsErr := rows.Err(); rowsErr != nil {
+		suite.T().Error(rowsErr)
+	} else {
+		defer rows.Close()
+
+		var values []int64
+		for rows.Next() {
+			var rowNum int64
+			if scanErr := rows.Scan(&rowNum); scanErr != nil {
+				suite.T().Error(scanErr)
+				return
+			}
+			values = append(values, rowNum)
+		}
+
+		if len(values) != 1 {
+			suite.T().Error("unexpected number of rows", len(values))
+			return
+		}
+
+		if values[0] != 2 {
 			suite.T().Error("unexpected value", values[0])
 			return
 		}

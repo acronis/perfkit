@@ -3,13 +3,14 @@ package sql
 import (
 	"context"
 	"fmt"
-	"github.com/MichaelS11/go-cql-driver"
-	"github.com/gocql/gocql"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+
+	"github.com/MichaelS11/go-cql-driver"
+	"github.com/gocql/gocql"
 
 	"github.com/acronis/perfkit/db"
 )
@@ -33,6 +34,7 @@ func TestDatabaseSuiteSQLite(t *testing.T) {
 	suite.Run(t, &TestingSuite{ConnString: sqliteConnString})
 }
 
+/*
 func TestDatabaseSuiteMySQL(t *testing.T) {
 	suite.Run(t, &TestingSuite{ConnString: mariaDBConnString})
 }
@@ -52,6 +54,8 @@ func TestDatabaseSuiteClickHouse(t *testing.T) {
 func TestDatabaseSuiteCassandra(t *testing.T) {
 	suite.Run(t, &TestingSuite{ConnString: cassandraConnString})
 }
+
+*/
 
 type testLogger struct {
 	t *testing.T

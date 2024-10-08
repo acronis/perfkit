@@ -16,13 +16,13 @@ var testQueryBuilder searchQueryBuilder
 
 func init() {
 	testQueryBuilder.queryable = map[string]filterFunction{
-		"id":            idCond(),
-		"uuid":          uuidCond(),
-		"type":          stringCond(64, false),
-		"policy_name":   stringCond(256, true), // +like,+hlike,+tlike
-		"resource_name": stringCond(256, true), // +like,+hlike,+tlike
-		"start_time":    timeCond(),
-		"slice":         stringCond(64, false),
+		"id":              idCond(),
+		"uuid":            uuidCond(),
+		"type":            stringCond(64, false),
+		"policy_name":     stringCond(256, true), // +like,+hlike,+tlike
+		"resource_name":   stringCond(256, true), // +like,+hlike,+tlike
+		"start_time":      timeCond(),
+		"tenant_vis_list": uuidCond(),
 	}
 }
 
@@ -100,23 +100,26 @@ func TestSearchQueryBuilder(t *testing.T) {
 				},
 			},
 		},
-		{
-			c: &db.SelectCtrl{Where: map[string][]string{
-				"slice": {"one", "two"},
-			}},
+		/*
+			{
+				c: &db.SelectCtrl{Where: map[string][]string{
+					"slice": {"one", "two"},
+				}},
 
-			request: &SearchRequest{
-				Source: false,
-				Fields: []string{},
-				Query: &SearchQuery{
-					Conditions: &conditions{
-						Filter: selectors{
-							selector{selectorTerms: {"slice": []interface{}{"one", "two"}}},
+				request: &SearchRequest{
+					Source: false,
+					Fields: []string{},
+					Query: &SearchQuery{
+						Conditions: &conditions{
+							Filter: selectors{
+								selector{selectorTerms: {"slice": []interface{}{"one", "two"}}},
+							},
 						},
 					},
 				},
 			},
-		},
+
+		*/
 		{
 			c: &db.SelectCtrl{Where: map[string][]string{"id": {"1"}}},
 
@@ -270,10 +273,39 @@ func TestSearchQueryBuilder(t *testing.T) {
 			},
 			err: fmt.Errorf("failed to create search request: failed to parse filter fields for request: failed to generate condition for column start_time: bad function 'ge10000)', no opening bracket on field 'start_time'"),
 		},
+		{
+			c: &db.SelectCtrl{
+				Fields: []string{"id", "type"},
+				Order:  []string{"desc(enqueue_time)"},
+				Where:  map[string][]string{"tenant_vis_list": {"00000000-0000-0000-0000-000000000001"}},
+				Page: db.Page{
+					Limit: 30,
+				},
+			},
+			request: &SearchRequest{
+				Source: false,
+				Fields: []string{"id", "type"},
+				Query: &SearchQuery{
+					Conditions: &conditions{
+						Filter: selectors{
+							selector{
+								selectorTerms: {
+									"tenant_vis_list": []interface{}{"00000000-0000-0000-0000-000000000001"},
+								},
+							},
+						},
+					},
+				},
+				Sort: []map[string]json.RawMessage{
+					{"enqueue_time": orderDesc()},
+				},
+				Size: 30,
+			},
+		},
 	}
 
 	for _, test := range tests {
-		var query, empty, err = testQueryBuilder.searchRequest(test.c)
+		var query, _, empty, err = testQueryBuilder.searchRequest(test.c)
 		if err != nil {
 			if test.err != nil {
 				assert.Equalf(t, test.err.Error(), err.Error(), "failure in test for col %v", test.c)
@@ -288,6 +320,8 @@ func TestSearchQueryBuilder(t *testing.T) {
 		if empty {
 			continue
 		}
+
+		t.Log(query)
 
 		var expected, actual, formatErr = getExpectedActual(test.request, query)
 		assert.NoError(t, formatErr, "failed to format expected and actual queries")

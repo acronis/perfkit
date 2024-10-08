@@ -128,15 +128,18 @@ func NewDBConnector(dbOpts *DatabaseOpts, workerID int, logger *benchmark.Logger
 
 	var queryLogger, readedRowsLogger, queryTimeLogger db.Logger
 	if dbOpts.LogQueries {
-		queryLogger = &dbLogger{level: benchmark.LogTrace, worker: workerID, logger: logger}
+		logger.LogLevel = benchmark.LogInfo
+		queryLogger = &dbLogger{level: benchmark.LogInfo, worker: workerID, logger: logger}
 	}
 
 	if dbOpts.LogReadedRows {
-		readedRowsLogger = &dbLogger{level: benchmark.LogTrace, worker: workerID, logger: logger}
+		logger.LogLevel = benchmark.LogInfo
+		readedRowsLogger = &dbLogger{level: benchmark.LogInfo, worker: workerID, logger: logger}
 	}
 
 	if dbOpts.LogQueryTime {
-		queryTimeLogger = &dbLogger{level: benchmark.LogTrace, worker: workerID, logger: logger}
+		logger.LogLevel = benchmark.LogInfo
+		queryTimeLogger = &dbLogger{level: benchmark.LogInfo, worker: workerID, logger: logger}
 	}
 
 	var dbConn, err = db.Open(db.Config{

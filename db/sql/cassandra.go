@@ -11,6 +11,7 @@ import (
 
 	"github.com/MichaelS11/go-cql-driver"
 	"github.com/gocql/gocql"
+	"github.com/google/uuid"
 
 	"github.com/acronis/perfkit/db"
 )
@@ -33,6 +34,10 @@ func (d *cassandraDialect) encodeString(s string) string {
 	// borrowed from dbr
 	// http://www.postgresql.org/docs/9.2/static/sql-syntax-lexical.html
 	return `'` + strings.Replace(s, `'`, `''`, -1) + `'`
+}
+
+func (d *cassandraDialect) encodeUUID(s uuid.UUID) string {
+	return s.String()
 }
 
 func (d *cassandraDialect) encodeBool(b bool) string {

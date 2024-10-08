@@ -12,6 +12,7 @@ require (
 	github.com/acronis/perfkit/benchmark v0.0.0-20240611181402-c39abde90e6f
 	github.com/acronis/perfkit/db v0.0.0-00010101000000-000000000000
 	github.com/denisenkom/go-mssqldb v0.12.3
+	github.com/elastic/go-elasticsearch/v8 v8.15.0
 	github.com/gocraft/dbr/v2 v2.7.6
 	github.com/google/uuid v1.6.0
 	github.com/lib/pq v1.10.9
@@ -23,9 +24,12 @@ require (
 	github.com/ClickHouse/clickhouse-go/v2 v2.26.0 // indirect
 	github.com/MichaelS11/go-cql-driver v0.1.1 // indirect
 	github.com/andybalholm/brotli v1.1.0 // indirect
+	github.com/elastic/elastic-transport-go/v8 v8.6.0 // indirect
 	github.com/fergusstrange/embedded-postgres v1.27.0 // indirect
 	github.com/go-faster/city v1.0.1 // indirect
 	github.com/go-faster/errors v0.7.1 // indirect
+	github.com/go-logr/logr v1.4.1 // indirect
+	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-sql-driver/mysql v1.8.1 // indirect
 	github.com/gocql/gocql v1.6.0 // indirect
 	github.com/golang-sql/civil v0.0.0-20220223132316-b832511892a9 // indirect
@@ -42,6 +46,7 @@ require (
 	github.com/shopspring/decimal v1.4.0 // indirect
 	github.com/xi2/xz v0.0.0-20171230120015-48954b6210f8 // indirect
 	go.opentelemetry.io/otel v1.26.0 // indirect
+	go.opentelemetry.io/otel/metric v1.26.0 // indirect
 	go.opentelemetry.io/otel/trace v1.26.0 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
 	golang.org/x/crypto v0.26.0 // indirect

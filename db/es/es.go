@@ -16,6 +16,7 @@ import (
 type querier interface {
 	insert(ctx context.Context, idxName indexName, query *BulkIndexRequest) (*BulkIndexResult, int, error)
 	search(ctx context.Context, idxName indexName, query *SearchRequest) (*SearchResponse, error)
+	count(ctx context.Context, idxName indexName, query *CountRequest) (*SearchResponse, error)
 }
 
 type accessor interface {
@@ -183,4 +184,14 @@ func (tq timedQuerier) search(ctx context.Context, idxName indexName, request *S
 	}
 
 	return tq.q.search(ctx, idxName, request)
+}
+
+func (tq timedQuerier) count(ctx context.Context, idxName indexName, request *CountRequest) (*SearchResponse, error) {
+	defer accountTime(tq.dbtime, time.Now())
+
+	if tq.queryLogger != nil {
+		tq.queryLogger.Log("count:\n%s", request.String())
+	}
+
+	return tq.q.count(ctx, idxName, request)
 }

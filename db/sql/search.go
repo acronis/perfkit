@@ -29,7 +29,7 @@ func createSelectQueryBuilder(tableName string, tableRows []db.TableRow) error {
 
 	for _, row := range tableRows {
 		switch row.Type {
-		case db.DataTypeInt:
+		case db.DataTypeInt, db.DataTypeBigIntAutoInc:
 			queryBuilder.queryable[row.Name] = idCond()
 		case db.DataTypeUUID:
 			queryBuilder.queryable[row.Name] = uuidCond()
@@ -55,68 +55,6 @@ func (g *sqlGateway) updatePlaceholders(query string) string {
 	}
 
 	return query
-}
-
-// SearchRaw executes a query and returns the result set as a slice of maps
-func (g *sqlGateway) SearchRaw(from string, what string, where string, orderBy string, limit int, explain bool, args ...interface{}) (db.Rows, error) {
-	var query string
-
-	switch g.dialect.name() {
-	case db.MSSQL:
-		query = fmt.Sprintf("SELECT {LIMIT} %s FROM %s {WHERE} {ORDERBY}", what, g.dialect.table(from))
-	default:
-		query = fmt.Sprintf("SELECT %s FROM %s {WHERE} {ORDERBY} {LIMIT}", what, g.dialect.table(from))
-	}
-
-	if where == "" {
-		query = strings.Replace(query, "{WHERE}", "", -1)
-	} else {
-		query = strings.Replace(query, "{WHERE}", fmt.Sprintf("WHERE %s", where), -1) //nolint:perfsprint
-	}
-
-	if limit == 0 {
-		query = strings.Replace(query, "{LIMIT}", "", -1)
-	} else {
-		switch g.dialect.name() {
-		case db.MSSQL:
-			query = strings.Replace(query, "{LIMIT}", fmt.Sprintf("TOP %d", limit), -1)
-		default:
-			query = strings.Replace(query, "{LIMIT}", fmt.Sprintf("LIMIT %d", limit), -1)
-		}
-	}
-
-	if orderBy == "" {
-		query = strings.Replace(query, "{ORDERBY}", "", -1)
-	} else {
-		query = strings.Replace(query, "{ORDERBY}", fmt.Sprintf("ORDER BY %s", orderBy), -1) //nolint:perfsprint
-	}
-
-	query = g.updatePlaceholders(query)
-
-	var rows *sql.Rows
-	var err error
-	startTime := g.StatementEnter(query, args)
-
-	if explain {
-		query, err = g.addExplainPrefix(query)
-	}
-	if err != nil {
-		return nil, err
-	}
-
-	rows, err = g.rw.queryContext(g.ctx, query, args...)
-
-	if explain {
-		return nil, g.explain(rows, query, args...)
-	}
-
-	if err != nil {
-		return nil, fmt.Errorf("DB query failed: %w", err)
-	}
-
-	g.StatementExit("Query()", startTime, err, false, nil, query, args, nil, nil)
-
-	return &sqlRows{rows: rows}, nil
 }
 
 // addExplainPrefix adds an 'explain' prefix to the query
@@ -244,7 +182,7 @@ func (b selectBuilder) sqlOrder(fields []string, values []string) (string, error
 }
 
 func (b selectBuilder) sqlSelectionAlias(fields []string, alias string) (string, error) {
-	if len(fields) == 0 { // select count
+	if len(fields) == 1 && fields[0] == "COUNT(0)" { // select count
 		return "SELECT COUNT(0)", nil
 	}
 
@@ -361,6 +299,9 @@ func sqlf(d dialect, fmts string, args ...interface{}) string {
 
 		case string:
 			args[i] = d.encodeString(val)
+
+		case uuid.UUID:
+			args[i] = d.encodeUUID(val)
 
 		case []string:
 			var sb strings.Builder
@@ -898,7 +839,7 @@ func timeCond() filterFunction {
 	return fn
 }
 
-func (g *sqlGateway) Search(tableName string, sc *db.SelectCtrl) (db.Rows, error) {
+func (g *sqlGateway) Select(tableName string, sc *db.SelectCtrl) (db.Rows, error) {
 	var queryBuilder, ok = tableQueryBuilders[tableName]
 	if !ok {
 		return nil, fmt.Errorf("table %s is not supported", tableName)

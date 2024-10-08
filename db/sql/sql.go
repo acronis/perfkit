@@ -2,12 +2,15 @@ package sql
 
 import (
 	"context"
-	"database/sql"
-	"database/sql/driver"
 	"fmt"
-	"go.uber.org/atomic"
 	"net/url"
 	"time"
+
+	"database/sql"
+	"database/sql/driver"
+
+	"github.com/google/uuid"
+	"go.uber.org/atomic"
 
 	"github.com/acronis/perfkit/db"
 )
@@ -424,6 +427,7 @@ func (d *sqlDatabase) Close() error {
 type dialect interface {
 	name() db.DialectName
 	encodeString(s string) string
+	encodeUUID(s uuid.UUID) string
 	encodeBool(b bool) string
 	encodeBytes(bs []byte) string
 	getType(dataType db.DataType) string

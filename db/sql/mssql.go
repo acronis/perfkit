@@ -6,6 +6,8 @@ import (
 	"math"
 	"strings"
 
+	"github.com/google/uuid"
+
 	mssql "github.com/denisenkom/go-mssqldb" // mssql driver
 
 	"github.com/acronis/perfkit/db"
@@ -28,6 +30,10 @@ func (d *msDialect) name() db.DialectName {
 
 func (d *msDialect) encodeString(s string) string {
 	return `'` + strings.ReplaceAll(s, `'`, `''`) + `'`
+}
+
+func (d *msDialect) encodeUUID(s uuid.UUID) string {
+	return d.encodeString(s.String())
 }
 
 func (d *msDialect) encodeBool(b bool) string {

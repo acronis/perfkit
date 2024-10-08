@@ -14,7 +14,11 @@ import (
 	"github.com/acronis/perfkit/benchmark"
 	"github.com/acronis/perfkit/db"
 
+	_ "github.com/acronis/perfkit/db/es"  // es drivers
 	_ "github.com/acronis/perfkit/db/sql" // sql drivers
+
+	events "github.com/acronis/perfkit/acronis-db-bench/event-bus"
+	tenants "github.com/acronis/perfkit/acronis-db-bench/tenants-cache"
 )
 
 // Version is a version of the acronis-db-bench
@@ -46,12 +50,12 @@ type BenchOpts struct {
 	List              bool   `short:"a" long:"list" description:"list available tests" required:"false"`
 	Cleanup           bool   `short:"C" long:"cleanup" description:"delete/truncate all test DB tables and exit"`
 	Init              bool   `short:"I" long:"init" description:"create all test DB tables and exit" `
-	RandSeed          int64  `short:"s" long:"randseed" description:"Seed used for random number generation" required:"false" default:"1"`
 	Chunk             int    `short:"u" long:"chunk" description:"chunk size for 'all' test" required:"false" default:"500000"`
 	Limit             int    `short:"U" long:"limit" description:"total rows limit for 'all' test" required:"false" default:"2000000"`
 	Info              bool   `short:"i" long:"info" description:"provide information about tables & indexes" required:"false"`
 	Events            bool   `short:"e" long:"events" description:"simulate event generation for every new object" required:"false"`
 	TenantsWorkingSet int    `long:"tenants-working-set" description:"set tenants working set" required:"false" default:"10000"`
+	TenantConnString  string `long:"tenants-storage-connection-string" description:"connection string for tenant storage" required:"false"`
 	CTIsWorkingSet    int    `long:"ctis-working-set" description:"set CTI working set" required:"false" default:"1000"`
 	ProfilerPort      int    `long:"profiler-port" description:"open profiler on given port (e.g. 6060)" required:"false" default:"0"`
 	Describe          bool   `long:"describe" description:"describe what test is going to do" required:"false"`
@@ -74,8 +78,8 @@ type TestcaseOpts struct {
 // DBTestData is a structure to store all the test data
 type DBTestData struct {
 	TestDesc       *TestDesc
-	EventBus       *EventBus
-	TenantsCache   *TenantsCache
+	EventBus       *events.EventBus
+	TenantsCache   *tenants.TenantsCache
 	EffectiveBatch int // EffectiveBatch reflects the default value if the --batch option is not set, it can be different for different tests
 
 	scores map[string][]benchmark.Score
@@ -83,7 +87,8 @@ type DBTestData struct {
 
 // DBWorkerData is a structure to store all the worker data
 type DBWorkerData struct {
-	conn *DBConnector
+	workingConn  *DBConnector
+	tenantsCache *DBConnector
 }
 
 var header = strings.Repeat("=", 120) + "\n"
@@ -148,7 +153,7 @@ func Main() {
 
 	var dialectName, err = db.GetDialectName(b.TestOpts.(*TestOpts).DBOpts.ConnString)
 	if err != nil {
-		b.Exit(err)
+		b.Exit("failed to get dialect name: %v", err)
 	}
 
 	if testOpts.BenchOpts.List {
@@ -200,8 +205,15 @@ func Main() {
 
 	if testOpts.DBOpts.Reconnect {
 		b.PreWorker = func(workerId int) {
-			conn := b.WorkerData[workerId].(*DBWorkerData).conn
-			conn.database.Close()
+			var workerData = b.WorkerData[workerId].(*DBWorkerData)
+
+			if workerData.workingConn != nil {
+				workerData.workingConn.database.Close()
+			}
+
+			if workerData.tenantsCache != nil {
+				workerData.tenantsCache.database.Close()
+			}
 		}
 	}
 
@@ -227,7 +239,9 @@ func Main() {
 	}
 
 	if !b.CommonOpts.Quiet {
-		dbInfo.ShowRecommendations()
+		if dbInfo != nil {
+			dbInfo.ShowRecommendations()
+		}
 	}
 
 	if testOpts.BenchOpts.ProfilerPort > 0 {
@@ -242,7 +256,7 @@ func Main() {
 	}
 
 	b.Init = func() {
-		b.Vault.(*DBTestData).TenantsCache = NewTenantsCache(b)
+		b.Vault.(*DBTestData).TenantsCache = tenants.NewTenantsCache(b)
 
 		b.Vault.(*DBTestData).TenantsCache.SetTenantsWorkingSet(b.TestOpts.(*TestOpts).BenchOpts.TenantsWorkingSet)
 		b.Vault.(*DBTestData).TenantsCache.SetCTIsWorkingSet(b.TestOpts.(*TestOpts).BenchOpts.CTIsWorkingSet)
@@ -252,7 +266,12 @@ func Main() {
 		}
 
 		if b.TestOpts.(*TestOpts).BenchOpts.Events {
-			b.Vault.(*DBTestData).EventBus = NewEventBus(&b.TestOpts.(*TestOpts).DBOpts, b.Logger)
+			var workingConn *DBConnector
+			if workingConn, err = NewDBConnector(&b.TestOpts.(*TestOpts).DBOpts, -1, b.Logger, 1); err != nil {
+				return
+			}
+
+			b.Vault.(*DBTestData).EventBus = events.NewEventBus(workingConn.database, b.Logger)
 			b.Vault.(*DBTestData).EventBus.CreateTables()
 		}
 	}

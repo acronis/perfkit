@@ -307,14 +307,3 @@ func GenDBParameterPlaceholders(start int, count int) string {
 
 	return strings.Join(ret, ",")
 }
-
-// GenDBParameterPlaceholdersCassandra generates placeholders for given start and count
-func GenDBParameterPlaceholdersCassandra(start int, count int) string {
-	var ret = make([]string, count)
-	end := start + count
-	for i := start; i < end; i++ {
-		ret[i-start] = "?"
-	}
-
-	return strings.Join(ret, ",")
-}

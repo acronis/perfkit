@@ -1,4 +1,4 @@
-package main
+package tenants_cache
 
 import (
 	"context"
@@ -64,6 +64,9 @@ type TenantsCache struct {
 	logger                    *benchmark.Logger
 	benchmark                 *benchmark.Benchmark
 	uuids                     []TenantUUID
+	customerUUIDS             []TenantUUID
+	partnerUUIDS              []TenantUUID
+	parentUUIDs               map[string][]TenantUUID
 	ctiUuids                  []CTIUUID
 	tenantStructureRandomizer *tenantStructureRandomizer
 	exitLock                  sync.Mutex
@@ -76,6 +79,9 @@ func NewTenantsCache(bench *benchmark.Benchmark) *TenantsCache {
 		logger:                 bench.Logger,
 		benchmark:              bench,
 		uuids:                  []TenantUUID{},
+		customerUUIDS:          []TenantUUID{},
+		partnerUUIDS:           []TenantUUID{},
+		parentUUIDs:            map[string][]TenantUUID{},
 	}
 
 	if bench.Randomizer == nil {
@@ -293,11 +299,16 @@ var ctiProvisioningDDLClickhouse = fmt.Sprintf(`CREATE TABLE %[1]s
 engine = MergeTree() ORDER BY (tenant_id, cti_entity_uuid);`, TableNameCtiProvisioning)
 
 // Init initializes tenants cache and creates tables if needed
-func (tc *TenantsCache) Init(database db.Database) {
+func (tc *TenantsCache) Init(database db.Database) error {
+	var dialect = database.DialectName()
+	if dialect != db.CLICKHOUSE && dialect != db.CASSANDRA && dialect != db.MYSQL && dialect != db.POSTGRES && dialect != db.SQLITE {
+		tc.logger.Log(benchmark.LogTrace, 0, fmt.Sprintf("unsupported dialect: %s", dialect))
+		return fmt.Errorf("unsupported dialect: %s", dialect)
+	}
+
 	var eventData []tenantStructureData
 	if err := json.Unmarshal(tenantStructure, &eventData); err != nil {
-		tc.logger.Log(benchmark.LogTrace, 0, fmt.Sprintf("error unmarshalling tenant_structure.json: %v", err))
-		return
+		return fmt.Errorf("error unmarshalling tenant_structure.json: %v", err)
 	}
 
 	tc.logger.Log(benchmark.LogTrace, 0, fmt.Sprintf("tenants probablity config: %v", eventData))
@@ -308,6 +319,8 @@ func (tc *TenantsCache) Init(database db.Database) {
 	tc.PopulateUuidsFromDB(database)
 	tc.logger.Log(benchmark.LogTrace, 0, fmt.Sprintf("loaded %d uuids", len(tc.uuids)))
 	tc.logger.Log(benchmark.LogTrace, 0, fmt.Sprintf("loaded %d cti uuids", len(tc.ctiUuids)))
+
+	return nil
 }
 
 // CreateTables checks if tables created, run migrations otherwise
@@ -467,7 +480,45 @@ func (tc *TenantsCache) PopulateUuidsFromDB(database db.Database) {
 		}
 		tc.uuids = append(tc.uuids, t.UUID)
 
+		if t.Kind == "c" {
+			tc.customerUUIDS = append(tc.customerUUIDS, t.UUID)
+		} else if t.Kind == "p" {
+			tc.partnerUUIDS = append(tc.partnerUUIDS, t.UUID)
+		}
+
 		rand.storeCreatedTenant(&t)
+	}
+
+	for _, storedUUID := range tc.uuids {
+		if storedUUID == "" {
+			continue
+		}
+
+		rows, err = session.Query(fmt.Sprintf(`
+			SELECT parents.uuid
+			FROM %s ten
+					 LEFT JOIN %s cl ON ten.id = cl.child_id
+					 LEFT JOIN %s parents ON cl.parent_id = parents.id
+			WHERE ten.uuid = '%s'
+			ORDER BY parents.nesting_level DESC;
+			`, TableNameTenants, TableNameTenantClosure, TableNameTenants, storedUUID))
+		if err != nil {
+			return
+		}
+
+		var parents []TenantUUID
+		for rows.Next() {
+			var parentUUID string
+			if err = rows.Scan(&parentUUID); err != nil {
+				tc.logger.Log(benchmark.LogTrace, 0, fmt.Sprintf("error scanning row: %v", err))
+				return
+			}
+			if parentUUID != "" {
+				parents = append(parents, TenantUUID(parentUUID))
+			}
+		}
+
+		tc.parentUUIDs[string(storedUUID)] = parents
 	}
 
 	rand.currentID = int64(getMax(database, "id"))
@@ -508,7 +559,9 @@ func (tc *TenantsCache) CreateTenant(rw *benchmark.RandomizerWorker, tx db.Datab
 		return "", err
 	}
 
-	if err = tx.InsertInto(TableNameTenants, *t, []string{"id", "uuid", "name", "kind", "parent_id", "nesting_level", "is_deleted", "parent_has_access"}); err != nil {
+	if err = tx.BulkInsert(TableNameTenants, [][]interface{}{
+		{t.ID, t.UUID, t.Name, t.Kind, t.ParentID, t.NestingLevel, t.IsDeleted, t.ParentHasAccess},
+	}, []string{"id", "uuid", "name", "kind", "parent_id", "nesting_level", "is_deleted", "parent_has_access"}); err != nil {
 		tc.logger.Log(benchmark.LogTrace, 0, fmt.Sprintf("error inserting into table %s: %v", TableNameTenants, err))
 		return "", err
 	}
@@ -516,9 +569,14 @@ func (tc *TenantsCache) CreateTenant(rw *benchmark.RandomizerWorker, tx db.Datab
 	tc.uuids = append(tc.uuids, t.UUID)
 	tc.logger.Log(benchmark.LogTrace, 0, fmt.Sprintf("creating a tenant: %v", t))
 
-	var tcToCreate []TenantClosureObj
+	var tcToCreate [][]interface{}
 	newTenantClosure := TenantClosureObj{ParentID: t.ID, ChildID: t.ID, ParentKind: t.Kind, Barrier: 0}
-	tcToCreate = append(tcToCreate, newTenantClosure)
+	tcToCreate = append(tcToCreate, []interface{}{
+		newTenantClosure.ParentID,
+		newTenantClosure.ChildID,
+		newTenantClosure.ParentKind,
+		newTenantClosure.Barrier},
+	)
 
 	rows, err := tx.Query(fmt.Sprintf("SELECT parent_id, parent_kind, barrier FROM %s WHERE child_id = %d", TableNameTenantClosure, t.ParentID))
 	if err != nil {
@@ -537,10 +595,16 @@ func (tc *TenantsCache) CreateTenant(rw *benchmark.RandomizerWorker, tx db.Datab
 		// get maximum of tc.Barrier, newTenantClosure.Barrier
 		tco.Barrier = Max(tco.Barrier, newTenantClosure.Barrier)
 
-		tcToCreate = append(tcToCreate, tco)
+		tcToCreate = append(tcToCreate, []interface{}{
+			tco.ParentID,
+			tco.ChildID,
+			tco.ParentKind,
+			tco.Barrier,
+		})
 	}
 
-	if err = tx.InsertInto(TableNameTenantClosure, tcToCreate, []string{"parent_id", "child_id", "parent_kind", "barrier"}); err != nil {
+	if err = tx.BulkInsert(TableNameTenantClosure, tcToCreate,
+		[]string{"parent_id", "child_id", "parent_kind", "barrier"}); err != nil {
 		tc.logger.Log(benchmark.LogTrace, 0, fmt.Sprintf("error inserting into table %s: %v", TableNameTenantClosure, err))
 		return "", err
 	}
@@ -560,7 +624,9 @@ func (tc *TenantsCache) CreateCTIEntity(rw *benchmark.RandomizerWorker, tx db.Da
 
 	cti.GlobalState = 1
 
-	if err = tx.InsertInto(TableNameCtiEntities, *cti, []string{"uuid", "cti", "final", "global_state", "entity_schema", "annotations", "traits", "traits_schema", "traits_annotations"}); err != nil {
+	if err = tx.BulkInsert(TableNameCtiEntities, [][]interface{}{
+		{cti.UUID, cti.CTI, cti.Final, cti.GlobalState, cti.EntitySchema, cti.Annotations, cti.Traits, cti.TraitsSchema, cti.TraitsAnnotations},
+	}, []string{"uuid", "cti", "final", "global_state", "entity_schema", "annotations", "traits", "traits_schema", "traits_annotations"}); err != nil {
 		return fmt.Errorf("error inserting into table %s: %v", TableNameCtiEntities, err)
 	}
 
@@ -588,7 +654,7 @@ func (tc *TenantsCache) genRandCtiStr(rw *benchmark.RandomizerWorker) string {
 // createRandomCtiEntity creates a new CTI entity and inserts it into DB
 func (tc *TenantsCache) createRandomCtiEntity(rw *benchmark.RandomizerWorker) (*CtiEntityObj, error) { //nolint:unparam
 	cti := CtiEntityObj{
-		UUID: CTIUUID(rw.UUID()),
+		UUID: CTIUUID(rw.UUID().String()),
 		CTI:  tc.genRandCtiStr(rw),
 	}
 
@@ -829,7 +895,7 @@ func convertIntToKind(kind int) (string, error) {
 }
 
 // GetRandomTenantUUID returns random tenant uuid from cache
-func (tc *TenantsCache) GetRandomTenantUUID(rw *benchmark.RandomizerWorker, testCardinality int) (TenantUUID, error) {
+func (tc *TenantsCache) GetRandomTenantUUID(rw *benchmark.RandomizerWorker, testCardinality int, kind string) (guuid.UUID, error) {
 	var cardinality int
 	if testCardinality == 0 {
 		cardinality = tc.tenantsWorkingSetLimit
@@ -837,10 +903,21 @@ func (tc *TenantsCache) GetRandomTenantUUID(rw *benchmark.RandomizerWorker, test
 		cardinality = Min(testCardinality, tc.tenantsWorkingSetLimit)
 	}
 	cardinality = Max(1, cardinality)
-	limit := len(tc.uuids)
+
+	var tenantList []TenantUUID
+	switch kind {
+	case "c":
+		tenantList = tc.customerUUIDS
+	case "p":
+		tenantList = tc.partnerUUIDS
+	default:
+		tenantList = tc.uuids
+	}
+
+	limit := len(tenantList)
 
 	if limit < cardinality {
-		msg := fmt.Sprintf("TEST ABORTED: The tenants hierarchy has %d tenants, while at least %d required for working set\n", len(tc.uuids), tc.tenantsWorkingSetLimit)
+		msg := fmt.Sprintf("TEST ABORTED: The tenants hierarchy has %d tenants, while at least %d required for working set\n", limit, tc.tenantsWorkingSetLimit)
 		if testCardinality == 0 {
 			msg += "Add tenants by '-t insert-tenant' first or use --tenants-working-set to reduce used working set\n"
 		} else {
@@ -849,7 +926,8 @@ func (tc *TenantsCache) GetRandomTenantUUID(rw *benchmark.RandomizerWorker, test
 		tc.Exit(msg)
 	}
 
-	return tc.uuids[rw.IntnExp(cardinality)], nil
+	var value, _ = guuid.ParseBytes([]byte(tenantList[rw.IntnExp(cardinality)]))
+	return value, nil
 }
 
 // GetTenantUuidBoundId returns tenant uuid bound id
@@ -857,13 +935,18 @@ func (tc *TenantsCache) GetRandomTenantUUID(rw *benchmark.RandomizerWorker, test
  * Generate a new UUID based on the UUID prefix coming from the TenantUUID
  * This logic is required to simulate a low cardinality objects associated with a tenant
  */
-func (tc *TenantsCache) GetTenantUuidBoundId(rw *benchmark.RandomizerWorker, tenantUuid TenantUUID, cardinality int) TenantUUID { //nolint:revive
-	s := string(tenantUuid)
+func (tc *TenantsCache) GetTenantUuidBoundId(rw *benchmark.RandomizerWorker, tenantUuid guuid.UUID, cardinality int) guuid.UUID { //nolint:revive
+	var s = tenantUuid.String()
+
+	var res string
 	if len(s) > 0 {
-		return TenantUUID(s[:len(s)-12] + fmt.Sprintf("%012d", rw.Intn(cardinality)))
+		res = s[:len(s)-12] + fmt.Sprintf("%012d", rw.Intn(cardinality))
+	} else {
+		res = fmt.Sprintf("00000000-0000-0000-0000-%012d", rw.Intn(cardinality))
 	}
 
-	return TenantUUID(fmt.Sprintf("00000000-0000-0000-0000-%012d", rw.Intn(cardinality)))
+	var value, _ = guuid.ParseBytes([]byte(res))
+	return value
 }
 
 // GetRandomCTIUUID returns random CTI uuid from cache
@@ -892,11 +975,19 @@ func (tc *TenantsCache) GetRandomCTIUUID(rw *benchmark.RandomizerWorker, testCar
 }
 
 func (tc *TenantsCache) GenCommonFakeValue(columnType string, rw *benchmark.RandomizerWorker, cardinality int) (bool, interface{}) {
-	if columnType != "tenant_uuid" {
+	if columnType != "tenant_uuid" && columnType != "customer_uuid" && columnType != "partner_uuid" {
 		return false, nil
 	}
 
-	var tenantUUID, err = tc.GetRandomTenantUUID(rw, cardinality)
+	var kind string
+	switch columnType {
+	case "customer_uuid":
+		kind = "c"
+	case "partner_uuid":
+		kind = "p"
+	}
+
+	var tenantUUID, err = tc.GetRandomTenantUUID(rw, cardinality, kind)
 	if err != nil {
 		tc.benchmark.Exit(err.Error())
 	}
@@ -905,15 +996,22 @@ func (tc *TenantsCache) GenCommonFakeValue(columnType string, rw *benchmark.Rand
 }
 
 func (tc *TenantsCache) GenFakeValue(columnType string, rw *benchmark.RandomizerWorker, cardinality int, preGenerated map[string]interface{}) (bool, interface{}) {
-	var tenantUUID TenantUUID
+	var tenantUUID guuid.UUID
 	if preGenerated != nil {
-		var rawTenantUUID = preGenerated["tenant_uuid"]
-		tenantUUID = rawTenantUUID.(TenantUUID)
+		if rawTenantUUID, ok := preGenerated["tenant_uuid"]; ok {
+			tenantUUID = rawTenantUUID.(guuid.UUID)
+		} else if rawTenantUUID, ok = preGenerated["customer_uuid"]; ok {
+			tenantUUID = rawTenantUUID.(guuid.UUID)
+		} else if rawTenantUUID, ok = preGenerated["partner_uuid"]; ok {
+			tenantUUID = rawTenantUUID.(guuid.UUID)
+		}
 	}
 
 	switch columnType {
-	case "tenant_uuid":
+	case "tenant_uuid", "customer_uuid", "partner_uuid":
 		return true, tenantUUID
+	case "tenant_uuid_parents":
+		return true, tc.parentUUIDs[tenantUUID.String()]
 	case "tenant_uuid_bound_id":
 		return true, tc.GetTenantUuidBoundId(rw, tenantUUID, cardinality)
 	case "cti_uuid":

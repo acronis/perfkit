@@ -5,9 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/acronis/perfkit/db"
 
 	es8 "github.com/elastic/go-elasticsearch/v8"
+
+	"github.com/acronis/perfkit/db"
 )
 
 type indexPhase string
@@ -70,7 +71,7 @@ const (
 
 func convertToEsType(t db.DataType) fieldType {
 	switch t {
-	case db.DataTypeId:
+	case db.DataTypeBigIntAutoInc, db.DataTypeId, db.DataTypeInt:
 		return fieldTypeLong
 	case db.DataTypeUUID:
 		return fieldTypeKeyword
@@ -135,7 +136,7 @@ func checkPolicyExists(client *es8.Client, policyName string) (bool, error) {
 }
 
 func indexExists(client *es8.Client, tableName string) (bool, error) {
-	var ilmPolicyName = "ilm-data-5gb"
+	var ilmPolicyName = fmt.Sprintf("ilm-data-5gb-%s", tableName)
 	return checkPolicyExists(client, ilmPolicyName)
 }
 
@@ -213,7 +214,11 @@ func initIndexTemplate(client *es8.Client, idxTemplateName string, indexPattern 
 }
 
 func createIndex(client *es8.Client, indexName string, indexDefinition *db.TableDefinition, tableMigrationDDL string) error {
-	var ilmPolicyName = "ilm-data-5gb"
+	if err := createSearchQueryBuilder(indexName, indexDefinition.TableRows); err != nil {
+		return err
+	}
+
+	var ilmPolicyName = fmt.Sprintf("ilm-data-5gb-%s", indexName)
 	var ilmPolicy = indexLifecycleManagementPolicy{
 		Phases: map[indexPhase]indexPhaseDefinition{
 			indexPhaseHot: {
@@ -231,7 +236,7 @@ func createIndex(client *es8.Client, indexName string, indexDefinition *db.Table
 			},
 		},
 	}
-	var ilmSettingName = "ilm-settings"
+	var ilmSettingName = fmt.Sprintf("ilm-settings-%s", indexName)
 
 	if exists, err := checkPolicyExists(client, ilmPolicyName); err != nil {
 		return err
@@ -272,6 +277,10 @@ func createIndex(client *es8.Client, indexName string, indexDefinition *db.Table
 
 	var mp = make(mapping)
 	for _, row := range indexDefinition.TableRows {
+		if row.Name == "id" {
+			continue
+		}
+
 		mp[row.Name] = fieldSpec{
 			Type:    convertToEsType(row.Type),
 			Indexed: row.Indexed,
@@ -311,14 +320,14 @@ func dropIndex(client *es8.Client, indexName string) error {
 		return fmt.Errorf("error code [%d] in delete index template response: %s", res.StatusCode, res.String())
 	}
 
-	var ilmSettingName = "ilm-settings"
+	var ilmSettingName = fmt.Sprintf("ilm-settings-%s", indexName)
 	if res, err := client.Cluster.DeleteComponentTemplate(ilmSettingName, client.Cluster.DeleteComponentTemplate.WithContext(context.Background())); err != nil {
 		return fmt.Errorf("error while trying to delete ilm settings template %s: %v", ilmSettingName, err)
 	} else if res.IsError() {
 		return fmt.Errorf("error code [%d] in delete ilm settings template response: %s", res.StatusCode, res.String())
 	}
 
-	var ilmPolicyName = "ilm-data-5gb"
+	var ilmPolicyName = fmt.Sprintf("ilm-data-5gb-%s", indexName)
 	if res, err := client.ILM.DeleteLifecycle(ilmPolicyName, client.ILM.DeleteLifecycle.WithContext(context.Background())); err != nil {
 		return fmt.Errorf("error while trying to delete policy lifecycle %v: %v", ilmPolicyName, err)
 	} else if res.IsError() {

@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/google/uuid"
+
 	_ "github.com/mattn/go-sqlite3" // sqlite3 driver
 
 	"github.com/acronis/perfkit/db"
@@ -29,6 +31,10 @@ func (d *sqliteDialect) encodeString(s string) string {
 	// borrowed from dbr
 	// https://www.sqlite.org/faq.html
 	return `'` + strings.ReplaceAll(s, `'`, `''`) + `'`
+}
+
+func (d *sqliteDialect) encodeUUID(s uuid.UUID) string {
+	return d.encodeString(s.String())
 }
 
 func (d *sqliteDialect) encodeBool(b bool) string {

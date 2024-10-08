@@ -19,6 +19,7 @@ type TestTable struct {
 	columns               [][]interface{}
 	InsertColumns         []string
 	UpdateColumns         []string
+	TableDefinition       func(dialect db.DialectName) *db.TableDefinition
 	CreateQuery           string
 	CreateQueryPatchFuncs []CreateQueryPatchFunc
 	Indexes               [][]string
@@ -140,23 +141,30 @@ func (t *TestTable) Create(c *DBConnector, b *benchmark.Benchmark) {
 		return
 	}
 
-	if t.CreateQuery == "" {
-		b.Log(benchmark.LogTrace, 0, fmt.Sprintf("no create query for '%s'", t.TableName))
-		// b.Exit("internal error: no migration provided for table %s creation", t.TableName)
-		return
-	}
-	tableCreationQuery := t.CreateQuery
-
-	var err error
-
-	for _, patch := range t.CreateQueryPatchFuncs {
-		tableCreationQuery, err = patch(t.TableName, tableCreationQuery, c.database.DialectName())
-		if err != nil {
+	if t.TableDefinition != nil {
+		var table = t.TableDefinition(c.database.DialectName())
+		if err := c.database.CreateTable(t.TableName, table, ""); err != nil {
 			b.Exit(err.Error())
 		}
-	}
+	} else {
+		if t.CreateQuery == "" {
+			b.Log(benchmark.LogTrace, 0, fmt.Sprintf("no create query for '%s'", t.TableName))
+			// b.Exit("internal error: no migration provided for table %s creation", t.TableName)
+			return
+		}
+		tableCreationQuery := t.CreateQuery
 
-	c.database.CreateTable(t.TableName, nil, tableCreationQuery)
+		var err error
+
+		for _, patch := range t.CreateQueryPatchFuncs {
+			tableCreationQuery, err = patch(t.TableName, tableCreationQuery, c.database.DialectName())
+			if err != nil {
+				b.Exit(err.Error())
+			}
+		}
+
+		c.database.CreateTable(t.TableName, nil, tableCreationQuery)
+	}
 
 	for _, columns := range t.Indexes {
 		c.database.CreateIndex(fmt.Sprintf("%s_%s_idx", t.TableName, strings.Join(columns, "_")), t.TableName, columns, db.IndexTypeBtree)
@@ -173,6 +181,15 @@ var TestTableLight = TestTable{
 	columns: [][]interface{}{
 		{"id", "autoinc"},
 		{"uuid", "uuid"},
+	},
+	TableDefinition: func(dialect db.DialectName) *db.TableDefinition {
+		return &db.TableDefinition{
+			TableRows: []db.TableRow{
+				{Name: "id", Type: db.DataTypeBigIntAutoInc},
+				{Name: "uuid", Type: db.DataTypeUUID, NotNull: true, Indexed: true},
+			},
+			PrimaryKey: []string{"id"},
+		}
 	},
 	CreateQuery: `create table {table} (
 			id {$bigint_autoinc_pk},
@@ -192,6 +209,18 @@ var TestTableMedium = TestTable{
 	},
 	InsertColumns: []string{}, // all
 	UpdateColumns: []string{"progress"},
+	TableDefinition: func(dialect db.DialectName) *db.TableDefinition {
+		return &db.TableDefinition{
+			TableRows: []db.TableRow{
+				{Name: "id", Type: db.DataTypeBigIntAutoInc},
+				{Name: "uuid", Type: db.DataTypeUUID, NotNull: true, Indexed: true},
+				{Name: "tenant_id", Type: db.DataTypeUUID, NotNull: true, Indexed: true},
+				{Name: "euc_id", Type: db.DataTypeInt, NotNull: true, Indexed: true},
+				{Name: "progress", Type: db.DataTypeInt},
+			},
+			PrimaryKey: []string{"id"},
+		}
+	},
 	CreateQuery: `create table {table} (
 			id {$bigint_autoinc_pk},
 			tenant_id {$varchar_uuid} {$notnull},
@@ -270,50 +299,153 @@ var tableHeavySchema = `
 var TestTableHeavy = TestTable{
 	TableName: "acronis_db_bench_heavy",
 	columns: [][]interface{}{
+		{"id", "autoinc"},
 		{"uuid", "uuid", 0},
 		{"checksum", "string", 0, 64},
-		{"tenant_id", "tenant_uuid", 0},
 		{"cti_entity_uuid", "cti_uuid", 0},
-		{"euc_id", "string", 0, 64},
+
+		{"tenant_id", "tenant_uuid", 0},
+		{"tenant_vis_list", "tenant_uuid_parents", 0},
+
 		{"workflow_id", "int", 2147483647},
 		{"state", "int", 16},
 		{"type", "string", 256, 64},
 		{"queue", "string", 256, 64},
-		{"progress", "int", 100},
-		{"progress_total", "int", 100},
-		{"started_by_user", "string", 0, 32},
 		{"priority", "int", 5},
-		{"policy_id", "int", 1024},
-		{"policy_type", "string", 1024, 64},
-		{"policy_name", "string", 16384, 256},
-		{"resource_id", "uuid", 0},
-		{"resource_type", "int", 256},
-		{"resource_name", "string", 0, 256},
+
 		{"issuer_id", "uuid", 0},
-		{"affinity_agent_id", "uuid", 0},
-		{"affinity_cluster_id", "string", 0, 32},
-		{"enqueue_time_str", "time", 0},
-		{"enqueue_time_ns", "time_ns", 0},
-		{"start_time_str", "time", 0},
-		{"start_time_ns", "time_ns", 0},
-		{"update_time_str", "time", 0},
-		{"update_time_ns", "time_ns", 0},
-		{"completion_time_str", "time", 0},
-		{"completion_time_ns", "time_ns", 0},
-		{"result_code", "int", 32},
-		{"result_payload", "rbyte", 0, 256},
+
 		{"max_assign_count", "int", 100},
 		{"assign_count", "int", 5},
-		{"max_fail_count", "int", 100},
-		{"fail_count", "int", 5},
 		{"cancellable", "bool", 0},
 		{"cancel_requested", "bool", 0},
-		{"blocker_count", "int", 3},
-		{"const_val", "int", 1},
+		{"started_by_user", "string", 0, 32},
+
+		{"policy_id", "uuid", 1024},
+		{"policy_type", "string", 1024, 64},
+		{"policy_name", "string", 16384, 256},
+
+		{"resource_id", "uuid", 1024},
+		{"resource_type", "string", 1024, 64},
+		{"resource_name", "string", 16384, 256},
+
+		{"affinity_agent_id", "uuid", 0, 16384},
+		{"affinity_cluster_id", "uuid", 0, 32},
+
+		{"progress", "int", 100},
+		{"progress_total", "int", 100},
+
+		{"enqueue_time", "time", 30},
+		{"assign_time", "time", 30},
+		{"start_time", "time", 30},
+		{"update_time", "time", 30},
+		{"completion_time", "time", 0},
+
+		{"result_code", "int", 32},
+		{"result_payload", "rbyte", 0, 256},
 	},
 	InsertColumns: []string{}, // all
 	UpdateColumns: []string{"progress", "result_payload", "update_time_str", "update_time_ns", "completion_time_str", "completion_time_ns"},
-	CreateQuery:   `create table {table} (` + tableHeavySchema + `) {$engine};`,
+	TableDefinition: func(dialect db.DialectName) *db.TableDefinition {
+		var tableRows []db.TableRow
+
+		tableRows = append(tableRows,
+			db.TableRow{Name: "id", Type: db.DataTypeBigIntAutoInc, Indexed: true},
+			db.TableRow{Name: "uuid", Type: db.DataTypeUUID, NotNull: true, Indexed: true},
+			db.TableRow{Name: "checksum", Type: db.DataTypeString, NotNull: true},
+			db.TableRow{Name: "cti_entity_uuid", Type: db.DataTypeUUID, Indexed: true},
+		)
+
+		if dialect == db.CLICKHOUSE {
+			// Needed for primary key
+			tableRows = append(tableRows,
+				db.TableRow{Name: "partner_id", Type: db.DataTypeUUID, NotNull: true, Indexed: true},
+				db.TableRow{Name: "customer_id", Type: db.DataTypeUUID, NotNull: true, Indexed: true},
+				db.TableRow{Name: "tenant_id", Type: db.DataTypeUUID, NotNull: true, Indexed: true},
+			)
+		} else if dialect == db.ELASTICSEARCH {
+			tableRows = append(tableRows,
+				db.TableRow{Name: "tenant_id", Type: db.DataTypeUUID, NotNull: true, Indexed: true},
+				db.TableRow{Name: "tenant_vis_list", Type: db.DataTypeUUID, NotNull: true, Indexed: true},
+			)
+		} else {
+			tableRows = append(tableRows,
+				db.TableRow{Name: "tenant_id", Type: db.DataTypeUUID, NotNull: true, Indexed: true},
+			)
+		}
+
+		tableRows = append(tableRows,
+			db.TableRow{Name: "workflow_id", Type: db.DataTypeInt, NotNull: true, Indexed: true},
+			db.TableRow{Name: "state", Type: db.DataTypeInt, NotNull: true, Indexed: true},
+			db.TableRow{Name: "type", Type: db.DataTypeString, NotNull: true, Indexed: true},
+			db.TableRow{Name: "queue", Type: db.DataTypeString, NotNull: true, Indexed: true},
+			db.TableRow{Name: "priority", Type: db.DataTypeInt, NotNull: true, Indexed: true},
+
+			db.TableRow{Name: "issuer_id", Type: db.DataTypeUUID, NotNull: true, Indexed: true},
+			db.TableRow{Name: "issuer_cluster_id", Type: db.DataTypeUUID, NotNull: true, Indexed: true},
+
+			db.TableRow{Name: "heartbeat_ivl_ns", Type: db.DataTypeInt},
+			db.TableRow{Name: "queue_timeout_ns", Type: db.DataTypeInt},
+			db.TableRow{Name: "ack_timeout_ns", Type: db.DataTypeInt},
+			db.TableRow{Name: "exec_timeout_ns", Type: db.DataTypeInt},
+			db.TableRow{Name: "life_time", Type: db.DataTypeInt},
+
+			db.TableRow{Name: "max_assign_count", Type: db.DataTypeInt},
+			db.TableRow{Name: "assign_count", Type: db.DataTypeInt},
+			db.TableRow{Name: "cancellable", Type: db.DataTypeBoolean},
+			db.TableRow{Name: "cancel_requested", Type: db.DataTypeBoolean},
+			db.TableRow{Name: "started_by_user", Type: db.DataTypeString, Indexed: true},
+
+			db.TableRow{Name: "policy_id", Type: db.DataTypeString, Indexed: true},
+			db.TableRow{Name: "policy_type", Type: db.DataTypeString, Indexed: true},
+			db.TableRow{Name: "policy_name", Type: db.DataTypeString, Indexed: true},
+
+			db.TableRow{Name: "resource_id", Type: db.DataTypeString, Indexed: true},
+			db.TableRow{Name: "resource_type", Type: db.DataTypeString, Indexed: true},
+			db.TableRow{Name: "resource_name", Type: db.DataTypeString, Indexed: true},
+
+			db.TableRow{Name: "tags", Type: db.DataTypeString, Indexed: true},
+
+			db.TableRow{Name: "affinity_agent_id", Type: db.DataTypeString, Indexed: true},
+			db.TableRow{Name: "affinity_cluster_id", Type: db.DataTypeString, Indexed: true},
+
+			db.TableRow{Name: "argument", Type: db.DataTypeString},
+			db.TableRow{Name: "context", Type: db.DataTypeString},
+
+			db.TableRow{Name: "progress", Type: db.DataTypeInt},
+			db.TableRow{Name: "progress_total", Type: db.DataTypeInt},
+
+			db.TableRow{Name: "assigned_agent_id", Type: db.DataTypeString, Indexed: true},
+			db.TableRow{Name: "assigned_agent_cluster_id", Type: db.DataTypeString, Indexed: true},
+
+			db.TableRow{Name: "enqueue_time", Type: db.DataTypeDateTime, Indexed: true},
+			db.TableRow{Name: "assign_time", Type: db.DataTypeDateTime, Indexed: true},
+			db.TableRow{Name: "start_time", Type: db.DataTypeDateTime, Indexed: true},
+			db.TableRow{Name: "update_time", Type: db.DataTypeDateTime, Indexed: true},
+			db.TableRow{Name: "completion_time", Type: db.DataTypeDateTime, Indexed: true},
+
+			db.TableRow{Name: "result_code", Type: db.DataTypeInt, Indexed: true},
+			db.TableRow{Name: "result_error", Type: db.DataTypeString},
+			db.TableRow{Name: "result_warnings", Type: db.DataTypeString},
+			db.TableRow{Name: "result_payload", Type: db.DataTypeString},
+		)
+
+		var tableDef = &db.TableDefinition{
+			TableRows: tableRows,
+		}
+		if dialect == db.CLICKHOUSE {
+			tableDef.PrimaryKey = []string{"partner_id", "customer_id", "toDate(update_time)"}
+		} else {
+			tableDef.PrimaryKey = []string{"id"}
+		}
+
+		if dialect == db.ELASTICSEARCH {
+			tableDef.Resilience.NumberOfReplicas = 2
+		}
+
+		return tableDef
+	},
+	CreateQuery: `create table {table} (` + tableHeavySchema + `) {$engine};`,
 	Indexes: [][]string{
 		{"uuid"},
 		{"completion_time_ns"},
