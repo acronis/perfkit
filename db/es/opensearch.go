@@ -13,6 +13,7 @@ import (
 
 	"github.com/opensearch-project/opensearch-go/v4"
 	"github.com/opensearch-project/opensearch-go/v4/opensearchapi"
+	"github.com/opensearch-project/opensearch-go/v4/plugins/ism"
 
 	"github.com/acronis/perfkit/db"
 )
@@ -86,9 +87,16 @@ func (c *openSearchConnector) ConnectionPool(cfg db.Config) (db.Database, error)
 		return nil, fmt.Errorf("db: failed ping OpenSearch db at %v, OpenSearch err: %v", cs, ping.String())
 	}
 
+	var ismClient *ism.Client
+	if ismClient, err = ism.NewClient(ism.Config{Client: conf.Client}); err != nil {
+		return nil, fmt.Errorf("db: cannot connect to ism client at %v, err: %v", cs, err)
+	}
+
 	var rw = &openSearchQuerier{client: openSearchClient}
+	var mig = &openSearchMigrator{client: openSearchClient, ismClient: ismClient}
 	return &esDatabase{
 		rw:          rw,
+		mig:         mig,
 		queryLogger: cfg.QueryLogger,
 	}, nil
 }
@@ -180,4 +188,192 @@ func (q *openSearchQuerier) count(ctx context.Context, idxName indexName, reques
 	}
 
 	return int64(resp.Count), nil
+}
+
+type openSearchMigrator struct {
+	client    *opensearchapi.Client
+	ismClient *ism.Client
+}
+
+func (m *openSearchMigrator) checkILMPolicyExists(policyName string) (bool, error) {
+	var _, err = m.ismClient.Policies.Get(context.Background(), &ism.PoliciesGetReq{
+		Policy: policyName,
+	})
+
+	if err != nil {
+		if osStructError, ok := err.(*opensearch.StructError); ok {
+			if osStructError.Err.Type == "index_not_found_exception" ||
+				(osStructError.Err.Type == "status_exception" && osStructError.Err.Reason == "Policy not found") {
+				return false, nil
+			}
+		}
+
+		return false, fmt.Errorf("failed to check policy exists: %v", err)
+	}
+
+	return true, nil
+}
+
+func translateIlMPolicytoISMPolicy(policy indexLifecycleManagementPolicy) ism.PolicyBody {
+	var states []ism.PolicyState
+	for phase, phaseDef := range policy.Phases {
+		if phase != indexPhaseHot {
+			continue
+		}
+
+		for action, actionDef := range phaseDef.Actions {
+			if action != indexActionRollover {
+				continue
+			}
+
+			if indexRolloverAction, ok := actionDef.(indexRolloverActionSettings); ok {
+				states = append(states, ism.PolicyState{
+					Name: "rollover",
+					Actions: []ism.PolicyStateAction{
+						{
+							Rollover: &ism.PolicyStateRollover{
+								MinSize:             indexRolloverAction.MinSize,
+								MinPrimaryShardSize: indexRolloverAction.MinPrimaryShardSize,
+								MinIndexAge:         indexRolloverAction.MinAge,
+							},
+						},
+					},
+				})
+			}
+		}
+	}
+
+	return ism.PolicyBody{
+		Description:  "Auto-generated policy",
+		DefaultState: "rollover",
+		States:       states,
+	}
+}
+
+func (m *openSearchMigrator) initILMPolicy(policyName string, policyDefinition indexLifecycleManagementPolicy) error {
+	var _, err = m.ismClient.Policies.Put(context.Background(), ism.PoliciesPutReq{
+		Policy: policyName,
+		Body:   ism.PoliciesPutBody{Policy: translateIlMPolicytoISMPolicy(policyDefinition)},
+	})
+
+	if err != nil {
+		return fmt.Errorf("failed to init ISM policy: %v", err)
+	}
+
+	return nil
+}
+
+func (m *openSearchMigrator) deleteILMPolicy(policyName string) error {
+	var _, err = m.ismClient.Policies.Delete(context.Background(), ism.PoliciesDeleteReq{
+		Policy: policyName,
+	})
+
+	if err != nil {
+		return fmt.Errorf("failed to delete ISM policy: %v", err)
+	}
+
+	return nil
+}
+
+func (m *openSearchMigrator) initComponentTemplate(templateName string, template componentTemplate) error {
+	type openSearchIndexSettings struct {
+		NumberOfShards     int    `json:"number_of_shards,omitempty"`
+		NumberOfReplicas   int    `json:"number_of_replicas,omitempty"`
+		IndexLifeCycleName string `json:"opendistro.index_state_management.policy_id,omitempty"`
+	}
+
+	type openSearchComponentTemplate struct {
+		Settings *openSearchIndexSettings `json:"settings,omitempty"`
+		Mappings *mappings                `json:"mappings,omitempty"`
+	}
+
+	var openSearchSettings *openSearchIndexSettings
+	if template.Settings != nil {
+		openSearchSettings = &openSearchIndexSettings{
+			NumberOfShards:     template.Settings.NumberOfShards,
+			NumberOfReplicas:   template.Settings.NumberOfReplicas,
+			IndexLifeCycleName: template.Settings.IndexLifeCycleName,
+		}
+	}
+
+	var query = struct {
+		Template openSearchComponentTemplate `json:"template"`
+	}{
+		Template: openSearchComponentTemplate{
+			Settings: openSearchSettings,
+			Mappings: template.Mappings,
+		},
+	}
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(query); err != nil {
+		return fmt.Errorf("failed to encode template request: %v", err)
+	}
+
+	if _, err := m.client.ComponentTemplate.Create(context.Background(), opensearchapi.ComponentTemplateCreateReq{
+		ComponentTemplate: templateName,
+		Body:              &buf,
+	}); err != nil {
+		return fmt.Errorf("error while trying to put component template %s: %v", templateName, err)
+	}
+
+	return nil
+}
+
+func (m *openSearchMigrator) deleteComponentTemplate(templateName string) error {
+	if _, err := m.client.ComponentTemplate.Delete(context.Background(), opensearchapi.ComponentTemplateDeleteReq{
+		ComponentTemplate: templateName,
+	}); err != nil {
+		return fmt.Errorf("error while trying to delete component template %s: %v", templateName, err)
+	}
+
+	return nil
+}
+
+func (m *openSearchMigrator) initIndexTemplate(templateName string, indexPattern string, components []string) error {
+	var initDataStreamQuery = struct {
+		IndexPatters []string `json:"index_patterns"`
+		DataStream   struct{} `json:"data_stream"`
+		ComposedOf   []string `json:"composed_of"`
+		Priority     int      `json:"priority"`
+	}{
+		IndexPatters: []string{indexPattern},
+		DataStream:   struct{}{},
+		ComposedOf:   components,
+		Priority:     500,
+	}
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(initDataStreamQuery); err != nil {
+		return fmt.Errorf("failed to MarshalJSON index template %s body: %v", templateName, err)
+	}
+
+	if _, err := m.client.IndexTemplate.Create(context.Background(), opensearchapi.IndexTemplateCreateReq{
+		IndexTemplate: templateName,
+		Body:          &buf,
+	}); err != nil {
+		return fmt.Errorf("error while trying to create index template %s: %v", templateName, err)
+	}
+
+	return nil
+}
+
+func (m *openSearchMigrator) deleteIndexTemplate(templateName string) error {
+	if _, err := m.client.IndexTemplate.Delete(context.Background(), opensearchapi.IndexTemplateDeleteReq{
+		IndexTemplate: templateName,
+	}); err != nil {
+		return fmt.Errorf("error while trying to delete component template %s: %v", templateName, err)
+	}
+
+	return nil
+}
+
+func (m *openSearchMigrator) deleteDataStream(dataStreamName string) error {
+	if _, err := m.client.DataStream.Delete(context.Background(), opensearchapi.DataStreamDeleteReq{
+		DataStream: dataStreamName,
+	}); err != nil {
+		return fmt.Errorf("error while trying to delete data stream %s: %v", dataStreamName, err)
+	}
+
+	return nil
 }
