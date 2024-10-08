@@ -8,8 +8,6 @@ import (
 
 	"go.uber.org/atomic"
 
-	es8 "github.com/elastic/go-elasticsearch/v8"
-
 	"github.com/acronis/perfkit/db"
 )
 
@@ -43,7 +41,7 @@ func (s *esSession) Transact(fn func(tx db.DatabaseAccessor) error) error {
 
 type esDatabase struct {
 	rw  accessor
-	raw *es8.Client
+	mig migrator
 
 	queryLogger db.Logger
 }
@@ -74,15 +72,15 @@ func (d *esDatabase) ApplyMigrations(tableName, tableMigrationSQL string) error 
 }
 
 func (d *esDatabase) TableExists(tableName string) (bool, error) {
-	return indexExists(d.raw, tableName)
+	return indexExists(d.mig, tableName)
 }
 
 func (d *esDatabase) CreateTable(tableName string, tableDefinition *db.TableDefinition, tableMigrationDDL string) error {
-	return createIndex(d.raw, tableName, tableDefinition, tableMigrationDDL)
+	return createIndex(d.mig, tableName, tableDefinition, tableMigrationDDL)
 }
 
 func (d *esDatabase) DropTable(name string) error {
-	return dropIndex(d.raw, name)
+	return dropIndex(d.mig, name)
 }
 
 func (d *esDatabase) IndexExists(indexName string, tableName string) (bool, error) {

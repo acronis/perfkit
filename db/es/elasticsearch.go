@@ -125,7 +125,7 @@ func (c *esConnector) ConnectionPool(cfg db.Config) (db.Database, error) {
 	var rw = &esQuerier{es: es}
 	return &esDatabase{
 		rw:          rw,
-		raw:         es,
+		mig:         rw,
 		queryLogger: cfg.QueryLogger,
 	}, nil
 }
@@ -350,4 +350,148 @@ func (q *esQuerier) count(ctx context.Context, idxName indexName, request *Count
 	}
 
 	return resp.Count, nil
+}
+
+func (q *esQuerier) checkILMPolicyExists(policyName string) (bool, error) {
+	var res, err = q.es.ILM.GetLifecycle(
+		q.es.ILM.GetLifecycle.WithContext(context.Background()),
+		q.es.ILM.GetLifecycle.WithPolicy(policyName))
+	if err != nil {
+		return false, fmt.Errorf("error while trying to get lifecycle %s: %v", policyName, err)
+	} else if res.IsError() {
+		if res.StatusCode == 404 {
+			return false, nil
+		}
+		return false, fmt.Errorf("error code [%d] in get lifecycle response: %s", res.StatusCode, res.String())
+	}
+
+	var b map[string]interface{}
+	if err = json.NewDecoder(res.Body).Decode(&b); err != nil {
+		return false, fmt.Errorf("failed to decode ILM response: %v", err)
+	}
+
+	if _, ok := b[policyName].(map[string]interface{}); !ok {
+		return false, fmt.Errorf("ILM missing %s", policyName)
+	}
+
+	return true, nil
+}
+
+func (q *esQuerier) initILMPolicy(policyName string, policyDefinition indexLifecycleManagementPolicy) error {
+	var query = struct {
+		Policy indexLifecycleManagementPolicy `json:"policy"`
+	}{
+		Policy: policyDefinition,
+	}
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(query); err != nil {
+		return fmt.Errorf("failed to encode policy request: %v", err)
+	}
+
+	if res, err := q.es.ILM.PutLifecycle(policyName,
+		q.es.ILM.PutLifecycle.WithContext(context.Background()),
+		q.es.ILM.PutLifecycle.WithBody(&buf)); err != nil {
+		return fmt.Errorf("error while trying to put lifecycle %s: %v", policyName, err)
+	} else if res.IsError() {
+		return fmt.Errorf("error code [%d] in put lifecycle response: %s", res.StatusCode, res.String())
+	}
+
+	return nil
+}
+
+func (q *esQuerier) deleteILMPolicy(policyName string) error {
+	if res, err := q.es.ILM.DeleteLifecycle(policyName,
+		q.es.ILM.DeleteLifecycle.WithContext(context.Background())); err != nil {
+		return fmt.Errorf("error while trying to delete policy lifecycle %v: %v", policyName, err)
+	} else if res.IsError() {
+		return fmt.Errorf("error code [%d] in ILM Lifecycle Delete response: %s", res.StatusCode, res.String())
+	}
+
+	return nil
+}
+
+func (q *esQuerier) initComponentTemplate(templateName string, template componentTemplate) error {
+	var query = struct {
+		Template componentTemplate `json:"template"`
+	}{
+		Template: template,
+	}
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(query); err != nil {
+		return fmt.Errorf("failed to encode template request: %v", err)
+	}
+
+	if res, err := q.es.Cluster.PutComponentTemplate(templateName, &buf,
+		q.es.Cluster.PutComponentTemplate.WithContext(context.Background())); err != nil {
+		return fmt.Errorf("error while trying to put component template %s: %v", templateName, err)
+	} else if res.IsError() {
+		return fmt.Errorf("error code [%d] in put component template response: %s", res.StatusCode, res.String())
+	}
+
+	return nil
+}
+
+func (q *esQuerier) deleteComponentTemplate(templateName string) error {
+	if res, err := q.es.Cluster.DeleteComponentTemplate(templateName,
+		q.es.Cluster.DeleteComponentTemplate.WithContext(context.Background())); err != nil {
+		return fmt.Errorf("error while trying to delete ilm settings template %s: %v", templateName, err)
+	} else if res.IsError() {
+		return fmt.Errorf("error code [%d] in delete ilm settings template response: %s", res.StatusCode, res.String())
+	}
+
+	return nil
+}
+
+func (q *esQuerier) initIndexTemplate(templateName string, indexPattern string, components []string) error {
+	var initDataStreamQuery = struct {
+		IndexPatters []string `json:"index_patterns"`
+		DataStream   struct{} `json:"data_stream"`
+		ComposedOf   []string `json:"composed_of"`
+		Priority     int      `json:"priority"`
+	}{
+		IndexPatters: []string{indexPattern},
+		DataStream:   struct{}{},
+		ComposedOf:   components,
+		Priority:     500,
+	}
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(initDataStreamQuery); err != nil {
+		return fmt.Errorf("failed to MarshalJSON index template %s body: %v", templateName, err)
+	}
+
+	if res, err := q.es.Indices.PutIndexTemplate(templateName, &buf,
+		q.es.Indices.PutIndexTemplate.WithContext(context.Background())); err != nil {
+		return fmt.Errorf("error while trying to create index template %s: %v", templateName, err)
+	} else if res.IsError() {
+		return fmt.Errorf("error code [%d] in create index template response: %s", res.StatusCode, res.String())
+	}
+
+	return nil
+}
+
+func (q *esQuerier) deleteIndexTemplate(templateName string) error {
+	if res, err := q.es.Indices.DeleteIndexTemplate(templateName,
+		q.es.Indices.DeleteIndexTemplate.WithContext(context.Background())); err != nil {
+		return fmt.Errorf("error while trying to delete index template %s: %v", templateName, err)
+	} else if res.IsError() {
+		return fmt.Errorf("error code [%d] in delete index template response: %s", res.StatusCode, res.String())
+	}
+
+	return nil
+}
+
+func (q *esQuerier) deleteDataStream(dataStreamName string) error {
+	if res, err := q.es.Indices.DeleteDataStream([]string{dataStreamName},
+		q.es.Indices.DeleteDataStream.WithContext(context.Background())); err != nil {
+		return fmt.Errorf("error while trying to delete data stream %s: %v", dataStreamName, err)
+	} else if res.IsError() {
+		if res.StatusCode != 404 {
+			return fmt.Errorf("error code [%d] in delete data stream response: %s", res.StatusCode, res.String())
+		}
+	}
+
+	return nil
 }

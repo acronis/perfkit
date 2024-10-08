@@ -89,7 +89,6 @@ func (c *openSearchConnector) ConnectionPool(cfg db.Config) (db.Database, error)
 	var rw = &openSearchQuerier{client: openSearchClient}
 	return &esDatabase{
 		rw:          rw,
-		raw:         openSearchClient,
 		queryLogger: cfg.QueryLogger,
 	}, nil
 }
