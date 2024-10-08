@@ -1,0 +1,29 @@
+version: '3.4'
+
+x-logging:
+  &logging
+  driver: gelf
+  options:
+    gelf-address: udp://${GELF_IP}:${GELF_PORT}
+
+services:
+  opensearch:
+    image: opensearchproject/opensearch:2.17.0
+    environment:
+      - node.name=os-test
+      - discovery.type=single-node # uses only for test clusters
+      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m" # Set min and max JVM heap sizes to at least 50% of system RAM
+      - OPENSEARCH_INITIAL_ADMIN_PASSWORD="ScoRpi0n$"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    logging: *logging
+    volumes:
+      - opensearch-data:/usr/share/opensearch/data
+    ports:
+      - 9200:9200
+      - 9600:9600
+
+volumes:
+  opensearch-data:
