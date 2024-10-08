@@ -15,8 +15,8 @@ import (
 
 type querier interface {
 	insert(ctx context.Context, idxName indexName, query *BulkIndexRequest) (*BulkIndexResult, int, error)
-	search(ctx context.Context, idxName indexName, query *SearchRequest) (*SearchResponse, error)
-	count(ctx context.Context, idxName indexName, query *CountRequest) (*SearchResponse, error)
+	search(ctx context.Context, idxName indexName, query *SearchRequest) ([]map[string]interface{}, error)
+	count(ctx context.Context, idxName indexName, query *CountRequest) (int64, error)
 }
 
 type accessor interface {
@@ -176,7 +176,7 @@ func (tq timedQuerier) insert(ctx context.Context, idxName indexName, query *Bul
 	return tq.q.insert(ctx, idxName, query)
 }
 
-func (tq timedQuerier) search(ctx context.Context, idxName indexName, request *SearchRequest) (*SearchResponse, error) {
+func (tq timedQuerier) search(ctx context.Context, idxName indexName, request *SearchRequest) ([]map[string]interface{}, error) {
 	defer accountTime(tq.dbtime, time.Now())
 
 	if tq.queryLogger != nil {
@@ -186,7 +186,7 @@ func (tq timedQuerier) search(ctx context.Context, idxName indexName, request *S
 	return tq.q.search(ctx, idxName, request)
 }
 
-func (tq timedQuerier) count(ctx context.Context, idxName indexName, request *CountRequest) (*SearchResponse, error) {
+func (tq timedQuerier) count(ctx context.Context, idxName indexName, request *CountRequest) (int64, error) {
 	defer accountTime(tq.dbtime, time.Now())
 
 	if tq.queryLogger != nil {

@@ -3,11 +3,16 @@ package es
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
+	"net"
+	"net/http"
+	"net/url"
+	"os"
 	"strconv"
 	"strings"
-	"time"
 
 	es8 "github.com/elastic/go-elasticsearch/v8"
 	"github.com/elastic/go-elasticsearch/v8/esapi"
@@ -16,8 +21,118 @@ import (
 )
 
 const (
-	timeStoreFormatPrecise = time.RFC3339Nano
+	magicEsEnvVar = "ELASTICSEARCH_URL"
 )
+
+// nolint: gochecknoinits // remove init() when we will have a better way to register connectors
+func init() {
+	for _, esNameStyle := range []string{"es", "elastic", "elasticsearch"} {
+		if err := db.Register(esNameStyle, &esConnector{}); err != nil {
+			panic(err)
+		}
+	}
+}
+
+// nolint:gocritic //TODO refactor unnamed returns
+func elasticCredentialsAndConnString(cs string, tlsEnabled bool) (string, string, string, error) {
+	var u, err = url.Parse(cs)
+	if err != nil {
+		return "", "", "", fmt.Errorf("cannot parse connection url %v, err: %v", cs, err)
+	}
+
+	var username = u.User.Username()
+	var password, _ = u.User.Password()
+
+	// TODO: This is hack
+	if username != "" || password != "" {
+		tlsEnabled = true
+	}
+
+	var scheme string
+	if tlsEnabled {
+		scheme = "https"
+	} else {
+		scheme = "http"
+	}
+
+	var finalURL = url.URL{
+		Scheme: scheme,
+		Host:   u.Host,
+	}
+	cs = finalURL.String()
+
+	return username, password, cs, nil
+}
+
+type esConnector struct{}
+
+func (c *esConnector) ConnectionPool(cfg db.Config) (db.Database, error) {
+	var adds []string
+	var username, password, cs string
+	var err error
+
+	if s := os.Getenv(magicEsEnvVar); s == "" {
+		username, password, cs, err = elasticCredentialsAndConnString(cfg.ConnString, cfg.TLSEnabled)
+		if err != nil {
+			return nil, fmt.Errorf("db: elastic: %v", err)
+		}
+
+		adds = append(adds, cs)
+	}
+
+	var tlsConfig tls.Config
+	if len(cfg.TLSCACert) == 0 {
+		tlsConfig = tls.Config{
+			InsecureSkipVerify: true, // nolint:gosec // TODO: InsecureSkipVerify is true
+		}
+	} else {
+		var caCertPool = x509.NewCertPool()
+		caCertPool.AppendCertsFromPEM(cfg.TLSCACert)
+
+		// nolint:gosec // TODO: TLS MinVersion too low
+		tlsConfig = tls.Config{
+			RootCAs: caCertPool,
+		}
+	}
+
+	var conf = es8.Config{
+		Addresses: adds,
+		Transport: &http.Transport{
+			MaxIdleConnsPerHost:   cfg.MaxOpenConns,
+			ResponseHeaderTimeout: cfg.MaxConnLifetime,
+			DialContext:           (&net.Dialer{Timeout: cfg.MaxConnLifetime}).DialContext,
+			TLSClientConfig:       &tlsConfig,
+		},
+		Username: username,
+		Password: password,
+	}
+
+	var es *es8.Client
+	if es, err = es8.NewClient(conf); err != nil {
+		return nil, fmt.Errorf("db: cannot connect to es db at %v, err: %v", cs, err)
+	}
+
+	var ping *esapi.Response
+	if ping, err = es.Ping(); err != nil {
+		if err.Error() == "EOF" {
+			return nil, fmt.Errorf("db: failed ping es db at %s, TLS CA required", cs)
+		}
+		return nil, fmt.Errorf("db: failed ping es db at %v, err: %v", cs, err)
+	} else if ping != nil && ping.IsError() {
+		return nil, fmt.Errorf("db: failed ping es db at %v, elastic err: %v", cs, ping.String())
+	}
+
+	var rw = &esQuerier{es: es}
+	return &esDatabase{
+		rw:          rw,
+		raw:         es,
+		queryLogger: cfg.QueryLogger,
+	}, nil
+}
+
+func (c *esConnector) DialectName(scheme string) (db.DialectName, error) {
+	return db.ELASTICSEARCH, nil
+}
 
 type esQuerier struct {
 	es *es8.Client
@@ -166,7 +281,7 @@ func (q *esQuerier) insert(ctx context.Context, idxName indexName, query *BulkIn
 	return rv, q.expectedSuccesses(idxName), nil
 }
 
-func (q *esQuerier) search(ctx context.Context, idxName indexName, request *SearchRequest) (*SearchResponse, error) {
+func (q *esQuerier) search(ctx context.Context, idxName indexName, request *SearchRequest) ([]map[string]interface{}, error) {
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(request); err != nil {
 		return nil, fmt.Errorf("request encode error: %v", err)
@@ -198,13 +313,18 @@ func (q *esQuerier) search(ctx context.Context, idxName indexName, request *Sear
 		return nil, fmt.Errorf("search response decode err: %v", err)
 	}
 
-	return &resp, nil
+	var fields []map[string]interface{}
+	for _, hit := range resp.Hits.Hits {
+		fields = append(fields, hit.Fields)
+	}
+
+	return fields, nil
 }
 
-func (q *esQuerier) count(ctx context.Context, idxName indexName, request *CountRequest) (*SearchResponse, error) {
+func (q *esQuerier) count(ctx context.Context, idxName indexName, request *CountRequest) (int64, error) {
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(request); err != nil {
-		return nil, fmt.Errorf("request encode error: %v", err)
+		return 0, fmt.Errorf("request encode error: %v", err)
 	}
 
 	var res, err = q.es.Count(
@@ -212,22 +332,22 @@ func (q *esQuerier) count(ctx context.Context, idxName indexName, request *Count
 		q.es.Count.WithIndex(string(idxName)),
 		q.es.Count.WithBody(&buf))
 	if err != nil {
-		return nil, fmt.Errorf("failed to perform count: %v", err)
+		return 0, fmt.Errorf("failed to perform count: %v", err)
 	}
 
 	// nolint: errcheck // Need to have logger here for deferred errors
 	defer res.Body.Close()
 
 	if res.IsError() {
-		return nil, fmt.Errorf("failed to perform count: %s", res.String())
+		return 0, fmt.Errorf("failed to perform count: %s", res.String())
 	}
 
 	var resp = SearchResponse{}
 	var decoder = json.NewDecoder(res.Body)
 	decoder.UseNumber()
 	if err = decoder.Decode(&resp); err != nil {
-		return nil, fmt.Errorf("count response decode err: %v", err)
+		return 0, fmt.Errorf("count response decode err: %v", err)
 	}
 
-	return &resp, nil
+	return resp.Count, nil
 }
