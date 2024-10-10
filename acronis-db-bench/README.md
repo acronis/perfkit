@@ -1,6 +1,26 @@
 # Acronis Database Benchmark
 
-This project provides a set of benchmarking utilities for various databases. It includes various tests and options for database performance analysis.
+The Acronis Database Benchmark provides an extensive suite of tests designed to cover a wide range of database performance scenarios. It addresses both typical queries and edge cases, allowing you to adjust parameters and explore the impact of different data access patterns on performance. This makes it ideal for testing scenarios such as high-concurrency inserts, complex updates, and various types of searches, including facet, indexed, and vector-based searches
+
+Core features of the tool:
+
+* Coverage of both SQL and NoSQL engines, allowing direct comparisons between different database technologies.
+* Support for various data access patterns such as insert, update, facet search, indexed search, and vector search.
+* Simulation of typical patterns in multi-tenant environments, enabling testing in SaaS-like scenarios.
+* Support of queries using [CTI](https://github.com/acronis/go-cti) data types.
+* Advanced logging facilities helping developers and DBA engineers troubleshoot discovered issues faster.
+
+Use Cases:
+
+* Compare the efficiency of different database engines.
+* Test the impact of hardware and virtualized environments on database performance.
+* Measure the performance overhead of database cluster solutions compared to a single database instance.
+* Analyze the impact of different database configuration parameters on overall performance.
+* Compare the performance and resource utilization of single-tenant versus multi-tenant data structures and queries.
+* Simulate and research performance issues related to high-cardinality datasets.
+* Investigate the effectiveness of indexing strategies and their impact on query performance.
+* Evaluate how well databases handle multiple concurrent transactions and identify potential bottlenecks.
+* Model and analyze production-like datasets and queries for rapid assessment of initial database performance limits.
 
 ## Supported Databases
 
