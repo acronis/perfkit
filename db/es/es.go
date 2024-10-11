@@ -40,8 +40,9 @@ func (s *esSession) Transact(fn func(tx db.DatabaseAccessor) error) error {
 }
 
 type esDatabase struct {
-	rw  accessor
-	mig migrator
+	rw      accessor
+	mig     migrator
+	dialect dialect
 
 	queryLogger db.Logger
 }
@@ -60,7 +61,7 @@ func (d *esDatabase) UseTruncate() bool {
 }
 
 func (d *esDatabase) GetVersion() (db.DialectName, string, error) {
-	return getVersion(d.rw)
+	return getVersion(d.dialect)
 }
 
 func (d *esDatabase) GetInfo(version string) (ret []string, dbInfo *db.Info, err error) {
@@ -192,4 +193,8 @@ func (tq timedQuerier) count(ctx context.Context, idxName indexName, request *Co
 	}
 
 	return tq.q.count(ctx, idxName, request)
+}
+
+type dialect interface {
+	name() db.DialectName
 }

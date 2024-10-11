@@ -3,8 +3,8 @@ package es
 import "github.com/acronis/perfkit/db"
 
 // GetVersion returns DB version and driver name
-func getVersion(q querier) (db.DialectName, string, error) {
-	return db.ELASTICSEARCH, "", nil
+func getVersion(dia dialect) (db.DialectName, string, error) {
+	return dia.name(), "", nil
 }
 
 // GetInfo returns DB info

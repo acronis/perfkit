@@ -33,6 +33,12 @@ func init() {
 	}
 }
 
+type elasticSearchDialect struct{}
+
+func (d *elasticSearchDialect) name() db.DialectName {
+	return db.ELASTICSEARCH
+}
+
 // nolint:gocritic //TODO refactor unnamed returns
 func elasticCredentialsAndConnString(cs string, tlsEnabled bool) (string, string, string, error) {
 	var u, err = url.Parse(cs)
@@ -126,6 +132,7 @@ func (c *esConnector) ConnectionPool(cfg db.Config) (db.Database, error) {
 	return &esDatabase{
 		rw:          rw,
 		mig:         rw,
+		dialect:     &elasticSearchDialect{},
 		queryLogger: cfg.QueryLogger,
 	}, nil
 }

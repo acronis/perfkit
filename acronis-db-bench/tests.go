@@ -105,7 +105,7 @@ func (t *TestDesc) getDBs() string {
 
 var (
 	// ALL is a list of all supported databases
-	ALL = []db.DialectName{db.POSTGRES, db.MYSQL, db.MSSQL, db.SQLITE, db.CLICKHOUSE, db.CASSANDRA, db.ELASTICSEARCH}
+	ALL = []db.DialectName{db.POSTGRES, db.MYSQL, db.MSSQL, db.SQLITE, db.CLICKHOUSE, db.CASSANDRA, db.ELASTICSEARCH, db.OPENSEARCH}
 	// RELATIONAL is a list of all supported relational databases
 	RELATIONAL = []db.DialectName{db.POSTGRES, db.MYSQL, db.MSSQL, db.SQLITE}
 	// PMWSA is a list of all supported databases except ClickHouse

@@ -27,6 +27,12 @@ func init() {
 	}
 }
 
+type openSearchDialect struct{}
+
+func (d *openSearchDialect) name() db.DialectName {
+	return db.OPENSEARCH
+}
+
 type openSearchConnector struct{}
 
 func (c *openSearchConnector) ConnectionPool(cfg db.Config) (db.Database, error) {
@@ -97,12 +103,13 @@ func (c *openSearchConnector) ConnectionPool(cfg db.Config) (db.Database, error)
 	return &esDatabase{
 		rw:          rw,
 		mig:         mig,
+		dialect:     &openSearchDialect{},
 		queryLogger: cfg.QueryLogger,
 	}, nil
 }
 
 func (c *openSearchConnector) DialectName(scheme string) (db.DialectName, error) {
-	return db.ELASTICSEARCH, nil
+	return db.OPENSEARCH, nil
 }
 
 type openSearchQuerier struct {
