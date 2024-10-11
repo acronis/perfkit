@@ -184,6 +184,13 @@ func (q *openSearchQuerier) count(ctx context.Context, idxName indexName, reques
 		Body:    &buf,
 	})
 	if err != nil {
+		if osStructError, ok := err.(*opensearch.StructError); ok {
+			if osStructError.Err.Type == "index_not_found_exception" ||
+				(osStructError.Err.Type == "status_exception" && osStructError.Err.Reason == "Policy not found") {
+				return 0, nil
+			}
+		}
+
 		return 0, fmt.Errorf("failed to perform count: %v", err)
 	}
 
