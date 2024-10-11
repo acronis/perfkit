@@ -290,7 +290,7 @@ func TestSearchQueryBuilder(t *testing.T) {
 						Filter: selectors{
 							selector{
 								selectorTerms: {
-									"tenant_vis_list": []interface{}{"00000000-0000-0000-0000-000000000001"},
+									"tenant_vis_list.keyword": []interface{}{"00000000-0000-0000-0000-000000000001"},
 								},
 							},
 						},
