@@ -12,7 +12,8 @@ import (
 )
 
 const (
-	esConnString = "es://0.0.0.0:9200"
+	esConnString         = "es://0.0.0.0:9200"
+	openSearchConnString = "opensearch://admin:%22ScoRpi0n$%22@0.0.0.0:9200"
 )
 
 type TestingSuite struct {
@@ -22,6 +23,10 @@ type TestingSuite struct {
 
 func TestDatabaseSuiteElasticSearch(t *testing.T) {
 	suite.Run(t, &TestingSuite{ConnString: esConnString})
+}
+
+func TestDatabaseSuiteOpenSearch(t *testing.T) {
+	suite.Run(t, &TestingSuite{ConnString: openSearchConnString})
 }
 
 type testLogger struct {
