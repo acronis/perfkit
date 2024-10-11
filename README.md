@@ -12,7 +12,7 @@ It includes:
 
 ## Acronis Database Benchmark (acronis-db-bench)
 
-The Acronis Database Benchmark is a comprehensive framework for testing and analyzing the performance of various database systems. It supports a wide range of both SQL and NoSQL databases, such as MySQL, PostgreSQL, Cassandra, ClickHouse, ElasticSearch and more, making it a powerful tool for cross-database performance comparisons. The tool provides extensive support for different data access patterns, including inserts, updates, facet searches, indexed searches, vector searches, and others, allowing for a detailed exploration of how each database handles different query types and workloads.
+The Acronis Database Benchmark is a comprehensive framework for testing and analyzing the performance of various database systems. It supports a wide range of both SQL and NoSQL databases, such as MySQL, PostgreSQL, Cassandra, ClickHouse, ElasticSearch, OpenSearch and more, making it a powerful tool for cross-database performance comparisons. The tool provides extensive support for different data access patterns, including inserts, updates, facet searches, indexed searches, vector searches, and others, allowing for a detailed exploration of how each database handles different query types and workloads.
 
 With built-in features for simulating multi-tenant environments, the benchmark can model real-world SaaS-like scenarios where multiple tenants access shared resources. Additionally, it offers advanced logging and diagnostic features that help developers and database administrators quickly identify and troubleshoot performance issues. The tool is ideal for assessing the impact of various database configurations, comparing the overhead of database clusters versus single instances, and analyzing performance bottlenecks under concurrent workloads. It also enables users to evaluate how databases perform under high-cardinality data, different indexing strategies, and various levels of hardware and virtualization environments. This makes it highly suitable for optimizing database systems and ensuring efficient performance in production-like environments.
 
@@ -32,7 +32,6 @@ These instructions will get you a copy of the project up and running on your loc
 
 Before you begin, ensure you have met the following requirements:
 * You have installed the latest version of [Go](https://golang.org/dl/).
-* You have a `<Mac/Linux/Windows>` machine. State which OS is supported/required.
 
 ### Getting perfkit
 
