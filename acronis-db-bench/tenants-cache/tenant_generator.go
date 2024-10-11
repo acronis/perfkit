@@ -559,8 +559,9 @@ func (tc *TenantsCache) CreateTenant(rw *benchmark.RandomizerWorker, tx db.Datab
 		return "", err
 	}
 
+	var tenantUuid, _ = guuid.ParseBytes([]byte(t.UUID))
 	if err = tx.BulkInsert(TableNameTenants, [][]interface{}{
-		{t.ID, t.UUID, t.Name, t.Kind, t.ParentID, t.NestingLevel, t.IsDeleted, t.ParentHasAccess},
+		{t.ID, tenantUuid, t.Name, t.Kind, t.ParentID, t.NestingLevel, t.IsDeleted, t.ParentHasAccess},
 	}, []string{"id", "uuid", "name", "kind", "parent_id", "nesting_level", "is_deleted", "parent_has_access"}); err != nil {
 		tc.logger.Log(benchmark.LogTrace, 0, fmt.Sprintf("error inserting into table %s: %v", TableNameTenants, err))
 		return "", err
@@ -624,8 +625,9 @@ func (tc *TenantsCache) CreateCTIEntity(rw *benchmark.RandomizerWorker, tx db.Da
 
 	cti.GlobalState = 1
 
+	var ctiUUID, _ = guuid.ParseBytes([]byte(cti.UUID))
 	if err = tx.BulkInsert(TableNameCtiEntities, [][]interface{}{
-		{cti.UUID, cti.CTI, cti.Final, cti.GlobalState, cti.EntitySchema, cti.Annotations, cti.Traits, cti.TraitsSchema, cti.TraitsAnnotations},
+		{ctiUUID, cti.CTI, cti.Final, cti.GlobalState, cti.EntitySchema, cti.Annotations, cti.Traits, cti.TraitsSchema, cti.TraitsAnnotations},
 	}, []string{"uuid", "cti", "final", "global_state", "entity_schema", "annotations", "traits", "traits_schema", "traits_annotations"}); err != nil {
 		return fmt.Errorf("error inserting into table %s: %v", TableNameCtiEntities, err)
 	}
