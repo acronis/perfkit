@@ -163,7 +163,7 @@ func (q *openSearchQuerier) search(ctx context.Context, idxName indexName, reque
 	var fields []map[string]interface{}
 	for _, hit := range resp.Hits.Hits {
 		var documentFields = make(map[string]interface{})
-		if err = json.Unmarshal(hit.Source, &documentFields); err != nil {
+		if err = json.Unmarshal(hit.Fields, &documentFields); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal source: %v", err)
 		}
 

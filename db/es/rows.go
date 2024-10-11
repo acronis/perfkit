@@ -60,15 +60,19 @@ func (r *esRows) Scan(dest ...interface{}) error {
 			}
 			*d = strVal
 		case *int64:
-			jsonNumber, ok := val.(json.Number) // based on elasticsearch view
-			if !ok {
-				return fmt.Errorf("%s : not equal type in struct 'json.Number', in map '%T'", esFieldName, val)
+			switch numberType := val.(type) {
+			case json.Number:
+				var err error
+				*d, err = numberType.Int64()
+				if err != nil {
+					return fmt.Errorf("%s : failed to cast jsonNumber to int64 '%T': %v", esFieldName, numberType, err)
+				}
+			case float64:
+				*d = int64(numberType)
+			default:
+				return fmt.Errorf("%s : not equal type, in map '%T'", esFieldName, val)
 			}
-			var err error
-			*d, err = jsonNumber.Int64()
-			if err != nil {
-				return fmt.Errorf("%s : failed to cast jsonNumber to int64 '%T': %v", esFieldName, jsonNumber, err)
-			}
+
 		case *bool:
 			boolVal, ok := val.(bool)
 			if !ok {
