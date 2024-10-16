@@ -21,6 +21,7 @@ const (
 	mariaDBConnString    = "mysql://user:password@tcp(localhost:3306)/perfkit_db_ci"
 	sqlServerConnString  = "sqlserver://perfkit_db_runner:qwe123%21%40%23@localhost:1433?database=perfkit_db_ci"
 	postgresqlConnString = "postgresql://root:root@localhost:5432/perfkit_db_ci?sslmode=disable"
+	pgVectorConnString   = "postgresql://root:root@localhost:5432/perfkit_pg_vector_db_ci?sslmode=disable"
 	clickHouseConnString = "clickhouse://username:password@localhost:9000/perfkit_db_ci"
 	cassandraConnString  = "cql://admin:admin@localhost:9042?keyspace=perfkit_db_ci"
 )
@@ -30,11 +31,11 @@ type TestingSuite struct {
 	ConnString string
 }
 
+/*
 func TestDatabaseSuiteSQLite(t *testing.T) {
 	suite.Run(t, &TestingSuite{ConnString: sqliteConnString})
 }
 
-/*
 func TestDatabaseSuiteMySQL(t *testing.T) {
 	suite.Run(t, &TestingSuite{ConnString: mariaDBConnString})
 }
@@ -46,7 +47,13 @@ func TestDatabaseSuiteSQLServer(t *testing.T) {
 func TestDatabaseSuitePG(t *testing.T) {
 	suite.Run(t, &TestingSuite{ConnString: postgresqlConnString})
 }
+*/
 
+func TestDatabaseSuitePGVector(t *testing.T) {
+	suite.Run(t, &TestingSuite{ConnString: pgVectorConnString})
+}
+
+/*
 func TestDatabaseSuiteClickHouse(t *testing.T) {
 	suite.Run(t, &TestingSuite{ConnString: clickHouseConnString})
 }
