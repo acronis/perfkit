@@ -1,12 +1,7 @@
 package es
 
 import (
-	"bytes"
-	"context"
-	"encoding/json"
 	"fmt"
-
-	es8 "github.com/elastic/go-elasticsearch/v8"
 
 	"github.com/acronis/perfkit/db"
 )
@@ -110,110 +105,26 @@ type componentTemplate struct {
 	Mappings *mappings      `json:"mappings,omitempty"`
 }
 
-func checkPolicyExists(client *es8.Client, policyName string) (bool, error) {
-	var res, err = client.ILM.GetLifecycle(
-		client.ILM.GetLifecycle.WithContext(context.Background()),
-		client.ILM.GetLifecycle.WithPolicy(policyName))
-	if err != nil {
-		return false, fmt.Errorf("error while trying to get lifecycle %s: %v", policyName, err)
-	} else if res.IsError() {
-		if res.StatusCode == 404 {
-			return false, nil
-		}
-		return false, fmt.Errorf("error code [%d] in get lifecycle response: %s", res.StatusCode, res.String())
-	}
+type migrator interface {
+	checkILMPolicyExists(policyName string) (bool, error)
+	initILMPolicy(policyName string, policyDefinition indexLifecycleManagementPolicy) error
+	deleteILMPolicy(policyName string) error
 
-	var b map[string]interface{}
-	if err = json.NewDecoder(res.Body).Decode(&b); err != nil {
-		return false, fmt.Errorf("failed to decode ILM response: %v", err)
-	}
+	initComponentTemplate(templateName string, template componentTemplate) error
+	deleteComponentTemplate(templateName string) error
 
-	if _, ok := b[policyName].(map[string]interface{}); !ok {
-		return false, fmt.Errorf("ILM missing %s", policyName)
-	}
+	initIndexTemplate(templateName string, indexPattern string, components []string) error
+	deleteIndexTemplate(templateName string) error
 
-	return true, nil
+	deleteDataStream(dataStreamName string) error
 }
 
-func indexExists(client *es8.Client, tableName string) (bool, error) {
+func indexExists(mig migrator, tableName string) (bool, error) {
 	var ilmPolicyName = fmt.Sprintf("ilm-data-5gb-%s", tableName)
-	return checkPolicyExists(client, ilmPolicyName)
+	return mig.checkILMPolicyExists(ilmPolicyName)
 }
 
-func initILMPolicy(client *es8.Client, policyName string, policyDefinition indexLifecycleManagementPolicy) error {
-	var query = struct {
-		Policy indexLifecycleManagementPolicy `json:"policy"`
-	}{
-		Policy: policyDefinition,
-	}
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(query); err != nil {
-		return fmt.Errorf("failed to encode policy request: %v", err)
-	}
-
-	if res, err := client.ILM.PutLifecycle(policyName,
-		client.ILM.PutLifecycle.WithContext(context.Background()),
-		client.ILM.PutLifecycle.WithBody(&buf)); err != nil {
-		return fmt.Errorf("error while trying to put lifecycle %s: %v", policyName, err)
-	} else if res.IsError() {
-		return fmt.Errorf("error code [%d] in put lifecycle response: %s", res.StatusCode, res.String())
-	}
-
-	return nil
-}
-
-func initComponentTemplate(client *es8.Client, templateName string, template componentTemplate) error {
-	var query = struct {
-		Template componentTemplate `json:"template"`
-	}{
-		Template: template,
-	}
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(query); err != nil {
-		return fmt.Errorf("failed to encode template request: %v", err)
-	}
-
-	if res, err := client.Cluster.PutComponentTemplate(templateName, &buf,
-		client.Cluster.PutComponentTemplate.WithContext(context.Background())); err != nil {
-		return fmt.Errorf("error while trying to put component template %s: %v", templateName, err)
-	} else if res.IsError() {
-		return fmt.Errorf("error code [%d] in put component template response: %s", res.StatusCode, res.String())
-	}
-
-	return nil
-}
-
-func initIndexTemplate(client *es8.Client, idxTemplateName string, indexPattern string, components []string) error {
-	var initDataStreamQuery = struct {
-		IndexPatters []string `json:"index_patterns"`
-		DataStream   struct{} `json:"data_stream"`
-		ComposedOf   []string `json:"composed_of"`
-		Priority     int      `json:"priority"`
-	}{
-		IndexPatters: []string{indexPattern},
-		DataStream:   struct{}{},
-		ComposedOf:   components,
-		Priority:     500,
-	}
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(initDataStreamQuery); err != nil {
-		return fmt.Errorf("failed to MarshalJSON index template %s body: %v", idxTemplateName, err)
-	}
-
-	if res, err := client.Indices.PutIndexTemplate(idxTemplateName, &buf,
-		client.Indices.PutIndexTemplate.WithContext(context.Background())); err != nil {
-		return fmt.Errorf("error while trying to create index template %s: %v", idxTemplateName, err)
-	} else if res.IsError() {
-		return fmt.Errorf("error code [%d] in create index template response: %s", res.StatusCode, res.String())
-	}
-
-	return nil
-}
-
-func createIndex(client *es8.Client, indexName string, indexDefinition *db.TableDefinition, tableMigrationDDL string) error {
+func createIndex(mig migrator, indexName string, indexDefinition *db.TableDefinition, tableMigrationDDL string) error {
 	if err := createSearchQueryBuilder(indexName, indexDefinition.TableRows); err != nil {
 		return err
 	}
@@ -238,17 +149,17 @@ func createIndex(client *es8.Client, indexName string, indexDefinition *db.Table
 	}
 	var ilmSettingName = fmt.Sprintf("ilm-settings-%s", indexName)
 
-	if exists, err := checkPolicyExists(client, ilmPolicyName); err != nil {
+	if exists, err := mig.checkILMPolicyExists(ilmPolicyName); err != nil {
 		return err
 	} else if exists {
 		return nil
 	}
 
-	if err := initILMPolicy(client, ilmPolicyName, ilmPolicy); err != nil {
+	if err := mig.initILMPolicy(ilmPolicyName, ilmPolicy); err != nil {
 		return err
 	}
 
-	if err := initComponentTemplate(client, ilmSettingName, componentTemplate{
+	if err := mig.initComponentTemplate(ilmSettingName, componentTemplate{
 		Settings: &indexSettings{
 			IndexLifeCycleName: ilmPolicyName,
 		},
@@ -287,7 +198,7 @@ func createIndex(client *es8.Client, indexName string, indexDefinition *db.Table
 		}
 	}
 
-	if err := initComponentTemplate(client, mappingTemplateName, componentTemplate{
+	if err := mig.initComponentTemplate(mappingTemplateName, componentTemplate{
 		Settings: &indexResilienceSettings,
 		Mappings: &mappings{Properties: mp},
 	}); err != nil {
@@ -295,43 +206,31 @@ func createIndex(client *es8.Client, indexName string, indexDefinition *db.Table
 	}
 
 	var indexPattern = fmt.Sprintf("%s*", indexName)
-	if err := initIndexTemplate(client, indexName, indexPattern, []string{ilmSettingName, mappingTemplateName}); err != nil {
+	if err := mig.initIndexTemplate(indexName, indexPattern, []string{ilmSettingName, mappingTemplateName}); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func dropIndex(client *es8.Client, indexName string) error {
+func dropIndex(mig migrator, indexName string) error {
 	var dataStreamName = indexName
-	if res, err := client.Indices.DeleteDataStream([]string{dataStreamName},
-		client.Indices.DeleteDataStream.WithContext(context.Background())); err != nil {
-		return fmt.Errorf("error while trying to delete data stream %s: %v", dataStreamName, err)
-	} else if res.IsError() {
-		if res.StatusCode != 404 {
-			return fmt.Errorf("error code [%d] in delete data stream response: %s", res.StatusCode, res.String())
-		}
+	if err := mig.deleteDataStream(dataStreamName); err != nil {
+		return err
 	}
 
-	if res, err := client.Indices.DeleteIndexTemplate(dataStreamName,
-		client.Indices.DeleteIndexTemplate.WithContext(context.Background())); err != nil {
-		return fmt.Errorf("error while trying to delete index template %s: %v", dataStreamName, err)
-	} else if res.IsError() {
-		return fmt.Errorf("error code [%d] in delete index template response: %s", res.StatusCode, res.String())
+	if err := mig.deleteIndexTemplate(dataStreamName); err != nil {
+		return err
 	}
 
 	var ilmSettingName = fmt.Sprintf("ilm-settings-%s", indexName)
-	if res, err := client.Cluster.DeleteComponentTemplate(ilmSettingName, client.Cluster.DeleteComponentTemplate.WithContext(context.Background())); err != nil {
-		return fmt.Errorf("error while trying to delete ilm settings template %s: %v", ilmSettingName, err)
-	} else if res.IsError() {
-		return fmt.Errorf("error code [%d] in delete ilm settings template response: %s", res.StatusCode, res.String())
+	if err := mig.deleteComponentTemplate(ilmSettingName); err != nil {
+		return err
 	}
 
 	var ilmPolicyName = fmt.Sprintf("ilm-data-5gb-%s", indexName)
-	if res, err := client.ILM.DeleteLifecycle(ilmPolicyName, client.ILM.DeleteLifecycle.WithContext(context.Background())); err != nil {
-		return fmt.Errorf("error while trying to delete policy lifecycle %v: %v", ilmPolicyName, err)
-	} else if res.IsError() {
-		return fmt.Errorf("error code [%d] in ILM Lifecycle Delete response: %s", res.StatusCode, res.String())
+	if err := mig.deleteILMPolicy(ilmPolicyName); err != nil {
+		return err
 	}
 
 	return nil

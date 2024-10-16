@@ -13,6 +13,10 @@ import (
 	"github.com/acronis/perfkit/db/optimize"
 )
 
+const (
+	timeStoreFormatPrecise = time.RFC3339Nano
+)
+
 var indexQueryBuilders = make(map[indexName]searchQueryBuilder)
 
 func createSearchQueryBuilder(idxName string, tableRows []db.TableRow) error {
@@ -839,39 +843,30 @@ func (g *esGateway) Select(idxName string, sc *db.SelectCtrl) (db.Rows, error) {
 		return &db.EmptyRows{}, nil
 	}
 
-	var resp *SearchResponse
 	switch qType {
 	case queryTypeSearch:
-		if resp, err = g.q.search(g.ctx.Ctx, index, query); err != nil {
+		var fields []map[string]interface{}
+		if fields, err = g.q.search(g.ctx.Ctx, index, query); err != nil {
 			return nil, fmt.Errorf("failed to search: %v", err)
 		}
+
+		if len(fields) == 0 {
+			return &db.EmptyRows{}, nil
+		}
+
+		return &esRows{data: fields, requestedColumns: sc.Fields}, nil
 	case queryTypeCount:
 		var countQuery = &CountRequest{
 			Query: query.Query,
 		}
 
-		if resp, err = g.q.count(g.ctx.Ctx, index, countQuery); err != nil {
+		var count int64
+		if count, err = g.q.count(g.ctx.Ctx, index, countQuery); err != nil {
 			return nil, fmt.Errorf("failed to count: %v", err)
 		}
+
+		return &db.CountRows{Count: count}, nil
 	default:
 		return nil, fmt.Errorf("unsupported query type %v", qType)
-	}
-
-	if resp == nil {
-		return &db.EmptyRows{}, nil
-	}
-
-	switch qType {
-	case queryTypeSearch:
-		var fields []map[string]interface{}
-		for _, hit := range resp.Hits.Hits {
-			fields = append(fields, hit.Fields)
-		}
-
-		return &esRows{data: fields, requestedColumns: sc.Fields}, nil
-	case queryTypeCount:
-		return &db.CountRows{Count: resp.Count}, nil
-	default:
-		return &db.EmptyRows{}, nil
 	}
 }

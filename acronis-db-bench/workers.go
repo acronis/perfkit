@@ -33,7 +33,7 @@ func initWorker(b *benchmark.Benchmark, workerID int, testDesc *TestDesc, rowsRe
 			tenantCacheDBOpts.ConnString = b.TestOpts.(*TestOpts).BenchOpts.TenantConnString
 
 			if workerData.tenantsCache, err = NewDBConnector(&tenantCacheDBOpts, workerID, b.Logger, 1); err != nil {
-				return
+				b.Exit("db: cannot create tenants cache connection: %v", err)
 			}
 		}
 

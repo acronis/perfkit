@@ -8,15 +8,13 @@ import (
 
 	"go.uber.org/atomic"
 
-	es8 "github.com/elastic/go-elasticsearch/v8"
-
 	"github.com/acronis/perfkit/db"
 )
 
 type querier interface {
 	insert(ctx context.Context, idxName indexName, query *BulkIndexRequest) (*BulkIndexResult, int, error)
-	search(ctx context.Context, idxName indexName, query *SearchRequest) (*SearchResponse, error)
-	count(ctx context.Context, idxName indexName, query *CountRequest) (*SearchResponse, error)
+	search(ctx context.Context, idxName indexName, query *SearchRequest) ([]map[string]interface{}, error)
+	count(ctx context.Context, idxName indexName, query *CountRequest) (int64, error)
 }
 
 type accessor interface {
@@ -42,8 +40,9 @@ func (s *esSession) Transact(fn func(tx db.DatabaseAccessor) error) error {
 }
 
 type esDatabase struct {
-	rw  accessor
-	raw *es8.Client
+	rw      accessor
+	mig     migrator
+	dialect dialect
 
 	queryLogger db.Logger
 }
@@ -62,7 +61,7 @@ func (d *esDatabase) UseTruncate() bool {
 }
 
 func (d *esDatabase) GetVersion() (db.DialectName, string, error) {
-	return getVersion(d.rw)
+	return getVersion(d.dialect)
 }
 
 func (d *esDatabase) GetInfo(version string) (ret []string, dbInfo *db.Info, err error) {
@@ -74,15 +73,15 @@ func (d *esDatabase) ApplyMigrations(tableName, tableMigrationSQL string) error 
 }
 
 func (d *esDatabase) TableExists(tableName string) (bool, error) {
-	return indexExists(d.raw, tableName)
+	return indexExists(d.mig, tableName)
 }
 
 func (d *esDatabase) CreateTable(tableName string, tableDefinition *db.TableDefinition, tableMigrationDDL string) error {
-	return createIndex(d.raw, tableName, tableDefinition, tableMigrationDDL)
+	return createIndex(d.mig, tableName, tableDefinition, tableMigrationDDL)
 }
 
 func (d *esDatabase) DropTable(name string) error {
-	return dropIndex(d.raw, name)
+	return dropIndex(d.mig, name)
 }
 
 func (d *esDatabase) IndexExists(indexName string, tableName string) (bool, error) {
@@ -176,7 +175,7 @@ func (tq timedQuerier) insert(ctx context.Context, idxName indexName, query *Bul
 	return tq.q.insert(ctx, idxName, query)
 }
 
-func (tq timedQuerier) search(ctx context.Context, idxName indexName, request *SearchRequest) (*SearchResponse, error) {
+func (tq timedQuerier) search(ctx context.Context, idxName indexName, request *SearchRequest) ([]map[string]interface{}, error) {
 	defer accountTime(tq.dbtime, time.Now())
 
 	if tq.queryLogger != nil {
@@ -186,7 +185,7 @@ func (tq timedQuerier) search(ctx context.Context, idxName indexName, request *S
 	return tq.q.search(ctx, idxName, request)
 }
 
-func (tq timedQuerier) count(ctx context.Context, idxName indexName, request *CountRequest) (*SearchResponse, error) {
+func (tq timedQuerier) count(ctx context.Context, idxName indexName, request *CountRequest) (int64, error) {
 	defer accountTime(tq.dbtime, time.Now())
 
 	if tq.queryLogger != nil {
@@ -194,4 +193,8 @@ func (tq timedQuerier) count(ctx context.Context, idxName indexName, request *Co
 	}
 
 	return tq.q.count(ctx, idxName, request)
+}
+
+type dialect interface {
+	name() db.DialectName
 }

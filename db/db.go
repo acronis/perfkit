@@ -19,6 +19,7 @@ const (
 	CLICKHOUSE    DialectName = "clickhouse"    // CLICKHOUSE is the ClickHouse driver name
 	CASSANDRA     DialectName = "cassandra"     // CASSANDRA is the Cassandra driver name
 	ELASTICSEARCH DialectName = "elasticsearch" // ELASTICSEARCH is the Elasticsearch driver name
+	OPENSEARCH    DialectName = "opensearch"    // OPENSEARCH is the OpenSearch driver name
 )
 
 // Special conditions for searching
@@ -359,6 +360,7 @@ func GetDatabases() []DBType {
 	// "A" is used as the latest symbol of the "Cassandra" due to duplicate with ClickHouse "C"
 	ret = append(ret, DBType{Driver: CASSANDRA, Symbol: "A", Name: "Cassandra"})
 	ret = append(ret, DBType{Driver: ELASTICSEARCH, Symbol: "E", Name: "Elasticsearch"})
+	ret = append(ret, DBType{Driver: OPENSEARCH, Symbol: "O", Name: "OpenSearch"})
 
 	return ret
 }
