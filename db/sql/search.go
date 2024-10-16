@@ -149,12 +149,12 @@ func (b selectBuilder) sqlOrder(fields []string, values []string) (string, error
 	}
 
 	for _, v := range values {
-		fnc, field, err := db.ParseFunc(v)
+		fnc, args, err := db.ParseFuncMultipleArgs(v, ";")
 		if err != nil {
 			return "", err
 		}
 
-		if field == "" {
+		if len(args) == 0 {
 			return "", fmt.Errorf("empty order field")
 		}
 
@@ -165,16 +165,42 @@ func (b selectBuilder) sqlOrder(fields []string, values []string) (string, error
 			dir = "ASC"
 		case "desc":
 			dir = "DESC"
+		case "nearest":
+			dir = "NEAREST"
 		case "":
 			return "", fmt.Errorf("empty order function")
 		default:
 			return "", fmt.Errorf("bad order function '%v'", fnc)
 		}
 
+		var orderStatement string
+		if dir == "ASC" || dir == "DESC" {
+			if len(args) != 1 {
+				return "", fmt.Errorf("number of args %d doesn't match number of conditions 1", len(args))
+			}
+
+			orderStatement = fmt.Sprintf("%v.%v %v", b.tableName, args[0], dir)
+		} else if dir == "NEAREST" {
+			if len(args) != 3 {
+				return "", fmt.Errorf("number of args %d doesn't match number of conditions for nearest function, should be 3", len(args))
+			}
+
+			var field = args[0]
+			var operator string
+			switch args[1] {
+			case "L2":
+				operator = "<->"
+			}
+
+			var vector = args[2]
+
+			orderStatement = fmt.Sprintf("%s %s '%s'", field, operator, vector)
+		}
+
 		if result == "" {
-			result = fmt.Sprintf("ORDER BY %v.%v %v", b.tableName, field, dir)
+			result = fmt.Sprintf("ORDER BY %s", orderStatement)
 		} else {
-			result += fmt.Sprintf(", %v.%v %v", b.tableName, field, dir)
+			result += fmt.Sprintf(", %s", orderStatement)
 		}
 	}
 
@@ -328,6 +354,16 @@ func sqlf(d dialect, fmts string, args ...interface{}) string {
 				sb.WriteString(strconv.FormatInt(i, 10))
 			}
 			args[i] = sb.String()
+
+		case []float32:
+			var sb strings.Builder
+			for _, f := range val {
+				if sb.Len() != 0 {
+					sb.WriteByte(',')
+				}
+				sb.WriteString(strconv.FormatFloat(float64(f), 'f', 0, 64))
+			}
+			args[i] = fmt.Sprintf("'[%s]'", sb.String())
 
 		case bool:
 			args[i] = d.encodeBool(val)
