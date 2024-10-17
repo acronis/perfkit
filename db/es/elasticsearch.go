@@ -281,11 +281,11 @@ func (q *esQuerier) insert(ctx context.Context, idxName indexName, query *BulkIn
 		}
 
 		if len(errList) != 0 {
-			return rv, q.expectedSuccesses(idxName), fmt.Errorf("bulk insert error: %v, query: %s", errList, query)
+			return rv, 0, fmt.Errorf("bulk insert error: %v, query: %s", errList, query)
 		}
 	}
 
-	return rv, q.expectedSuccesses(idxName), nil
+	return rv, 0, nil
 }
 
 func (q *esQuerier) search(ctx context.Context, idxName indexName, request *SearchRequest) ([]map[string]interface{}, error) {
