@@ -58,35 +58,54 @@ type indexSettings struct {
 type fieldType string
 
 const (
-	fieldTypeLong     fieldType = "long"
-	fieldTypeKeyword  fieldType = "keyword"
-	fieldTypeBoolean  fieldType = "boolean"
-	fieldTypeDateNano fieldType = "date_nanos"
+	fieldTypeLong        fieldType = "long"
+	fieldTypeKeyword     fieldType = "keyword"
+	fieldTypeBoolean     fieldType = "boolean"
+	fieldTypeDateNano    fieldType = "date_nanos"
+	fieldTypeDenseVector fieldType = "dense_vector"
 )
-
-func convertToEsType(t db.DataType) fieldType {
-	switch t {
-	case db.DataTypeBigIntAutoInc, db.DataTypeId, db.DataTypeInt:
-		return fieldTypeLong
-	case db.DataTypeUUID:
-		return fieldTypeKeyword
-	case db.DataTypeString:
-		return fieldTypeKeyword
-	case db.DataTypeDateTime:
-		return fieldTypeDateNano
-	case db.DataTypeBoolean:
-		return fieldTypeBoolean
-	default:
-		return fieldTypeKeyword
-	}
-}
 
 type fieldSpec struct {
 	Type    fieldType
+	Dims    int
 	Indexed bool
 }
 
+func convertToEsType(t db.TableRow) fieldSpec {
+	var spec = fieldSpec{
+		Indexed: t.Indexed,
+	}
+
+	switch t.Type {
+	case db.DataTypeBigIntAutoInc, db.DataTypeId, db.DataTypeInt:
+		spec.Type = fieldTypeLong
+	case db.DataTypeUUID:
+		spec.Type = fieldTypeKeyword
+	case db.DataTypeString:
+		spec.Type = fieldTypeKeyword
+	case db.DataTypeDateTime:
+		spec.Type = fieldTypeDateNano
+	case db.DataTypeBoolean:
+		spec.Type = fieldTypeBoolean
+	case db.DataTypeVector3Float32:
+		spec.Type = fieldTypeDenseVector
+		spec.Dims = 3
+	default:
+		spec.Type = fieldTypeKeyword
+	}
+
+	return spec
+}
+
 func (s fieldSpec) MarshalJSON() ([]byte, error) {
+	if s.Dims > 0 {
+		if s.Indexed {
+			return []byte(fmt.Sprintf(`{"type":%q, "dims":%d}`, s.Type, s.Dims)), nil
+		}
+
+		return []byte(fmt.Sprintf(`{"type":%q, "dims":%d, "index": false}`, s.Type, s.Dims)), nil
+	}
+
 	if s.Indexed {
 		return []byte(fmt.Sprintf(`{"type":%q}`, s.Type)), nil
 	}
@@ -192,10 +211,7 @@ func createIndex(mig migrator, indexName string, indexDefinition *db.TableDefini
 			continue
 		}
 
-		mp[row.Name] = fieldSpec{
-			Type:    convertToEsType(row.Type),
-			Indexed: row.Indexed,
-		}
+		mp[row.Name] = convertToEsType(row)
 	}
 
 	if err := mig.initComponentTemplate(mappingTemplateName, componentTemplate{
