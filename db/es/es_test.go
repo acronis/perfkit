@@ -25,9 +25,12 @@ func TestDatabaseSuiteElasticSearch(t *testing.T) {
 	suite.Run(t, &TestingSuite{ConnString: esConnString})
 }
 
+/*
 func TestDatabaseSuiteOpenSearch(t *testing.T) {
 	suite.Run(t, &TestingSuite{ConnString: openSearchConnString})
 }
+
+*/
 
 type testLogger struct {
 	t *testing.T

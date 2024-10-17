@@ -1435,7 +1435,7 @@ func TestOrder(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		var actual, err = testQueryBuilder.order(test.values)
+		var actual, _, err = testQueryBuilder.order(test.values)
 		if err != nil {
 			if test.err != nil {
 				assert.Equalf(t, test.err.Error(), err.Error(), "failure in test for values %v", test.values)

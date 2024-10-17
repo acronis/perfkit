@@ -111,6 +111,26 @@ func (r *esRows) Scan(dest ...interface{}) error {
 			if err != nil {
 				return fmt.Errorf("%s : failed to cast string to time.Time '%T': %v", esFieldName, strVal, err)
 			}
+		case *[]float32:
+			var sliceType, ok = val.([]interface{})
+			if !ok {
+				return fmt.Errorf("%s : not equal type in struct '[]float32', in map '%T'", esFieldName, val)
+			}
+
+			for _, valInSlice := range sliceType {
+				switch numberType := valInSlice.(type) {
+				case json.Number:
+					if fl64, err := numberType.Float64(); err != nil {
+						return fmt.Errorf("%s : failed to cast jsonNumber to int64 '%T': %v", esFieldName, numberType, err)
+					} else {
+						*d = append(*d, float32(fl64))
+					}
+				case float64:
+					*d = append(*d, float32(numberType))
+				default:
+					return fmt.Errorf("%s : not equal type, in map '%T'", esFieldName, val)
+				}
+			}
 		default:
 			return fmt.Errorf("unsupported type to convert (type=%T)", d)
 		}
