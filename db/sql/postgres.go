@@ -112,6 +112,8 @@ func (d *pgDialect) getType(id db.DataType) string {
 		return "null"
 	case db.DataTypeTenantUUIDBoundID:
 		return "VARCHAR(64)"
+	case db.DataTypeVector3Float32: // For pgvector
+		return "vector(3)"
 	default:
 		return ""
 	}

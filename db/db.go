@@ -325,6 +325,7 @@ const (
 	DataTypeNotNull           DataType = "{$notnull}"
 	DataTypeNull              DataType = "{$null}"
 	DataTypeTenantUUIDBoundID DataType = "{$tenant_uuid_bound_id}"
+	DataTypeVector3Float32    DataType = "{$vector_3_float32}"
 )
 
 // Dialect is an interface for database dialects
