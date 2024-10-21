@@ -58,8 +58,8 @@ Incorporate tests for any new features.
 Craft a [good commit message][commit-message].
 Ensure that your changes are backward-compatible.
 
-[fork]: https://github.com/acronis/acronis-perflib/fork
+[fork]: https://github.com/acronis/perfkit/fork
 
-[open-issue]: https://github.com/acronis/acronis-perflib/issues/new
+[open-issue]: https://github.com/acronis/perfkit/issues/new
 
 [commit-message]: http://tbaggery.com/2008/04/19/a-note-about-git-commit-messages.html
