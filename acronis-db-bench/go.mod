@@ -39,6 +39,7 @@ require (
 	github.com/jessevdk/go-flags v1.5.0 // indirect
 	github.com/klauspost/compress v1.17.7 // indirect
 	github.com/mattn/go-sqlite3 v1.14.22 // indirect
+	github.com/opensearch-project/opensearch-go/v4 v4.2.0 // indirect
 	github.com/paulmach/orb v0.11.1 // indirect
 	github.com/pierrec/lz4/v4 v4.1.21 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
