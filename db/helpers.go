@@ -113,6 +113,7 @@ func DefaultCreateQueryPatchFunc(table string, query string, dialect Dialect) (s
 	query = strings.ReplaceAll(query, "{table}", table)
 
 	for _, logicalType := range []DataType{
+		DataTypeBigInt,
 		DataTypeBigIntAutoIncPK,
 		DataTypeBigIntAutoInc,
 		DataTypeAscii,

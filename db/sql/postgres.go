@@ -66,6 +66,8 @@ func (d *pgDialect) getType(id db.DataType) string {
 		return "VARCHAR"
 	case db.DataTypeString256:
 		return "VARCHAR(256)"
+	case db.DataTypeBigInt:
+		return "BIGINT"
 	case db.DataTypeBigIntAutoIncPK:
 		return "BIGSERIAL PRIMARY KEY"
 	case db.DataTypeBigIntAutoInc:

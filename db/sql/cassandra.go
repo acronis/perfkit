@@ -62,6 +62,8 @@ func (d *cassandraDialect) getType(dataType db.DataType) string {
 		return "VARCHAR"
 	case db.DataTypeString256:
 		return "VARCHAR(256)"
+	case db.DataTypeBigInt:
+		return "bigint"
 	case db.DataTypeBigIntAutoIncPK:
 		return "bigint PRIMARY KEY" // Cassandra does not support auto-increment, bigint is closest
 	case db.DataTypeBigIntAutoInc:

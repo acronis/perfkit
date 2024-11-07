@@ -7,7 +7,7 @@ import (
 	"math"
 	"strconv"
 	"strings"
-	
+
 	"github.com/google/uuid"
 
 	"github.com/go-sql-driver/mysql" // mysql driver
@@ -91,6 +91,8 @@ func (d *mysqlDialect) getType(id db.DataType) string {
 		return "VARCHAR"
 	case db.DataTypeString256:
 		return "VARCHAR(256)"
+	case db.DataTypeBigInt:
+		return "BIGINT"
 	case db.DataTypeBigIntAutoIncPK:
 		return "BIGINT AUTO_INCREMENT PRIMARY KEY"
 	case db.DataTypeBigIntAutoInc:
