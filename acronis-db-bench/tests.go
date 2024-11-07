@@ -879,12 +879,14 @@ func insertMultiValueDataWorker(b *benchmark.Benchmark, c *DBConnector, testDesc
 	colConfs := testDesc.table.GetColumnsForInsert(db.WithAutoInc(c.database.DialectName()))
 	workerID := c.WorkerID
 
-	columns, _ := b.GenFakeData(workerID, colConfs, db.WithAutoInc(c.database.DialectName()))
-
+	var columns []string
 	var values [][]interface{}
 	for i := 0; i < batch; i++ {
-		_, vals := b.GenFakeData(workerID, colConfs, db.WithAutoInc(c.database.DialectName()))
+		var genColumns, vals = b.GenFakeData(workerID, colConfs, db.WithAutoInc(c.database.DialectName()))
 		values = append(values, vals)
+		if i == 0 {
+			columns = genColumns
+		}
 	}
 
 	var session = c.database.Session(c.database.Context(context.Background()))
