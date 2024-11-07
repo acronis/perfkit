@@ -361,7 +361,7 @@ func sqlf(d dialect, fmts string, args ...interface{}) string {
 				if sb.Len() != 0 {
 					sb.WriteByte(',')
 				}
-				sb.WriteString(strconv.FormatFloat(float64(f), 'f', 0, 64))
+				sb.WriteString(strconv.FormatFloat(float64(f), 'f', -1, 64))
 			}
 			args[i] = fmt.Sprintf("'[%s]'", sb.String())
 
