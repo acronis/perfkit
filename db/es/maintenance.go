@@ -90,6 +90,9 @@ func convertToEsType(t db.TableRow) fieldSpec {
 	case db.DataTypeVector3Float32:
 		spec.Type = fieldTypeDenseVector
 		spec.Dims = 3
+	case db.DataTypeVector768Float32:
+		spec.Type = fieldTypeDenseVector
+		spec.Dims = 768
 	default:
 		spec.Type = fieldTypeKeyword
 	}

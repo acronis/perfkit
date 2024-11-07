@@ -136,6 +136,7 @@ func DefaultCreateQueryPatchFunc(table string, query string, dialect Dialect) (s
 		DataTypeNotNull,
 		DataTypeNull,
 		DataTypeVector3Float32,
+		DataTypeVector768Float32,
 		DataTypeEngine,
 	} {
 		var specificType = dialect.GetType(logicalType)

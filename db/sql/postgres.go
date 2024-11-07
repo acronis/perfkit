@@ -114,6 +114,8 @@ func (d *pgDialect) getType(id db.DataType) string {
 		return "VARCHAR(64)"
 	case db.DataTypeVector3Float32: // For pgvector
 		return "vector(3)"
+	case db.DataTypeVector768Float32: // For pgvector
+		return "vector(768)"
 	default:
 		return ""
 	}
