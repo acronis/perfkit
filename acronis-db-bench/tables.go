@@ -470,6 +470,33 @@ var TestTableHeavy = TestTable{
 	},
 }
 
+// TestTableVector768 is table to store 768-dimensions vector objects
+var TestTableVector768 = TestTable{
+	TableName: "acronis_db_bench_vector_768",
+	columns: [][]interface{}{
+		{"id", "dataset.id"},
+		{"embedding", "dataset.emb.list.item"},
+	},
+	TableDefinition: func(dialect db.DialectName) *db.TableDefinition {
+		var tableRows []db.TableRow
+
+		tableRows = append(tableRows,
+			db.TableRow{Name: "id", Type: db.DataTypeBigInt, Indexed: true},
+			db.TableRow{Name: "embedding", Type: db.DataTypeVector768Float32, Indexed: true},
+		)
+
+		var tableDef = &db.TableDefinition{
+			TableRows: tableRows,
+		}
+
+		if dialect == db.ELASTICSEARCH {
+			tableDef.Resilience.NumberOfReplicas = 2
+		}
+
+		return tableDef
+	},
+}
+
 // TestTableBlob is table to store blobs
 var TestTableBlob = TestTable{
 	TableName: "acronis_db_bench_blob",
@@ -975,6 +1002,7 @@ var TestTables = map[string]TestTable{
 	"acronis_db_bench_light":                     TestTableLight,
 	"acronis_db_bench_medium":                    TestTableMedium,
 	"acronis_db_bench_heavy":                     TestTableHeavy,
+	"acronis_db_bench_vector_768":                TestTableVector768,
 	"acronis_db_bench_blob":                      TestTableBlob,
 	"acronis_db_bench_largeobj":                  TestTableLargeObj,
 	"acronis_db_bench_json":                      TestTableJSON,

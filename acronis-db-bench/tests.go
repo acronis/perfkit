@@ -1264,6 +1264,20 @@ var TestInsertHeavyDBR = TestDesc{
 	},
 }
 
+// TestInsertVector768MultiValue inserts rows into the 'heavy' table using golang DB query builder
+var TestInsertVector768MultiValue = TestDesc{
+	name:        "insert-vector-768-multivalue",
+	metric:      "rows/sec",
+	description: "insert a 768-dim vectors with ids into the 'vector' table by batches",
+	category:    TestInsert,
+	isReadonly:  false,
+	databases:   RELATIONAL,
+	table:       TestTableVector768,
+	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
+		testGeneric(b, testDesc, insertMultiValueDataWorker, 0)
+	},
+}
+
 // TestInsertJSON inserts a row into a table with JSON(b) column
 var TestInsertJSON = TestDesc{
 	name:        "insert-json",
@@ -2124,6 +2138,7 @@ func GetTests() ([]*TestGroup, map[string]*TestDesc) {
 	tg.add(&TestCopyHeavy)
 	tg.add(&TestUpdateMedium)
 	tg.add(&TestUpdateHeavy)
+	tg.add(&TestInsertVector768MultiValue)
 	tg.add(&TestSelectOne)
 	tg.add(&TestSelectMediumLast)
 	tg.add(&TestSelectMediumRand)
