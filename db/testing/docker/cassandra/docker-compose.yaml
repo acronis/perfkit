@@ -11,7 +11,7 @@ services:
     image: cassandra:4.0
     environment:
       - CASSANDRA_USER=admin
-      - CASSANDRA_PASSWORD=admin
+      - CASSANDRA_PASSWORD=password # example value of a secret
     volumes:
       - cassandra-data:/var/lib/cassandra
     logging: *logging

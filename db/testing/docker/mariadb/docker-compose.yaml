@@ -10,10 +10,10 @@ services:
   mariadb:
     image: mariadb:10.11
     environment:
-      MYSQL_ROOT_PASSWORD: root
+      MYSQL_ROOT_PASSWORD: password # example value of a secret
       MYSQL_DATABASE: perfkit_db_ci
       MYSQL_USER: user
-      MYSQL_PASSWORD: password
+      MYSQL_PASSWORD: password # example value of a secret
     logging: *logging
     ports:
       - "3306:3306"

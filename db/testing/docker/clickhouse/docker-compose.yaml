@@ -13,7 +13,7 @@ services:
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
       CLICKHOUSE_DB: perfkit_db_ci
       CLICKHOUSE_USER: username
-      CLICKHOUSE_PASSWORD: password
+      CLICKHOUSE_PASSWORD: password # example value of a secret
     logging: *logging
     ports:
       - "8123:8123"

@@ -39,4 +39,4 @@ spec:
         - name: POSTGRES_USER
           value: "test"
         - name: POSTGRES_PASSWORD
-          value: "test"
+          value: "password" # example value of a secret

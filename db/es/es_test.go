@@ -13,7 +13,7 @@ import (
 
 const (
 	esConnString         = "es://0.0.0.0:9200"
-	openSearchConnString = "opensearch://admin:%22ScoRpi0n$%22@0.0.0.0:9200"
+	openSearchConnString = "opensearch://admin:%22ScoRpi0n$%22@0.0.0.0:9200" // example value of a secret compliant with OpenSearch password requirements
 )
 
 type TestingSuite struct {

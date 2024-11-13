@@ -18,7 +18,7 @@ type CLI struct {
 	PostgresHost     string `long:"postgres-host" description:"sets host URL for postgres connection" default:"localhost"`
 	MysqlHost        string `long:"mysql-host" description:"sets host URL for mysql connection" default:"localhost"`
 	DatabaseUser     string `long:"db-user" description:"sets user for database connection" default:"test"`
-	DatabasePassword string `long:"db-password" description:"sets password for database connection" default:"test"`
+	DatabasePassword string `long:"db-password" description:"sets password for database connection" default:"password"` // example value of a secret
 	Host             string `short:"h" long:"host" description:"listen to this host" default:""`
 	Port             int    `short:"p" long:"port" description:"listen to this port" default:"8080"`
 	NumberInChain    int    `long:"number-in-chain" description:"number of server in topology" default:"0"`
