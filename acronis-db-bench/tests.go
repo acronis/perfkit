@@ -287,7 +287,7 @@ var TestSelectMediumLast = TestDesc{
 	databases:   ALL,
 	table:       TestTableMedium,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
-		var orderBy = func(b *benchmark.Benchmark) []string { return []string{"desc(id)"} } //nolint:revive
+		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { return []string{"desc(id)"} } //nolint:revive
 		testSelect(b, testDesc, nil, []string{"id"}, nil, orderBy, 1)
 	},
 }
@@ -303,7 +303,7 @@ var TestSelectMediumLastDBR = TestDesc{
 	databases:   RELATIONAL,
 	table:       TestTableMedium,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
-		var orderBy = func(b *benchmark.Benchmark) []string { return []string{"desc(id)"} } //nolint:revive
+		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { return []string{"desc(id)"} } //nolint:revive
 		testSelect(b, testDesc, nil, []string{"id"}, nil, orderBy, 1)
 	},
 }
@@ -325,7 +325,7 @@ var TestSelectMediumRand = TestDesc{
 			return map[string][]string{"id": {fmt.Sprintf("ge(%d)", id)}}
 		}
 
-		var orderBy = func(b *benchmark.Benchmark) []string { //nolint:revive
+		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { //nolint:revive
 			return []string{"asc(id)"}
 		}
 
@@ -350,7 +350,7 @@ var TestSelectMediumRandDBR = TestDesc{
 			return map[string][]string{"id": {fmt.Sprintf("gt(%d)", id)}}
 		}
 
-		var orderBy = func(b *benchmark.Benchmark) []string { //nolint:revive
+		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { //nolint:revive
 			return []string{"asc(id)"}
 		}
 		testSelect(b, testDesc, nil, []string{"id"}, where, orderBy, 1)
@@ -368,7 +368,7 @@ var TestSelectHeavyLast = TestDesc{
 	databases:   RELATIONAL,
 	table:       TestTableHeavy,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
-		var orderBy = func(b *benchmark.Benchmark) []string { return []string{"desc(id)"} } //nolint:revive
+		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { return []string{"desc(id)"} } //nolint:revive
 
 		testSelect(b, testDesc, nil, []string{"id"}, nil, orderBy, 1)
 	},
@@ -385,7 +385,7 @@ var TestSelectHeavyLastDBR = TestDesc{
 	databases:   RELATIONAL,
 	table:       TestTableHeavy,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
-		var orderBy = func(b *benchmark.Benchmark) []string { return []string{"desc(id)"} } //nolint:revive
+		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { return []string{"desc(id)"} } //nolint:revive
 		testSelect(b, testDesc, nil, []string{"id"}, nil, orderBy, 1)
 	},
 }
@@ -407,7 +407,7 @@ var TestSelectHeavyRand = TestDesc{
 			return map[string][]string{"id": {fmt.Sprintf("gt(%d)", id)}}
 		}
 
-		var orderBy = func(b *benchmark.Benchmark) []string { //nolint:revive
+		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { //nolint:revive
 			return []string{"asc(id)"}
 		}
 		testSelect(b, testDesc, nil, []string{"id"}, where, orderBy, 1)
@@ -431,7 +431,7 @@ var TestSelectHeavyRandDBR = TestDesc{
 			return map[string][]string{"id": {fmt.Sprintf("gt(%d)", id)}}
 		}
 
-		var orderBy = func(b *benchmark.Benchmark) []string { //nolint:revive
+		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { //nolint:revive
 			return []string{"asc(id)"}
 		}
 		testSelect(b, testDesc, nil, []string{"id"}, where, orderBy, 1)
@@ -460,7 +460,7 @@ var TestSelectHeavyRandTenantLike = TestDesc{
 			}
 		}
 
-		var orderBy = func(b *benchmark.Benchmark) []string { //nolint:revive
+		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { //nolint:revive
 			return []string{"desc(id)"}
 		}
 		testSelect(b, testDesc, nil, []string{"id"}, where, orderBy, 1)
@@ -574,7 +574,7 @@ var TestSelectHeavyRandCustomerRecent = TestDesc{
 			}
 		}
 
-		var orderBy = func(b *benchmark.Benchmark) []string { //nolint:revive
+		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { //nolint:revive
 			return []string{"desc(enqueue_time)"}
 		}
 
@@ -607,7 +607,7 @@ var TestSelectHeavyRandCustomerRecentLike = TestDesc{
 			}
 		}
 
-		var orderBy = func(b *benchmark.Benchmark) []string { //nolint:revive
+		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { //nolint:revive
 			return []string{"desc(enqueue_time)"}
 		}
 
@@ -645,7 +645,7 @@ var TestSelectHeavyRandCustomerUpdateTimePage = TestDesc{
 			}
 		}
 
-		var orderBy = func(b *benchmark.Benchmark) []string { //nolint:revive
+		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { //nolint:revive
 			return []string{"asc(update_time)"}
 		}
 
@@ -699,7 +699,7 @@ var TestSelectHeavyRandPartnerRecent = TestDesc{
 			}
 		}
 
-		var orderBy = func(b *benchmark.Benchmark) []string { //nolint:revive
+		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { //nolint:revive
 			return []string{"desc(enqueue_time)"}
 		}
 
@@ -741,7 +741,7 @@ var TestSelectHeavyRandPartnerStartUpdateTimePage = TestDesc{
 			}
 		}
 
-		var orderBy = func(b *benchmark.Benchmark) []string { //nolint:revive
+		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { //nolint:revive
 			return []string{"asc(update_time)"}
 		}
 
@@ -1343,7 +1343,7 @@ var TestSelectJSONByIndexedValue = TestDesc{
 			return selector
 		}
 
-		var orderBy = func(b *benchmark.Benchmark) []string { //nolint:revive
+		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { //nolint:revive
 			return []string{"asc(id)"}
 		}
 
@@ -1386,7 +1386,7 @@ var TestSearchJSONByIndexedValue = TestDesc{
 			return selector
 		}
 
-		var orderBy = func(b *benchmark.Benchmark) []string { //nolint:revive
+		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { //nolint:revive
 			return []string{"asc(id)"}
 		}
 		testSelect(b, testDesc, nil, []string{"id"}, where, orderBy, 1)
@@ -1428,7 +1428,7 @@ var TestSelectJSONByNonIndexedValue = TestDesc{
 			return selector
 		}
 
-		var orderBy = func(b *benchmark.Benchmark) []string { //nolint:revive
+		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { //nolint:revive
 			return []string{"asc(id)"}
 		}
 
@@ -1471,7 +1471,7 @@ var TestSearchJSONByNonIndexedValue = TestDesc{
 			return selector
 		}
 
-		var orderBy = func(b *benchmark.Benchmark) []string { //nolint:revive
+		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { //nolint:revive
 			return []string{"asc(id)"}
 		}
 
@@ -1709,7 +1709,7 @@ var TestSelectTimeSeriesSQL = TestDesc{
 			}
 		}
 
-		var orderBy = func(b *benchmark.Benchmark) []string { //nolint:revive
+		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { //nolint:revive
 			return []string{"desc(id)"}
 		}
 
@@ -1755,7 +1755,7 @@ var TestSelectAdvmTasksLast = TestDesc{
 			}
 		}
 
-		var orderBy = func(b *benchmark.Benchmark) []string { //nolint:revive
+		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { //nolint:revive
 			return []string{"asc(id)"}
 		}
 		testSelect(b, testDesc, nil, []string{"id"}, where, orderBy, 1)
