@@ -221,5 +221,16 @@ func (p *DataSetSourcePlugin) GenFakeValue(columnType string, rw *benchmark.Rand
 		return false, nil
 	}
 
+	if columnType == "dataset.Date" {
+		if valueStr, casted := value.(string); casted {
+			var date, err = db.ParseTimeUTC(valueStr)
+			if err != nil {
+				return false, nil
+			}
+
+			return true, date
+		}
+	}
+
 	return true, value
 }
