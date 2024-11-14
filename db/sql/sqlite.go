@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -50,6 +51,12 @@ func (d *sqliteDialect) encodeBytes(bs []byte) string {
 	// borrowed from dbr
 	// https://www.sqlite.org/lang_expr.html
 	return fmt.Sprintf(`X'%x'`, bs)
+}
+
+func (d *sqliteDialect) encodeTime(timestamp time.Time) string {
+	// borrowed from dbr
+	// https://www.sqlite.org/lang_datefunc.html
+	return `'` + timestamp.UTC().Format(time.RFC3339Nano) + `'`
 }
 
 // GetType returns SQLite-specific types

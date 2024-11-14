@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -45,6 +46,10 @@ func (d *msDialect) encodeBool(b bool) string {
 
 func (d *msDialect) encodeBytes(bs []byte) string {
 	return fmt.Sprintf("0x%x", bs)
+}
+
+func (d *msDialect) encodeTime(timestamp time.Time) string {
+	return `'` + timestamp.UTC().Format(time.RFC3339Nano) + `'`
 }
 
 // GetType returns SQL Server-specific types

@@ -367,6 +367,9 @@ func sqlf(d dialect, fmts string, args ...interface{}) string {
 
 		case bool:
 			args[i] = d.encodeBool(val)
+
+		case time.Time:
+			args[i] = d.encodeTime(val)
 		}
 	}
 

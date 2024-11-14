@@ -8,6 +8,7 @@ import (
 	"math"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -55,6 +56,10 @@ func (d *pgDialect) encodeBool(b bool) string {
 func (d *pgDialect) encodeBytes(bs []byte) string {
 	// borrowed from dbr, using string for json fields
 	return d.encodeString(string(bs))
+}
+
+func (d *pgDialect) encodeTime(timestamp time.Time) string {
+	return `'` + timestamp.UTC().Format(time.RFC3339Nano) + `'`
 }
 
 // GetType returns PostgreSQL-specific types

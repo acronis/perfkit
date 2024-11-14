@@ -7,6 +7,7 @@ import (
 	"math"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -80,6 +81,10 @@ func (d *mysqlDialect) encodeBool(b bool) string {
 func (d *mysqlDialect) encodeBytes(bs []byte) string {
 	// borrowed from dbr
 	return fmt.Sprintf(`0x%x`, bs)
+}
+
+func (d *mysqlDialect) encodeTime(timestamp time.Time) string {
+	return fmt.Sprintf("'%s'", timestamp.UTC().Format(time.RFC3339Nano))
 }
 
 // GetType returns MySQL-specific types

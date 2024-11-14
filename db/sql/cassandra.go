@@ -53,6 +53,10 @@ func (d *cassandraDialect) encodeBytes(bs []byte) string {
 	return d.encodeString(string(bs))
 }
 
+func (d *cassandraDialect) encodeTime(timestamp time.Time) string {
+	return `'` + timestamp.UTC().Format(time.RFC3339Nano) + `'`
+}
+
 // GetType returns Cassandra-specific types
 func (d *cassandraDialect) getType(dataType db.DataType) string {
 	switch dataType {

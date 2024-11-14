@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -46,6 +47,10 @@ func (d *clickHouseDialect) encodeBool(b bool) string {
 func (d *clickHouseDialect) encodeBytes(bs []byte) string {
 	// borrowed from dbr, using string for json fields
 	return d.encodeString(string(bs))
+}
+
+func (d *clickHouseDialect) encodeTime(timestamp time.Time) string {
+	return `'` + timestamp.UTC().Format(time.RFC3339Nano) + `'`
 }
 
 // GetType returns ClickHouse-specific types
