@@ -1278,6 +1278,31 @@ var TestInsertVector768MultiValue = TestDesc{
 	},
 }
 
+// TestSelectVector768NearestL2 selects k nearest vectors by L2 from the 'vector' table to the given vector
+var TestSelectVector768NearestL2 = TestDesc{
+	name:        "select-vector-768-nearest-l2",
+	metric:      "rows/sec",
+	description: "selects k nearest vectors from the 'vector' table to the given vector",
+	category:    TestSelect,
+	isReadonly:  false,
+	databases:   RELATIONAL,
+	table:       TestTableVector768,
+	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
+		var colConfs = []benchmark.DBFakeColumnConf{
+			{ColumnName: "id", ColumnType: "dataset.id"},
+			{ColumnName: "embedding", ColumnType: "dataset.emb.list.item"},
+		}
+
+		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { //nolint:revive
+			var _, vals = b.GenFakeData(workerId, &colConfs, false)
+			var vec = "[" + strings.Trim(strings.Replace(fmt.Sprint(vals[1]), " ", ", ", -1), "[]") + "]"
+			return []string{fmt.Sprintf("nearest(embedding;L2;%s)", vec)}
+		}
+
+		testSelect(b, testDesc, nil, []string{"id", "embedding"}, nil, orderBy, 1)
+	},
+}
+
 // TestInsertJSON inserts a row into a table with JSON(b) column
 var TestInsertJSON = TestDesc{
 	name:        "insert-json",
@@ -2139,6 +2164,7 @@ func GetTests() ([]*TestGroup, map[string]*TestDesc) {
 	tg.add(&TestUpdateMedium)
 	tg.add(&TestUpdateHeavy)
 	tg.add(&TestInsertVector768MultiValue)
+	tg.add(&TestSelectVector768NearestL2)
 	tg.add(&TestSelectOne)
 	tg.add(&TestSelectMediumLast)
 	tg.add(&TestSelectMediumRand)
