@@ -1303,6 +1303,46 @@ var TestSelectVector768NearestL2 = TestDesc{
 	},
 }
 
+// TestInsertEmailSecurityMultiValue inserts email security data into the 'email_security' table
+var TestInsertEmailSecurityMultiValue = TestDesc{
+	name:        "insert-email-security-multivalue",
+	metric:      "rows/sec",
+	description: "insert a email security data into the 'email_security' table by batches",
+	category:    TestInsert,
+	isReadonly:  false,
+	databases:   ALL,
+	table:       TestTableEmailSecurity,
+	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
+		testGeneric(b, testDesc, insertMultiValueDataWorker, 0)
+	},
+}
+
+// TestSelectEmailByEmbeddingNearestL2 selects k nearest vectors by L2 from the 'email_security' table to the given vector
+var TestSelectEmailByEmbeddingNearestL2 = TestDesc{
+	name:        "select-email-security-768-nearest-l2",
+	metric:      "rows/sec",
+	description: "selects k nearest emails from the 'email_security' table to the given vector",
+	category:    TestSelect,
+	isReadonly:  false,
+	databases:   ALL,
+	table:       TestTableEmailSecurity,
+	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
+		var colConfs = []benchmark.DBFakeColumnConf{
+			{ColumnName: "id", ColumnType: "dataset.id"},
+			// {ColumnName: "body", ColumnType: "dataset.Body"},
+			{ColumnName: "embedding", ColumnType: "dataset.Embedding.list.element"},
+		}
+
+		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { //nolint:revive
+			var _, vals = b.GenFakeData(workerId, &colConfs, false)
+			var vec = "[" + strings.Trim(strings.Replace(fmt.Sprint(vals[1]), " ", ", ", -1), "[]") + "]"
+			return []string{fmt.Sprintf("nearest(embedding;L2;%s)", vec)}
+		}
+
+		testSelect(b, testDesc, nil, []string{"body", "embedding"}, nil, orderBy, 1)
+	},
+}
+
 // TestInsertJSON inserts a row into a table with JSON(b) column
 var TestInsertJSON = TestDesc{
 	name:        "insert-json",
@@ -2165,6 +2205,8 @@ func GetTests() ([]*TestGroup, map[string]*TestDesc) {
 	tg.add(&TestUpdateHeavy)
 	tg.add(&TestInsertVector768MultiValue)
 	tg.add(&TestSelectVector768NearestL2)
+	tg.add(&TestInsertEmailSecurityMultiValue)
+	tg.add(&TestSelectEmailByEmbeddingNearestL2)
 	tg.add(&TestSelectOne)
 	tg.add(&TestSelectMediumLast)
 	tg.add(&TestSelectMediumRand)
