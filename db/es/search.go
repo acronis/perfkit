@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -785,6 +786,7 @@ func (b searchQueryBuilder) order(sortFields []string) ([]map[string]json.RawMes
 			var vector []float64
 			for _, v := range rawVector {
 				var f float64
+				v = strings.TrimSpace(v) // Removes any leading/trailing whitespace
 				f, err = strconv.ParseFloat(v, 64)
 				if err != nil {
 					return nil, nil, fmt.Errorf("failed to parse vector value: %v", err)
