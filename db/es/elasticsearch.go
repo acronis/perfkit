@@ -346,6 +346,9 @@ func (q *esQuerier) count(ctx context.Context, idxName indexName, request *Count
 	defer res.Body.Close()
 
 	if res.IsError() {
+		if res.StatusCode == 404 {
+			return 0, nil
+		}
 		return 0, fmt.Errorf("failed to perform count: %s", res.String())
 	}
 
