@@ -62,6 +62,8 @@ func (d *clickHouseDialect) getType(id db.DataType) string {
 		return "String"
 	case db.DataTypeString256:
 		return "String"
+	case db.DataTypeText:
+		return "String"
 	case db.DataTypeBigInt:
 		return "UInt64"
 	case db.DataTypeBigIntAutoIncPK:

@@ -60,6 +60,7 @@ type fieldType string
 const (
 	fieldTypeLong        fieldType = "long"
 	fieldTypeKeyword     fieldType = "keyword"
+	fieldTypeText        fieldType = "text"
 	fieldTypeBoolean     fieldType = "boolean"
 	fieldTypeDateNano    fieldType = "date_nanos"
 	fieldTypeDenseVector fieldType = "dense_vector"
@@ -83,6 +84,8 @@ func convertToEsType(t db.TableRow) fieldSpec {
 		spec.Type = fieldTypeKeyword
 	case db.DataTypeString:
 		spec.Type = fieldTypeKeyword
+	case db.DataTypeText:
+		spec.Type = fieldTypeText
 	case db.DataTypeDateTime:
 		spec.Type = fieldTypeDateNano
 	case db.DataTypeBoolean:

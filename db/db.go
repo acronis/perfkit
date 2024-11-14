@@ -302,6 +302,7 @@ const (
 	DataTypeInt               DataType = "{$int}"
 	DataTypeString            DataType = "{$string}"
 	DataTypeString256         DataType = "{$string256}"
+	DataTypeText              DataType = "{$text}"
 	DataTypeBigInt            DataType = "{$bigint}"
 	DataTypeBigIntAutoIncPK   DataType = "{$bigint_autoinc_pk}"
 	DataTypeBigIntAutoInc     DataType = "{$bigint_autoinc}"

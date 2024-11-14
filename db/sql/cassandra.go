@@ -66,6 +66,8 @@ func (d *cassandraDialect) getType(dataType db.DataType) string {
 		return "VARCHAR"
 	case db.DataTypeString256:
 		return "VARCHAR(256)"
+	case db.DataTypeText:
+		return "VARCHAR"
 	case db.DataTypeBigInt:
 		return "bigint"
 	case db.DataTypeBigIntAutoIncPK:
