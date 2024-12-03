@@ -21,9 +21,9 @@ const (
 	mariaDBConnString    = "mysql://user:password@tcp(localhost:3306)/perfkit_db_ci"                             // example value of a secret
 	sqlServerConnString  = "sqlserver://perfkit_db_runner:MyP%40ssw0rd123@localhost:1433?database=perfkit_db_ci" // example value of a secret
 	postgresqlConnString = "postgresql://root:password@localhost:5432/perfkit_db_ci?sslmode=disable"             // example value of a secret
-	pgVectorConnString   = "postgresql://root:root@localhost:5432/perfkit_pg_vector_db_ci?sslmode=disable"
-	clickHouseConnString = "clickhouse://username:password@localhost:9000/perfkit_db_ci" // example value of a secret
-	cassandraConnString  = "cql://admin:password@localhost:9042?keyspace=perfkit_db_ci"  // example value of a secret
+	pgVectorConnString   = "postgresql://root:password@localhost:5432/perfkit_pg_vector_db_ci?sslmode=disable"   // example value of a secret
+	clickHouseConnString = "clickhouse://username:password@localhost:9000/perfkit_db_ci"                         // example value of a secret
+	cassandraConnString  = "cql://admin:password@localhost:9042?keyspace=perfkit_db_ci"                          // example value of a secret
 )
 
 type TestingSuite struct {
@@ -181,9 +181,9 @@ func dbDialect(connString string) (dialect, error) {
 
 func TestSanitizeConn(t *testing.T) {
 	require.Equal(t, "", sanitizeConn(""))
-	require.Equal(t, "mysql://tcp:3306/perfkit_ci", sanitizeConn("mysql://root:password@tcp:3306/perfkit_ci"))                                                     // example value of a secret
-	require.Equal(t, "root:password@tcp:3306/perfkit_ci", sanitizeConn("root:password@tcp:3306/perfkit_ci"))                                                       // example value of a secret
-	require.Equal(t, "postgresql://postgres:5432/perfkit_ci?sslmode=disable", sanitizeConn("postgresql://root:password@postgres:5432/perfkit_ci?sslmode=disable")) // example value of a secret
+	require.Equal(t, "mysql://tcp:3306/perfkit_ci", sanitizeConn("mysql://root:root@tcp:3306/perfkit_ci"))
+	require.Equal(t, "root:root@tcp:3306/perfkit_ci", sanitizeConn("root:root@tcp:3306/perfkit_ci"))
+	require.Equal(t, "postgresql://postgres:5432/perfkit_ci?sslmode=disable", sanitizeConn("postgresql://root:root@postgres:5432/perfkit_ci?sslmode=disable"))
 	require.Equal(t, "sqlite://:memory:", sanitizeConn("sqlite://:memory:"))
 	require.Equal(t, "some_random@string", sanitizeConn("some_random@string"))
 }
