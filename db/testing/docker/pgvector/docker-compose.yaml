@@ -11,7 +11,7 @@ services:
     image: ankane/pgvector:v0.5.1
     environment:
       POSTGRES_USER: root
-      POSTGRES_PASSWORD: root
+      POSTGRES_PASSWORD: password # example value of a secret
       POSTGRES_DB: perfkit_pg_vector_db_ci
     logging: *logging
     ports:
