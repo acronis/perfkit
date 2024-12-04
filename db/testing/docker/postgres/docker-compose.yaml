@@ -11,7 +11,7 @@ services:
     image: postgres:13-alpine
     environment:
       POSTGRES_USER: root
-      POSTGRES_PASSWORD: root
+      POSTGRES_PASSWORD: password # example value of a secret
       POSTGRES_DB: perfkit_db_ci
     logging: *logging
     ports:

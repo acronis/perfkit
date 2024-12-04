@@ -13,7 +13,7 @@ services:
       - node.name=os-test
       - discovery.type=single-node # uses only for test clusters
       - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m" # Set min and max JVM heap sizes to at least 50% of system RAM
-      - OPENSEARCH_INITIAL_ADMIN_PASSWORD="ScoRpi0n$"
+      - OPENSEARCH_INITIAL_ADMIN_PASSWORD="ScoRpi0n$" # example value of a secret compliant with OpenSearch password policy
     ulimits:
       memlock:
         soft: -1

@@ -11,10 +11,10 @@ services:
     image: mcmoe/mssqldocker:v1.0.0
     environment:
       ACCEPT_EULA: Y
-      SA_PASSWORD: qwe123!@#
+      SA_PASSWORD: MyP@ssw0rd123  # example value of a secret compliant with MS SQL Server password policy
       MSSQL_DB: perfkit_db_ci
       MSSQL_USER: perfkit_db_runner
-      MSSQL_PASSWORD: qwe123!@#
+      MSSQL_PASSWORD: MyP@ssw0rd123 # example value of a secret compliant with MS SQL Server password policy
     logging: *logging
     ports:
       - "1433:1433"
