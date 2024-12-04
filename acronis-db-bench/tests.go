@@ -287,7 +287,7 @@ var TestSelectMediumLast = TestDesc{
 	databases:   ALL,
 	table:       TestTableMedium,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
-		var orderBy = func(b *benchmark.Benchmark) []string { return []string{"desc(id)"} } //nolint:revive
+		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { return []string{"desc(id)"} } //nolint:revive
 		testSelect(b, testDesc, nil, []string{"id"}, nil, orderBy, 1)
 	},
 }
@@ -303,7 +303,7 @@ var TestSelectMediumLastDBR = TestDesc{
 	databases:   RELATIONAL,
 	table:       TestTableMedium,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
-		var orderBy = func(b *benchmark.Benchmark) []string { return []string{"desc(id)"} } //nolint:revive
+		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { return []string{"desc(id)"} } //nolint:revive
 		testSelect(b, testDesc, nil, []string{"id"}, nil, orderBy, 1)
 	},
 }
@@ -325,7 +325,7 @@ var TestSelectMediumRand = TestDesc{
 			return map[string][]string{"id": {fmt.Sprintf("ge(%d)", id)}}
 		}
 
-		var orderBy = func(b *benchmark.Benchmark) []string { //nolint:revive
+		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { //nolint:revive
 			return []string{"asc(id)"}
 		}
 
@@ -350,7 +350,7 @@ var TestSelectMediumRandDBR = TestDesc{
 			return map[string][]string{"id": {fmt.Sprintf("gt(%d)", id)}}
 		}
 
-		var orderBy = func(b *benchmark.Benchmark) []string { //nolint:revive
+		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { //nolint:revive
 			return []string{"asc(id)"}
 		}
 		testSelect(b, testDesc, nil, []string{"id"}, where, orderBy, 1)
@@ -368,7 +368,7 @@ var TestSelectHeavyLast = TestDesc{
 	databases:   RELATIONAL,
 	table:       TestTableHeavy,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
-		var orderBy = func(b *benchmark.Benchmark) []string { return []string{"desc(id)"} } //nolint:revive
+		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { return []string{"desc(id)"} } //nolint:revive
 
 		testSelect(b, testDesc, nil, []string{"id"}, nil, orderBy, 1)
 	},
@@ -385,7 +385,7 @@ var TestSelectHeavyLastDBR = TestDesc{
 	databases:   RELATIONAL,
 	table:       TestTableHeavy,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
-		var orderBy = func(b *benchmark.Benchmark) []string { return []string{"desc(id)"} } //nolint:revive
+		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { return []string{"desc(id)"} } //nolint:revive
 		testSelect(b, testDesc, nil, []string{"id"}, nil, orderBy, 1)
 	},
 }
@@ -407,7 +407,7 @@ var TestSelectHeavyRand = TestDesc{
 			return map[string][]string{"id": {fmt.Sprintf("gt(%d)", id)}}
 		}
 
-		var orderBy = func(b *benchmark.Benchmark) []string { //nolint:revive
+		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { //nolint:revive
 			return []string{"asc(id)"}
 		}
 		testSelect(b, testDesc, nil, []string{"id"}, where, orderBy, 1)
@@ -431,7 +431,7 @@ var TestSelectHeavyRandDBR = TestDesc{
 			return map[string][]string{"id": {fmt.Sprintf("gt(%d)", id)}}
 		}
 
-		var orderBy = func(b *benchmark.Benchmark) []string { //nolint:revive
+		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { //nolint:revive
 			return []string{"asc(id)"}
 		}
 		testSelect(b, testDesc, nil, []string{"id"}, where, orderBy, 1)
@@ -460,7 +460,7 @@ var TestSelectHeavyRandTenantLike = TestDesc{
 			}
 		}
 
-		var orderBy = func(b *benchmark.Benchmark) []string { //nolint:revive
+		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { //nolint:revive
 			return []string{"desc(id)"}
 		}
 		testSelect(b, testDesc, nil, []string{"id"}, where, orderBy, 1)
@@ -574,7 +574,7 @@ var TestSelectHeavyRandCustomerRecent = TestDesc{
 			}
 		}
 
-		var orderBy = func(b *benchmark.Benchmark) []string { //nolint:revive
+		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { //nolint:revive
 			return []string{"desc(enqueue_time)"}
 		}
 
@@ -607,7 +607,7 @@ var TestSelectHeavyRandCustomerRecentLike = TestDesc{
 			}
 		}
 
-		var orderBy = func(b *benchmark.Benchmark) []string { //nolint:revive
+		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { //nolint:revive
 			return []string{"desc(enqueue_time)"}
 		}
 
@@ -645,7 +645,7 @@ var TestSelectHeavyRandCustomerUpdateTimePage = TestDesc{
 			}
 		}
 
-		var orderBy = func(b *benchmark.Benchmark) []string { //nolint:revive
+		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { //nolint:revive
 			return []string{"asc(update_time)"}
 		}
 
@@ -699,7 +699,7 @@ var TestSelectHeavyRandPartnerRecent = TestDesc{
 			}
 		}
 
-		var orderBy = func(b *benchmark.Benchmark) []string { //nolint:revive
+		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { //nolint:revive
 			return []string{"desc(enqueue_time)"}
 		}
 
@@ -741,7 +741,7 @@ var TestSelectHeavyRandPartnerStartUpdateTimePage = TestDesc{
 			}
 		}
 
-		var orderBy = func(b *benchmark.Benchmark) []string { //nolint:revive
+		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { //nolint:revive
 			return []string{"asc(update_time)"}
 		}
 
@@ -879,12 +879,14 @@ func insertMultiValueDataWorker(b *benchmark.Benchmark, c *DBConnector, testDesc
 	colConfs := testDesc.table.GetColumnsForInsert(db.WithAutoInc(c.database.DialectName()))
 	workerID := c.WorkerID
 
-	columns, _ := b.GenFakeData(workerID, colConfs, db.WithAutoInc(c.database.DialectName()))
-
+	var columns []string
 	var values [][]interface{}
 	for i := 0; i < batch; i++ {
-		_, vals := b.GenFakeData(workerID, colConfs, db.WithAutoInc(c.database.DialectName()))
+		var genColumns, vals = b.GenFakeData(workerID, colConfs, db.WithAutoInc(c.database.DialectName()))
 		values = append(values, vals)
+		if i == 0 {
+			columns = genColumns
+		}
 	}
 
 	var session = c.database.Session(c.database.Context(context.Background()))
@@ -1262,6 +1264,85 @@ var TestInsertHeavyDBR = TestDesc{
 	},
 }
 
+// TestInsertVector768MultiValue inserts rows into the 'heavy' table using golang DB query builder
+var TestInsertVector768MultiValue = TestDesc{
+	name:        "insert-vector-768-multivalue",
+	metric:      "rows/sec",
+	description: "insert a 768-dim vectors with ids into the 'vector' table by batches",
+	category:    TestInsert,
+	isReadonly:  false,
+	databases:   RELATIONAL,
+	table:       TestTableVector768,
+	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
+		testGeneric(b, testDesc, insertMultiValueDataWorker, 0)
+	},
+}
+
+// TestSelectVector768NearestL2 selects k nearest vectors by L2 from the 'vector' table to the given vector
+var TestSelectVector768NearestL2 = TestDesc{
+	name:        "select-vector-768-nearest-l2",
+	metric:      "rows/sec",
+	description: "selects k nearest vectors from the 'vector' table to the given vector",
+	category:    TestSelect,
+	isReadonly:  false,
+	databases:   RELATIONAL,
+	table:       TestTableVector768,
+	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
+		var colConfs = []benchmark.DBFakeColumnConf{
+			{ColumnName: "id", ColumnType: "dataset.id"},
+			{ColumnName: "embedding", ColumnType: "dataset.emb.list.item"},
+		}
+
+		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { //nolint:revive
+			var _, vals = b.GenFakeData(workerId, &colConfs, false)
+			var vec = "[" + strings.Trim(strings.Replace(fmt.Sprint(vals[1]), " ", ", ", -1), "[]") + "]"
+			return []string{fmt.Sprintf("nearest(embedding;L2;%s)", vec)}
+		}
+
+		testSelect(b, testDesc, nil, []string{"id", "embedding"}, nil, orderBy, 1)
+	},
+}
+
+// TestInsertEmailSecurityMultiValue inserts email security data into the 'email_security' table
+var TestInsertEmailSecurityMultiValue = TestDesc{
+	name:        "insert-email-security-multivalue",
+	metric:      "rows/sec",
+	description: "insert a email security data into the 'email_security' table by batches",
+	category:    TestInsert,
+	isReadonly:  false,
+	databases:   ALL,
+	table:       TestTableEmailSecurity,
+	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
+		testGeneric(b, testDesc, insertMultiValueDataWorker, 0)
+	},
+}
+
+// TestSelectEmailByEmbeddingNearestL2 selects k nearest vectors by L2 from the 'email_security' table to the given vector
+var TestSelectEmailByEmbeddingNearestL2 = TestDesc{
+	name:        "select-email-security-768-nearest-l2",
+	metric:      "rows/sec",
+	description: "selects k nearest emails from the 'email_security' table to the given vector",
+	category:    TestSelect,
+	isReadonly:  false,
+	databases:   ALL,
+	table:       TestTableEmailSecurity,
+	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
+		var colConfs = []benchmark.DBFakeColumnConf{
+			{ColumnName: "id", ColumnType: "dataset.id"},
+			// {ColumnName: "body", ColumnType: "dataset.Body"},
+			{ColumnName: "embedding", ColumnType: "dataset.Embedding.list.element"},
+		}
+
+		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { //nolint:revive
+			var _, vals = b.GenFakeData(workerId, &colConfs, false)
+			var vec = "[" + strings.Trim(strings.Replace(fmt.Sprint(vals[1]), " ", ", ", -1), "[]") + "]"
+			return []string{fmt.Sprintf("nearest(embedding;L2;%s)", vec)}
+		}
+
+		testSelect(b, testDesc, nil, []string{"body", "embedding"}, nil, orderBy, 1)
+	},
+}
+
 // TestInsertJSON inserts a row into a table with JSON(b) column
 var TestInsertJSON = TestDesc{
 	name:        "insert-json",
@@ -1327,7 +1408,7 @@ var TestSelectJSONByIndexedValue = TestDesc{
 			return selector
 		}
 
-		var orderBy = func(b *benchmark.Benchmark) []string { //nolint:revive
+		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { //nolint:revive
 			return []string{"asc(id)"}
 		}
 
@@ -1370,7 +1451,7 @@ var TestSearchJSONByIndexedValue = TestDesc{
 			return selector
 		}
 
-		var orderBy = func(b *benchmark.Benchmark) []string { //nolint:revive
+		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { //nolint:revive
 			return []string{"asc(id)"}
 		}
 		testSelect(b, testDesc, nil, []string{"id"}, where, orderBy, 1)
@@ -1412,7 +1493,7 @@ var TestSelectJSONByNonIndexedValue = TestDesc{
 			return selector
 		}
 
-		var orderBy = func(b *benchmark.Benchmark) []string { //nolint:revive
+		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { //nolint:revive
 			return []string{"asc(id)"}
 		}
 
@@ -1455,7 +1536,7 @@ var TestSearchJSONByNonIndexedValue = TestDesc{
 			return selector
 		}
 
-		var orderBy = func(b *benchmark.Benchmark) []string { //nolint:revive
+		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { //nolint:revive
 			return []string{"asc(id)"}
 		}
 
@@ -1693,7 +1774,7 @@ var TestSelectTimeSeriesSQL = TestDesc{
 			}
 		}
 
-		var orderBy = func(b *benchmark.Benchmark) []string { //nolint:revive
+		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { //nolint:revive
 			return []string{"desc(id)"}
 		}
 
@@ -1739,7 +1820,7 @@ var TestSelectAdvmTasksLast = TestDesc{
 			}
 		}
 
-		var orderBy = func(b *benchmark.Benchmark) []string { //nolint:revive
+		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { //nolint:revive
 			return []string{"asc(id)"}
 		}
 		testSelect(b, testDesc, nil, []string{"id"}, where, orderBy, 1)
@@ -2122,6 +2203,10 @@ func GetTests() ([]*TestGroup, map[string]*TestDesc) {
 	tg.add(&TestCopyHeavy)
 	tg.add(&TestUpdateMedium)
 	tg.add(&TestUpdateHeavy)
+	tg.add(&TestInsertVector768MultiValue)
+	tg.add(&TestSelectVector768NearestL2)
+	tg.add(&TestInsertEmailSecurityMultiValue)
+	tg.add(&TestSelectEmailByEmbeddingNearestL2)
 	tg.add(&TestSelectOne)
 	tg.add(&TestSelectMediumLast)
 	tg.add(&TestSelectMediumRand)

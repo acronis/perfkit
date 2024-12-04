@@ -56,6 +56,7 @@ type BenchOpts struct {
 	Events            bool   `short:"e" long:"events" description:"simulate event generation for every new object" required:"false"`
 	TenantsWorkingSet int    `long:"tenants-working-set" description:"set tenants working set" required:"false" default:"10000"`
 	TenantConnString  string `long:"tenants-storage-connection-string" description:"connection string for tenant storage" required:"false"`
+	ParquetDataSource string `long:"parquet-data-source" description:"path to the parquet file" required:"false"`
 	CTIsWorkingSet    int    `long:"ctis-working-set" description:"set CTI working set" required:"false" default:"1000"`
 	ProfilerPort      int    `long:"profiler-port" description:"open profiler on given port (e.g. 6060)" required:"false" default:"0"`
 	Describe          bool   `long:"describe" description:"describe what test is going to do" required:"false"`
@@ -273,6 +274,12 @@ func Main() {
 
 			b.Vault.(*DBTestData).EventBus = events.NewEventBus(workingConn.database, b.Logger)
 			b.Vault.(*DBTestData).EventBus.CreateTables()
+		}
+
+		if b.TestOpts.(*TestOpts).BenchOpts.ParquetDataSource != "" {
+			if err = NewParquetFileDataSourceForRandomizer(b, b.TestOpts.(*TestOpts).BenchOpts.ParquetDataSource); err != nil {
+				b.Exit("failed to create parquet data source: %v", err)
+			}
 		}
 	}
 

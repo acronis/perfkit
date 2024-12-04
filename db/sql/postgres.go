@@ -8,6 +8,7 @@ import (
 	"math"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -57,6 +58,10 @@ func (d *pgDialect) encodeBytes(bs []byte) string {
 	return d.encodeString(string(bs))
 }
 
+func (d *pgDialect) encodeTime(timestamp time.Time) string {
+	return `'` + timestamp.UTC().Format(time.RFC3339Nano) + `'`
+}
+
 // GetType returns PostgreSQL-specific types
 func (d *pgDialect) getType(id db.DataType) string {
 	switch id {
@@ -66,6 +71,10 @@ func (d *pgDialect) getType(id db.DataType) string {
 		return "VARCHAR"
 	case db.DataTypeString256:
 		return "VARCHAR(256)"
+	case db.DataTypeText:
+		return "VARCHAR"
+	case db.DataTypeBigInt:
+		return "BIGINT"
 	case db.DataTypeBigIntAutoIncPK:
 		return "BIGSERIAL PRIMARY KEY"
 	case db.DataTypeBigIntAutoInc:
@@ -112,6 +121,10 @@ func (d *pgDialect) getType(id db.DataType) string {
 		return "null"
 	case db.DataTypeTenantUUIDBoundID:
 		return "VARCHAR(64)"
+	case db.DataTypeVector3Float32: // For pgvector
+		return "vector(3)"
+	case db.DataTypeVector768Float32: // For pgvector
+		return "vector(768)"
 	default:
 		return ""
 	}

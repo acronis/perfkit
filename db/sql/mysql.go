@@ -7,7 +7,8 @@ import (
 	"math"
 	"strconv"
 	"strings"
-	
+	"time"
+
 	"github.com/google/uuid"
 
 	"github.com/go-sql-driver/mysql" // mysql driver
@@ -82,6 +83,10 @@ func (d *mysqlDialect) encodeBytes(bs []byte) string {
 	return fmt.Sprintf(`0x%x`, bs)
 }
 
+func (d *mysqlDialect) encodeTime(timestamp time.Time) string {
+	return fmt.Sprintf("'%s'", timestamp.UTC().Format(time.RFC3339Nano))
+}
+
 // GetType returns MySQL-specific types
 func (d *mysqlDialect) getType(id db.DataType) string {
 	switch id {
@@ -91,6 +96,10 @@ func (d *mysqlDialect) getType(id db.DataType) string {
 		return "VARCHAR"
 	case db.DataTypeString256:
 		return "VARCHAR(256)"
+	case db.DataTypeText:
+		return "VARCHAR"
+	case db.DataTypeBigInt:
+		return "BIGINT"
 	case db.DataTypeBigIntAutoIncPK:
 		return "BIGINT AUTO_INCREMENT PRIMARY KEY"
 	case db.DataTypeBigIntAutoInc:

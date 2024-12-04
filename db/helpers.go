@@ -113,8 +113,12 @@ func DefaultCreateQueryPatchFunc(table string, query string, dialect Dialect) (s
 	query = strings.ReplaceAll(query, "{table}", table)
 
 	for _, logicalType := range []DataType{
+		DataTypeBigInt,
 		DataTypeBigIntAutoIncPK,
 		DataTypeBigIntAutoInc,
+		DataTypeString,
+		DataTypeString256,
+		DataTypeText,
 		DataTypeAscii,
 		DataTypeUUID,
 		DataTypeVarCharUUID,
@@ -135,6 +139,8 @@ func DefaultCreateQueryPatchFunc(table string, query string, dialect Dialect) (s
 		DataTypeUnique,
 		DataTypeNotNull,
 		DataTypeNull,
+		DataTypeVector3Float32,
+		DataTypeVector768Float32,
 		DataTypeEngine,
 	} {
 		var specificType = dialect.GetType(logicalType)
@@ -232,6 +238,44 @@ func ParseFunc(s string) (fName string, arg string, err error) {
 	}
 
 	return s[:argOpen], s[argOpen+1 : argClose], nil
+}
+
+func ParseFuncMultipleArgs(s string, sep string) (fName string, args []string, err error) {
+	argOpen, argClose := strings.Index(s, "("), strings.Index(s, ")")
+	if argOpen == -1 && argClose == -1 {
+		return "", strings.Split(s, sep), nil
+	}
+	if argOpen == -1 {
+		return "", nil, fmt.Errorf("bad function '%v', no opening bracket", s)
+	}
+	if argClose == -1 {
+		return "", nil, fmt.Errorf("bad function '%v', no closing bracket", s)
+	}
+
+	if argClose <= argOpen {
+		return "", nil, fmt.Errorf("bad function '%v', closing bracket placed before opening bracket", s)
+	}
+
+	return s[:argOpen], strings.Split(s[argOpen+1:argClose], sep), nil
+}
+
+func ParseVector(s string, sep string) (args []string, err error) {
+	argOpen, argClose := strings.Index(s, "["), strings.Index(s, "]")
+	if argOpen == -1 && argClose == -1 {
+		return strings.Split(s, sep), nil
+	}
+	if argOpen == -1 {
+		return nil, fmt.Errorf("bad vector '%v', no opening bracket", s)
+	}
+	if argClose == -1 {
+		return nil, fmt.Errorf("bad vector '%v', no closing bracket", s)
+	}
+
+	if argClose <= argOpen {
+		return nil, fmt.Errorf("bad function '%v', closing bracket placed before opening bracket", s)
+	}
+
+	return strings.Split(s[argOpen+1:argClose], sep), nil
 }
 
 func ParseTimeUTC(s string) (time.Time, error) {

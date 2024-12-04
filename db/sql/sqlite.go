@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -52,6 +53,12 @@ func (d *sqliteDialect) encodeBytes(bs []byte) string {
 	return fmt.Sprintf(`X'%x'`, bs)
 }
 
+func (d *sqliteDialect) encodeTime(timestamp time.Time) string {
+	// borrowed from dbr
+	// https://www.sqlite.org/lang_datefunc.html
+	return `'` + timestamp.UTC().Format(time.RFC3339Nano) + `'`
+}
+
 // GetType returns SQLite-specific types
 func (d *sqliteDialect) getType(id db.DataType) string {
 	switch id {
@@ -61,6 +68,10 @@ func (d *sqliteDialect) getType(id db.DataType) string {
 		return "VARCHAR"
 	case db.DataTypeString256:
 		return "VARCHAR(256)"
+	case db.DataTypeText:
+		return "VARCHAR"
+	case db.DataTypeBigInt:
+		return "INTEGER"
 	case db.DataTypeBigIntAutoIncPK:
 		return "INTEGER PRIMARY KEY AUTOINCREMENT"
 	case db.DataTypeBigIntAutoInc:

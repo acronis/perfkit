@@ -144,7 +144,7 @@ func testSelect(
 	fromFunc func(b *benchmark.Benchmark, workerId int) string,
 	what []string,
 	whereFunc func(b *benchmark.Benchmark, workerId int) map[string][]string,
-	orderByFunc func(b *benchmark.Benchmark) []string,
+	orderByFunc func(b *benchmark.Benchmark, workerId int) []string,
 	rowsRequired uint64,
 ) {
 	initCommon(b, testDesc, rowsRequired)
@@ -176,7 +176,7 @@ func testSelect(
 
 		var orderBy []string
 		if orderByFunc != nil {
-			orderBy = orderByFunc(b)
+			orderBy = orderByFunc(b, workerId)
 		}
 
 		if testDesc.isDBRTest {

@@ -470,6 +470,70 @@ var TestTableHeavy = TestTable{
 	},
 }
 
+// TestTableVector768 is table to store 768-dimensions vector objects
+var TestTableVector768 = TestTable{
+	TableName: "acronis_db_bench_vector_768",
+	columns: [][]interface{}{
+		{"id", "dataset.id"},
+		{"embedding", "dataset.emb.list.item"},
+	},
+	TableDefinition: func(dialect db.DialectName) *db.TableDefinition {
+		var tableRows []db.TableRow
+
+		tableRows = append(tableRows,
+			db.TableRow{Name: "id", Type: db.DataTypeBigInt, Indexed: true},
+			db.TableRow{Name: "embedding", Type: db.DataTypeVector768Float32, Indexed: true},
+		)
+
+		var tableDef = &db.TableDefinition{
+			TableRows: tableRows,
+		}
+
+		if dialect == db.ELASTICSEARCH {
+			tableDef.Resilience.NumberOfReplicas = 2
+		}
+
+		return tableDef
+	},
+}
+
+// TestTableEmailSecurity is table to store email security objects
+var TestTableEmailSecurity = TestTable{
+	TableName: "acronis_db_bench_email_security",
+	columns: [][]interface{}{
+		{"id", "dataset.id"},
+		{"date", "dataset.Date"},
+		{"sender", "dataset.From"},
+		{"recipient", "dataset.To"},
+		{"subject", "dataset.Subject"},
+		{"body", "dataset.Body"},
+		{"embedding", "dataset.Embedding.list.element"},
+	},
+	TableDefinition: func(dialect db.DialectName) *db.TableDefinition {
+		var tableRows []db.TableRow
+
+		tableRows = append(tableRows,
+			db.TableRow{Name: "id", Type: db.DataTypeBigInt, Indexed: true},
+			db.TableRow{Name: "date", Type: db.DataTypeDateTime, Indexed: true},
+			db.TableRow{Name: "sender", Type: db.DataTypeString, Indexed: true},
+			db.TableRow{Name: "recipient", Type: db.DataTypeString, Indexed: true},
+			db.TableRow{Name: "subject", Type: db.DataTypeString, Indexed: true},
+			db.TableRow{Name: "body", Type: db.DataTypeText, Indexed: true},
+			db.TableRow{Name: "embedding", Type: db.DataTypeVector768Float32, Indexed: true},
+		)
+
+		var tableDef = &db.TableDefinition{
+			TableRows: tableRows,
+		}
+
+		if dialect == db.ELASTICSEARCH {
+			tableDef.Resilience.NumberOfReplicas = 2
+		}
+
+		return tableDef
+	},
+}
+
 // TestTableBlob is table to store blobs
 var TestTableBlob = TestTable{
 	TableName: "acronis_db_bench_blob",
@@ -975,6 +1039,8 @@ var TestTables = map[string]TestTable{
 	"acronis_db_bench_light":                     TestTableLight,
 	"acronis_db_bench_medium":                    TestTableMedium,
 	"acronis_db_bench_heavy":                     TestTableHeavy,
+	"acronis_db_bench_vector_768":                TestTableVector768,
+	"acronis_db_bench_email_security":            TestTableEmailSecurity,
 	"acronis_db_bench_blob":                      TestTableBlob,
 	"acronis_db_bench_largeobj":                  TestTableLargeObj,
 	"acronis_db_bench_json":                      TestTableJSON,
