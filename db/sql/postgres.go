@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -43,6 +44,18 @@ func (d *pgDialect) encodeString(s string) string {
 
 func (d *pgDialect) encodeUUID(s uuid.UUID) string {
 	return d.encodeString(s.String())
+}
+
+func (d *pgDialect) encodeVector(vs []float32) string {
+	var sb strings.Builder
+	for _, f := range vs {
+		if sb.Len() != 0 {
+			sb.WriteByte(',')
+		}
+		sb.WriteString(strconv.FormatFloat(float64(f), 'f', -1, 64))
+	}
+
+	return fmt.Sprintf("'[%s]'", sb.String())
 }
 
 func (d *pgDialect) encodeBool(b bool) string {

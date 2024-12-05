@@ -428,6 +428,7 @@ type dialect interface {
 	name() db.DialectName
 	encodeString(s string) string
 	encodeUUID(s uuid.UUID) string
+	encodeVector(vs []float32) string
 	encodeBool(b bool) string
 	encodeBytes(bs []byte) string
 	encodeTime(timestamp time.Time) string
