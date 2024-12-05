@@ -38,6 +38,10 @@ func (d *sqliteDialect) encodeUUID(s uuid.UUID) string {
 	return d.encodeString(s.String())
 }
 
+func (d *sqliteDialect) encodeVector(vs []float32) string {
+	return ""
+}
+
 func (d *sqliteDialect) encodeBool(b bool) string {
 	// borrowed from dbr
 	// https://www.sqlite.org/lang_expr.html

@@ -70,6 +70,10 @@ func (d *mysqlDialect) encodeUUID(s uuid.UUID) string {
 	return d.encodeString(s.String())
 }
 
+func (d *mysqlDialect) encodeVector(vs []float32) string {
+	return ""
+}
+
 func (d *mysqlDialect) encodeBool(b bool) string {
 	// borrowed from dbr
 	if b {

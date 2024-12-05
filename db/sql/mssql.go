@@ -37,6 +37,10 @@ func (d *msDialect) encodeUUID(s uuid.UUID) string {
 	return d.encodeString(s.String())
 }
 
+func (d *msDialect) encodeVector(vs []float32) string {
+	return ""
+}
+
 func (d *msDialect) encodeBool(b bool) string {
 	if b {
 		return "1"

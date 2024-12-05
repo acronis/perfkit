@@ -356,14 +356,7 @@ func sqlf(d dialect, fmts string, args ...interface{}) string {
 			args[i] = sb.String()
 
 		case []float32:
-			var sb strings.Builder
-			for _, f := range val {
-				if sb.Len() != 0 {
-					sb.WriteByte(',')
-				}
-				sb.WriteString(strconv.FormatFloat(float64(f), 'f', -1, 64))
-			}
-			args[i] = fmt.Sprintf("'[%s]'", sb.String())
+			args[i] = d.encodeVector(val)
 
 		case bool:
 			args[i] = d.encodeBool(val)

@@ -36,6 +36,10 @@ func (d *clickHouseDialect) encodeUUID(s uuid.UUID) string {
 	return d.encodeString(s.String())
 }
 
+func (d *clickHouseDialect) encodeVector(vs []float32) string {
+	return ""
+}
+
 func (d *clickHouseDialect) encodeBool(b bool) string {
 	// borrowed from dbr
 	if b {

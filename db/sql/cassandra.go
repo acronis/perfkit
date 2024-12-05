@@ -40,6 +40,10 @@ func (d *cassandraDialect) encodeUUID(s uuid.UUID) string {
 	return s.String()
 }
 
+func (d *cassandraDialect) encodeVector(vs []float32) string {
+	return ""
+}
+
 func (d *cassandraDialect) encodeBool(b bool) string {
 	// borrowed from dbr
 	if b {
