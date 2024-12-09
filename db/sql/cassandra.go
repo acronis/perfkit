@@ -40,6 +40,10 @@ func (d *cassandraDialect) encodeUUID(s uuid.UUID) string {
 	return s.String()
 }
 
+func (d *cassandraDialect) encodeVector(vs []float32) string {
+	return ""
+}
+
 func (d *cassandraDialect) encodeBool(b bool) string {
 	// borrowed from dbr
 	if b {
@@ -53,6 +57,10 @@ func (d *cassandraDialect) encodeBytes(bs []byte) string {
 	return d.encodeString(string(bs))
 }
 
+func (d *cassandraDialect) encodeTime(timestamp time.Time) string {
+	return `'` + timestamp.UTC().Format(time.RFC3339Nano) + `'`
+}
+
 // GetType returns Cassandra-specific types
 func (d *cassandraDialect) getType(dataType db.DataType) string {
 	switch dataType {
@@ -62,6 +70,10 @@ func (d *cassandraDialect) getType(dataType db.DataType) string {
 		return "VARCHAR"
 	case db.DataTypeString256:
 		return "VARCHAR(256)"
+	case db.DataTypeText:
+		return "VARCHAR"
+	case db.DataTypeBigInt:
+		return "bigint"
 	case db.DataTypeBigIntAutoIncPK:
 		return "bigint PRIMARY KEY" // Cassandra does not support auto-increment, bigint is closest
 	case db.DataTypeBigIntAutoInc:

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -36,6 +37,10 @@ func (d *msDialect) encodeUUID(s uuid.UUID) string {
 	return d.encodeString(s.String())
 }
 
+func (d *msDialect) encodeVector(vs []float32) string {
+	return ""
+}
+
 func (d *msDialect) encodeBool(b bool) string {
 	if b {
 		return "1"
@@ -47,6 +52,10 @@ func (d *msDialect) encodeBytes(bs []byte) string {
 	return fmt.Sprintf("0x%x", bs)
 }
 
+func (d *msDialect) encodeTime(timestamp time.Time) string {
+	return `'` + timestamp.UTC().Format(time.RFC3339Nano) + `'`
+}
+
 // GetType returns SQL Server-specific types
 func (d *msDialect) getType(id db.DataType) string {
 	switch id {
@@ -56,6 +65,10 @@ func (d *msDialect) getType(id db.DataType) string {
 		return "VARCHAR"
 	case db.DataTypeString256:
 		return "VARCHAR(256)"
+	case db.DataTypeText:
+		return "VARCHAR"
+	case db.DataTypeBigInt:
+		return "BIGINT"
 	case db.DataTypeBigIntAutoIncPK:
 		return "BIGINT IDENTITY(1,1) PRIMARY KEY"
 	case db.DataTypeBigIntAutoInc:

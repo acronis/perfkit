@@ -302,6 +302,8 @@ const (
 	DataTypeInt               DataType = "{$int}"
 	DataTypeString            DataType = "{$string}"
 	DataTypeString256         DataType = "{$string256}"
+	DataTypeText              DataType = "{$text}"
+	DataTypeBigInt            DataType = "{$bigint}"
 	DataTypeBigIntAutoIncPK   DataType = "{$bigint_autoinc_pk}"
 	DataTypeBigIntAutoInc     DataType = "{$bigint_autoinc}"
 	DataTypeAscii             DataType = "{$ascii}"
@@ -325,6 +327,8 @@ const (
 	DataTypeNotNull           DataType = "{$notnull}"
 	DataTypeNull              DataType = "{$null}"
 	DataTypeTenantUUIDBoundID DataType = "{$tenant_uuid_bound_id}"
+	DataTypeVector3Float32    DataType = "{$vector_3_float32}"
+	DataTypeVector768Float32  DataType = "{$vector_768_float32}"
 )
 
 // Dialect is an interface for database dialects

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -160,10 +161,16 @@ type SearchQuery struct {
 	Conditions *conditions `json:"bool,omitempty"`
 }
 
+type KnnRequest struct {
+	Field       string    `json:"field"`
+	QueryVector []float64 `json:"query_vector"`
+}
+
 type SearchRequest struct {
 	Source bool                         `json:"_source"` // Should always be false
 	Fields []string                     `json:"fields"`
 	Query  *SearchQuery                 `json:"query"`
+	Knn    *KnnRequest                  `json:"knn,omitempty"`
 	Sort   []map[string]json.RawMessage `json:"sort,omitempty"` // list to keep ordering
 	Size   int64                        `json:"size,omitempty"`
 	From   int64                        `json:"from,omitempty"`
@@ -264,7 +271,7 @@ func (b searchQueryBuilder) searchRequest(c *db.SelectCtrl) (*SearchRequest, que
 		return req, queryTypeCount, false, nil
 	}
 
-	if req.Sort, err = b.order(c.Order); err != nil {
+	if req.Sort, req.Knn, err = b.order(c.Order); err != nil {
 		return nil, queryTypeSearch, false, fmt.Errorf("failed to parse order fields for request: %v", err)
 	}
 
@@ -734,29 +741,77 @@ func orderBy(fnc string) (json.RawMessage, error) {
 	return qry, nil
 }
 
-func (b searchQueryBuilder) order(sortFields []string) ([]map[string]json.RawMessage, error) {
+func (b searchQueryBuilder) order(sortFields []string) ([]map[string]json.RawMessage, *KnnRequest, error) {
 	var orderQuery []map[string]json.RawMessage
+	var knn *KnnRequest
 
 	for _, value := range sortFields {
-		fnc, field, err := db.ParseFunc(value)
+		fnc, args, err := db.ParseFuncMultipleArgs(value, ";")
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse order function: %v", err)
-		}
-		if field == "" {
-			return nil, fmt.Errorf("empty order field")
+			return nil, nil, fmt.Errorf("failed to parse order function: %v", err)
 		}
 
-		var qry json.RawMessage
-		if qry, err = orderBy(fnc); err != nil {
-			return nil, err
+		if len(args) == 0 {
+			return nil, nil, fmt.Errorf("empty order field")
 		}
 
-		orderQuery = append(orderQuery, map[string]json.RawMessage{
-			field: qry,
-		})
+		switch fnc {
+		case "asc", "desc":
+			if len(args) != 1 {
+				return nil, nil, fmt.Errorf("number of args %d doesn't match number of conditions 1", len(args))
+			}
+
+			var qry json.RawMessage
+			if fnc == "asc" {
+				qry = orderAsc()
+			} else {
+				qry = orderDesc()
+			}
+
+			orderQuery = append(orderQuery, map[string]json.RawMessage{
+				args[0]: qry,
+			})
+
+		case "nearest":
+			if len(args) != 3 {
+				return nil, nil, fmt.Errorf("number of args %d doesn't match number of conditions for nearest function, should be 3", len(args))
+			}
+
+			var field = args[0]
+			var rawVector []string
+			if rawVector, err = db.ParseVector(args[2], ","); err != nil {
+				return nil, nil, fmt.Errorf("failed to parse vector: %v", err)
+			}
+
+			var vector []float64
+			for _, v := range rawVector {
+				var f float64
+				v = strings.TrimSpace(v) // Removes any leading/trailing whitespace
+				f, err = strconv.ParseFloat(v, 64)
+				if err != nil {
+					return nil, nil, fmt.Errorf("failed to parse vector value: %v", err)
+				}
+				vector = append(vector, f)
+			}
+
+			if knn == nil {
+				knn = &KnnRequest{
+					Field:       field,
+					QueryVector: vector,
+				}
+			} else {
+				return nil, nil, fmt.Errorf("knn function already set")
+			}
+		default:
+			return nil, nil, fmt.Errorf("bad order function '%v'", fnc)
+		}
 	}
 
-	return orderQuery, nil
+	if len(orderQuery) != 0 && knn != nil {
+		return nil, nil, fmt.Errorf("orderQuery and knn functions are mutually exclusive")
+	}
+
+	return orderQuery, knn, nil
 }
 
 func (b searchQueryBuilder) fields(selectedFields []string) ([]string, bool, error) {

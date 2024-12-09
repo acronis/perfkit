@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -35,6 +36,10 @@ func (d *clickHouseDialect) encodeUUID(s uuid.UUID) string {
 	return d.encodeString(s.String())
 }
 
+func (d *clickHouseDialect) encodeVector(vs []float32) string {
+	return ""
+}
+
 func (d *clickHouseDialect) encodeBool(b bool) string {
 	// borrowed from dbr
 	if b {
@@ -48,6 +53,10 @@ func (d *clickHouseDialect) encodeBytes(bs []byte) string {
 	return d.encodeString(string(bs))
 }
 
+func (d *clickHouseDialect) encodeTime(timestamp time.Time) string {
+	return `'` + timestamp.UTC().Format(time.RFC3339Nano) + `'`
+}
+
 // GetType returns ClickHouse-specific types
 func (d *clickHouseDialect) getType(id db.DataType) string {
 	switch id {
@@ -57,6 +66,10 @@ func (d *clickHouseDialect) getType(id db.DataType) string {
 		return "String"
 	case db.DataTypeString256:
 		return "String"
+	case db.DataTypeText:
+		return "String"
+	case db.DataTypeBigInt:
+		return "UInt64"
 	case db.DataTypeBigIntAutoIncPK:
 		return "UInt64" // ClickHouse does not support auto-increment
 	case db.DataTypeBigIntAutoInc:
