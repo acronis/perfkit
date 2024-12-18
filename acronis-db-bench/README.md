@@ -168,7 +168,7 @@ acronis-db-bench --connection-string "opensearch://<USER>::<PASSWORD>@<HOST>:<PO
 #### Run all tests
 
 ```bash
-acronis-db-bench --connection-string "postgresql://<USER>:<PASSWORD>@localhost:5432/<DATABASE NAME>?sslmode=disable"-t all
+acronis-db-bench --connection-string "postgresql://<USER>:<PASSWORD>@localhost:5432/<DATABASE NAME>?sslmode=disable" -t all
 ```
 
 #### Run a specific test
