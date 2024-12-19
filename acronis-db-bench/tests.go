@@ -1386,7 +1386,7 @@ var TestSelectJSONByIndexedValue = TestDesc{
 	databases:   RELATIONAL,
 	table:       TestTableJSON,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
-		var where = func(b *benchmark.Benchmark, workerId int) map[string][]string {
+		where := func(b *benchmark.Benchmark, workerId int) string {
 			id := b.Randomizer.GetWorker(workerId).Uintn64(testDesc.table.RowsCount - 1)
 
 			var dialectName, err = db.GetDialectName(b.TestOpts.(*TestOpts).DBOpts.ConnString)
@@ -1394,27 +1394,21 @@ var TestSelectJSONByIndexedValue = TestDesc{
 				b.Exit(err)
 			}
 
-			var selector = map[string][]string{
-				"id": {fmt.Sprintf("gt(%s)", strconv.FormatUint(id, 10))},
-			}
-
 			switch dialectName {
 			case db.MYSQL:
-				selector["_data_f0f0"] = []string{"10"}
+				return "_data_f0f0 = '10' AND id > " + strconv.FormatUint(id, 10)
 			case db.POSTGRES:
-				// return "json_data @> '{\"field0\": {\"field0\": 10}}' AND id > " + strconv.FormatUint(id, 10)
+				return "json_data @> '{\"field0\": {\"field0\": 10}}' AND id > " + strconv.FormatUint(id, 10)
 			default:
 				b.Exit("The %s test is not supported on driver: %s", testDesc.name, dialectName)
 			}
 
-			return selector
+			return ""
 		}
-
-		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { //nolint:revive
-			return []string{"asc(id)"}
+		orderby := func(b *benchmark.Benchmark) string { //nolint:revive
+			return "id ASC"
 		}
-
-		testSelect(b, testDesc, nil, []string{"id"}, where, orderBy, 1)
+		testSelectRawSQLQuery(b, testDesc, nil, "id", where, orderby, 1)
 	},
 }
 
@@ -1429,7 +1423,7 @@ var TestSearchJSONByIndexedValue = TestDesc{
 	databases:   RELATIONAL,
 	table:       TestTableJSON,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
-		var where = func(b *benchmark.Benchmark, workerId int) map[string][]string {
+		where := func(b *benchmark.Benchmark, workerId int) string {
 			id := b.Randomizer.GetWorker(workerId).Uintn64(testDesc.table.RowsCount - 1)
 
 			var dialectName, err = db.GetDialectName(b.TestOpts.(*TestOpts).DBOpts.ConnString)
@@ -1437,26 +1431,21 @@ var TestSearchJSONByIndexedValue = TestDesc{
 				b.Exit(err)
 			}
 
-			var selector = map[string][]string{
-				"id": {fmt.Sprintf("gt(%s)", strconv.FormatUint(id, 10))},
-			}
-
 			switch dialectName {
 			case db.MYSQL:
-				selector["_data_f0f0f0"] = []string{"like(eedl)"}
+				return "_data_f0f0f0 LIKE '%eedl%' AND id > " + strconv.FormatUint(id, 10)
 			case db.POSTGRES:
-				selector["json_data->'field0'->'field0'->>'field0'"] = []string{"like(eedl)"}
+				return "json_data->'field0'->'field0'->>'field0' LIKE '%eedl%' AND id > " + strconv.FormatUint(id, 10) // searching for the 'needle' word
 			default:
 				b.Exit("The %s test is not supported on driver: %s", testDesc.name, dialectName)
 			}
 
-			return selector
+			return ""
 		}
-
-		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { //nolint:revive
-			return []string{"asc(id)"}
+		orderby := func(b *benchmark.Benchmark) string { //nolint:revive
+			return "id ASC"
 		}
-		testSelect(b, testDesc, nil, []string{"id"}, where, orderBy, 1)
+		testSelectRawSQLQuery(b, testDesc, nil, "id", where, orderby, 1)
 	},
 }
 
@@ -1471,7 +1460,7 @@ var TestSelectJSONByNonIndexedValue = TestDesc{
 	databases:   RELATIONAL,
 	table:       TestTableJSON,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
-		var where = func(b *benchmark.Benchmark, workerId int) map[string][]string {
+		where := func(b *benchmark.Benchmark, workerId int) string {
 			id := b.Randomizer.GetWorker(workerId).Uintn64(testDesc.table.RowsCount - 1)
 
 			var dialectName, err = db.GetDialectName(b.TestOpts.(*TestOpts).DBOpts.ConnString)
@@ -1479,27 +1468,21 @@ var TestSelectJSONByNonIndexedValue = TestDesc{
 				b.Exit(err)
 			}
 
-			var selector = map[string][]string{
-				"id": {fmt.Sprintf("gt(%s)", strconv.FormatUint(id, 10))},
-			}
-
 			switch dialectName {
 			case db.MYSQL:
-				selector["JSON_EXTRACT(json_data, '$.field0.field1')"] = []string{"10"}
+				return "JSON_EXTRACT(json_data, '$.field0.field1') = '10' AND id > " + strconv.FormatUint(id, 10)
 			case db.POSTGRES:
-				// return "json_data @> '{\"field0\": {\"field1\": 10}}' AND id > " + strconv.FormatUint(id, 10)
+				return "json_data @> '{\"field0\": {\"field1\": 10}}' AND id > " + strconv.FormatUint(id, 10)
 			default:
 				b.Exit("The %s test is not supported on driver: %s", testDesc.name, dialectName)
 			}
 
-			return selector
+			return ""
 		}
-
-		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { //nolint:revive
-			return []string{"asc(id)"}
+		orderby := func(b *benchmark.Benchmark) string { //nolint:revive
+			return "id ASC"
 		}
-
-		testSelect(b, testDesc, nil, []string{"id"}, where, orderBy, 1)
+		testSelectRawSQLQuery(b, testDesc, nil, "id", where, orderby, 1)
 	},
 }
 
@@ -1514,7 +1497,7 @@ var TestSearchJSONByNonIndexedValue = TestDesc{
 	databases:   RELATIONAL,
 	table:       TestTableJSON,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
-		var where = func(b *benchmark.Benchmark, workerId int) map[string][]string {
+		where := func(b *benchmark.Benchmark, workerId int) string {
 			id := b.Randomizer.GetWorker(workerId).Uintn64(testDesc.table.RowsCount - 1)
 
 			var dialectName, err = db.GetDialectName(b.TestOpts.(*TestOpts).DBOpts.ConnString)
@@ -1522,27 +1505,21 @@ var TestSearchJSONByNonIndexedValue = TestDesc{
 				b.Exit(err)
 			}
 
-			var selector = map[string][]string{
-				"id": {fmt.Sprintf("gt(%s)", strconv.FormatUint(id, 10))},
-			}
-
 			switch dialectName {
 			case db.MYSQL:
-				selector["JSON_EXTRACT(json_data, '$.field0.field1')"] = []string{"like(eedl)"}
+				return "JSON_EXTRACT(json_data, '$.field0.field1') LIKE '%eedl%' AND id > " + strconv.FormatUint(id, 10)
 			case db.POSTGRES:
-				selector["json_data->'field0'->'field1'->>'field0'"] = []string{"like(eedl)"}
+				return "json_data->'field0'->'field0'->>'field0' LIKE '%eedl%' AND id > " + strconv.FormatUint(id, 10) // searching for the 'needle' word
 			default:
 				b.Exit("The %s test is not supported on driver: %s", testDesc.name, dialectName)
 			}
 
-			return selector
+			return ""
 		}
-
-		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { //nolint:revive
-			return []string{"asc(id)"}
+		orderby := func(b *benchmark.Benchmark) string { //nolint:revive
+			return "id ASC"
 		}
-
-		testSelect(b, testDesc, nil, []string{"id"}, where, orderBy, 1)
+		testSelectRawSQLQuery(b, testDesc, nil, "id", where, orderby, 1)
 	},
 }
 
@@ -1764,23 +1741,18 @@ var TestSelectTimeSeriesSQL = TestDesc{
 			b.Vault.(*DBTestData).EffectiveBatch = 256
 		}
 
-		var colConfs = testDesc.table.GetColumnsConf([]string{"tenant_id", "device_id", "metric_id"}, false)
+		colConfs := testDesc.table.GetColumnsConf([]string{"tenant_id", "device_id", "metric_id"}, false)
 
-		var where = func(b *benchmark.Benchmark, workerId int) map[string][]string {
+		where := func(b *benchmark.Benchmark, workerId int) string {
 			w := b.GenFakeDataAsMap(workerId, colConfs, false)
 
-			return map[string][]string{
-				"tenant_id": {fmt.Sprintf("%s", (*w)["tenant_id"])},
-				"device_id": {fmt.Sprintf("%s", (*w)["device_id"])},
-				"metric_id": {fmt.Sprintf("%s", (*w)["metric_id"])},
-			}
+			return fmt.Sprintf("tenant_id = '%s' AND device_id = '%s' AND metric_id = '%s'", (*w)["tenant_id"], (*w)["device_id"], (*w)["metric_id"])
+		}
+		orderby := func(b *benchmark.Benchmark) string { //nolint:revive
+			return "id DESC"
 		}
 
-		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { //nolint:revive
-			return []string{"desc(id)"}
-		}
-
-		testSelect(b, testDesc, nil, []string{"id"}, where, orderBy, 1)
+		testSelectRawSQLQuery(b, testDesc, nil, "id", where, orderby, 1)
 
 		b.Vault.(*DBTestData).EffectiveBatch = origBatch
 	},
