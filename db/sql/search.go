@@ -215,10 +215,14 @@ func (b selectBuilder) sqlSelectionAlias(fields []string, alias string) (string,
 	var columns []string
 	var addFields = func(fields []string) {
 		for _, c := range fields {
-			if alias != "" {
-				c = alias + "." + c
+			if _, _, err := db.ParseFunc(c); err == nil {
+				columns = append(columns, c)
+			} else {
+				if alias != "" {
+					c = alias + "." + c
+				}
+				columns = append(columns, c)
 			}
-			columns = append(columns, c)
 		}
 	}
 
