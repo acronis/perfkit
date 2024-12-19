@@ -193,10 +193,13 @@ func createTable(q querier, d dialect, name string, tableDefinition *db.TableDef
 		return nil
 	}
 
+	var tableRows []db.TableRow
 	if tableDefinition != nil {
-		if err := createSelectQueryBuilder(name, tableDefinition.TableRows); err != nil {
-			return err
-		}
+		tableRows = tableDefinition.TableRows
+	}
+
+	if err := createSelectQueryBuilder(name, tableRows); err != nil {
+		return err
 	}
 
 	if exists, err := tableExists(q, d, name); err != nil {
