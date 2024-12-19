@@ -15,6 +15,7 @@ type CreateQueryPatchFunc func(table string, query string, dialect db.DialectNam
 // TestTable represents table to be used in tests and benchmarks
 type TestTable struct {
 	TableName             string
+	Databases             []db.DialectName
 	ColumnsConf           []benchmark.DBFakeColumnConf
 	columns               [][]interface{}
 	InsertColumns         []string
@@ -26,6 +27,17 @@ type TestTable struct {
 
 	// runtime information
 	RowsCount uint64
+}
+
+// dbIsSupported returns true if the database is supported by the test
+func (t *TestTable) dbIsSupported(db db.DialectName) bool {
+	for _, b := range t.Databases {
+		if b == db {
+			return true
+		}
+	}
+
+	return false
 }
 
 func exit(fmts string, args ...interface{}) {
@@ -178,6 +190,7 @@ func (t *TestTable) Create(c *DBConnector, b *benchmark.Benchmark) {
 // TestTableLight is table to store light objects
 var TestTableLight = TestTable{
 	TableName: "acronis_db_bench_light",
+	Databases: ALL,
 	columns: [][]interface{}{
 		{"id", "autoinc"},
 		{"uuid", "uuid"},
@@ -200,6 +213,7 @@ var TestTableLight = TestTable{
 // TestTableMedium is table to store medium objects
 var TestTableMedium = TestTable{
 	TableName: "acronis_db_bench_medium",
+	Databases: ALL,
 	columns: [][]interface{}{
 		{"id", "autoinc"},
 		{"uuid", "uuid"},
@@ -298,6 +312,7 @@ var tableHeavySchema = `
 // TestTableHeavy is table to store heavy objects
 var TestTableHeavy = TestTable{
 	TableName: "acronis_db_bench_heavy",
+	Databases: ALL,
 	columns: [][]interface{}{
 		{"id", "autoinc"},
 		{"uuid", "uuid", 0},
@@ -473,6 +488,7 @@ var TestTableHeavy = TestTable{
 // TestTableVector768 is table to store 768-dimensions vector objects
 var TestTableVector768 = TestTable{
 	TableName: "acronis_db_bench_vector_768",
+	Databases: VECTOR,
 	columns: [][]interface{}{
 		{"id", "dataset.id"},
 		{"embedding", "dataset.emb.list.item"},
@@ -500,6 +516,7 @@ var TestTableVector768 = TestTable{
 // TestTableEmailSecurity is table to store email security objects
 var TestTableEmailSecurity = TestTable{
 	TableName: "acronis_db_bench_email_security",
+	Databases: VECTOR,
 	columns: [][]interface{}{
 		{"id", "dataset.id"},
 		{"date", "dataset.Date"},
@@ -537,6 +554,7 @@ var TestTableEmailSecurity = TestTable{
 // TestTableBlob is table to store blobs
 var TestTableBlob = TestTable{
 	TableName: "acronis_db_bench_blob",
+	Databases: ALL,
 	columns: [][]interface{}{
 		{"id", "autoinc"},
 		{"uuid", "uuid"},
@@ -558,6 +576,7 @@ var TestTableBlob = TestTable{
 // TestTableLargeObj is table to store large objects
 var TestTableLargeObj = TestTable{
 	TableName: "acronis_db_bench_largeobj",
+	Databases: RELATIONAL,
 	columns: [][]interface{}{
 		{"uuid", "uuid"},
 		{"tenant_id", "tenant_uuid"},
@@ -578,6 +597,7 @@ var TestTableLargeObj = TestTable{
 // TestTableJSON is table to store JSON data
 var TestTableJSON = TestTable{
 	TableName: "acronis_db_bench_json",
+	Databases: RELATIONAL,
 	columns: [][]interface{}{
 		{"previous", "bigint", 0},
 		{"sequence", "bigint", 0},
@@ -630,6 +650,7 @@ var TestTableJSON = TestTable{
 // TestTableTimeSeriesSQL is table to store time series data
 var TestTableTimeSeriesSQL = TestTable{
 	TableName: "acronis_db_bench_ts_sql",
+	Databases: ALL,
 	columns: [][]interface{}{
 		{"id", "autoinc", 0},
 		{"tenant_id", "tenant_uuid", 0},
@@ -665,6 +686,7 @@ var TestTableTimeSeriesSQL = TestTable{
 // TestTableAdvmTasks is table to store tasks
 var TestTableAdvmTasks = TestTable{
 	TableName: "acronis_db_bench_advm_tasks",
+	Databases: RELATIONAL,
 	columns: [][]interface{}{
 		{"origin", "int", 20},
 		{"uuid", "uuid", 0},
@@ -722,6 +744,7 @@ var TestTableAdvmTasks = TestTable{
 // TestTableAdvmResources is table to store resources
 var TestTableAdvmResources = TestTable{
 	TableName: "acronis_db_bench_advm_resources",
+	Databases: RELATIONAL,
 	columns: [][]interface{}{
 		{"origin", "int", 20},
 		{"resource_uuid", "uuid", 100000},
@@ -760,6 +783,7 @@ var TestTableAdvmResources = TestTable{
 // inspired by the Event Archive table
 var TestTableAdvmResourcesStatuses = TestTable{
 	TableName: "acronis_db_bench_advm_resources_statuses",
+	Databases: RELATIONAL,
 	columns: [][]interface{}{
 		{"origin", "int", 20},
 		{"state", "int", 4},
@@ -788,6 +812,7 @@ var TestTableAdvmResourcesStatuses = TestTable{
 // inspired by the Event Archive table
 var TestTableAdvmAgentsResources = TestTable{
 	TableName: "acronis_db_bench_advm_agent_resources",
+	Databases: RELATIONAL,
 	columns: [][]interface{}{
 		{"origin", "int", 20},
 		{"agent_uuid", "uuid", 100000},
@@ -810,6 +835,7 @@ var TestTableAdvmAgentsResources = TestTable{
 // inspired by the Event Archive table
 var TestTableAdvmAgents = TestTable{
 	TableName: "acronis_db_bench_advm_agents",
+	Databases: RELATIONAL,
 	columns: [][]interface{}{
 		{"origin", "int", 20},
 		{"uuid", "uuid", 100000},
@@ -851,6 +877,7 @@ var TestTableAdvmAgents = TestTable{
 // inspired by the Event Archive table
 var TestTableAdvmBackupResources = TestTable{
 	TableName: "acronis_db_bench_advm_backup_resources",
+	Databases: RELATIONAL,
 	columns: [][]interface{}{
 		{"origin", "int", 20},
 		{"backup_id", "int", 400000},
@@ -871,6 +898,7 @@ var TestTableAdvmBackupResources = TestTable{
 // inspired by the Event Archive table
 var TestTableAdvmBackups = TestTable{
 	TableName: "acronis_db_bench_advm_backups",
+	Databases: RELATIONAL,
 	columns: [][]interface{}{
 		{"origin", "int", 20},
 
@@ -897,6 +925,7 @@ var TestTableAdvmBackups = TestTable{
 // inspired by the Event Archive table
 var TestTableAdvmArchives = TestTable{
 	TableName: "acronis_db_bench_advm_archives",
+	Databases: RELATIONAL,
 	columns: [][]interface{}{
 		{"origin", "int", 20},
 
@@ -925,6 +954,7 @@ var TestTableAdvmArchives = TestTable{
 // inspired by the Event Archive table
 var TestTableAdvmVaults = TestTable{
 	TableName: "acronis_db_bench_advm_vaults",
+	Databases: RELATIONAL,
 	columns: [][]interface{}{
 		{"origin", "int", 20},
 
@@ -948,6 +978,7 @@ var TestTableAdvmVaults = TestTable{
 // inspired by the Event Archive table
 var TestTableAdvmDevices = TestTable{
 	TableName: "acronis_db_bench_advm_devices",
+	Databases: RELATIONAL,
 	columns: [][]interface{}{
 		{"origin", "int", 20},
 		{"uuid", "uuid", 0},

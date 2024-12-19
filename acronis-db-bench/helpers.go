@@ -45,7 +45,7 @@ func createTables(b *benchmark.Benchmark) {
 
 	c := dbConnector(b)
 	for _, tableDesc := range TestTables {
-		if usedTables.Contains(tableDesc.TableName) {
+		if usedTables.Contains(tableDesc.TableName) && tableDesc.dbIsSupported(dialectName) {
 			tableDesc.Create(c, b)
 		}
 	}

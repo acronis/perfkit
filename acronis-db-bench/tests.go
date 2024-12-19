@@ -110,6 +110,8 @@ var (
 	RELATIONAL = []db.DialectName{db.POSTGRES, db.MYSQL, db.MSSQL, db.SQLITE}
 	// PMWSA is a list of all supported databases except ClickHouse
 	PMWSA = []db.DialectName{db.POSTGRES, db.MYSQL, db.MSSQL, db.SQLITE, db.CASSANDRA}
+	// VECTOR is a list of all supported vector databases
+	VECTOR = []db.DialectName{db.ELASTICSEARCH, db.OPENSEARCH}
 )
 
 // TestBaseAll tests all tests in the 'base' group
