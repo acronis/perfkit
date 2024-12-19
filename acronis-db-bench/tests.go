@@ -167,7 +167,7 @@ var TestRawQuery = TestDesc{
 					if err != nil {
 						b.Exit(err)
 					}
-					q = strings.Replace(q, "{CTI}", "'"+string(ctiUUID)+"'", -1)
+					q = strings.Replace(q, "{CTI}", "'"+ctiUUID.String()+"'", -1)
 				}
 				if strings.Contains(query, "{TENANT}") {
 					rw := b.Randomizer.GetWorker(c.WorkerID)
@@ -487,7 +487,7 @@ var TestSelectHeavyMinMaxTenant = TestDesc{
 
 			return map[string][]string{"tenant_id": {fmt.Sprintf("%s", (*w)["tenant_id"])}}
 		}
-		testSelect(b, testDesc, nil, []string{"min(completion_time_ns)", "max(completion_time_ns)"}, where, nil, 1)
+		testSelect(b, testDesc, nil, []string{"min(completion_time)", "max(completion_time)"}, where, nil, 1)
 	},
 }
 
@@ -495,7 +495,7 @@ var TestSelectHeavyMinMaxTenant = TestDesc{
 var TestSelectHeavyMinMaxTenantAndState = TestDesc{
 	name:        "select-heavy-minmax-in-tenant-and-state",
 	metric:      "rows/sec",
-	description: "select min(completion_time_ns) and max(completion_time_ns) value from the 'heavy' table WHERE tenant_id = {} AND state = {}",
+	description: "select min(completion_time) and max(completion_time) value from the 'heavy' table WHERE tenant_id = {} AND state = {}",
 	category:    TestSelect,
 	isReadonly:  true,
 	isDBRTest:   false,
@@ -510,11 +510,11 @@ var TestSelectHeavyMinMaxTenantAndState = TestDesc{
 
 			return map[string][]string{
 				"tenant_id": {fmt.Sprintf("%s", (*w)["tenant_id"])},
-				"state":     {fmt.Sprintf("%s", (*w)["state"])},
+				"state":     {fmt.Sprintf("%d", (*w)["state"])},
 			}
 		}
 
-		testSelect(b, testDesc, nil, []string{"min(completion_time_ns)", "max(completion_time_ns)"}, where, nil, 1)
+		testSelect(b, testDesc, nil, []string{"min(completion_time)", "max(completion_time)"}, where, nil, 1)
 	},
 }
 
@@ -2030,35 +2030,64 @@ func tenantAwareCTIAwareWorker(b *benchmark.Benchmark, c *DBConnector, testDesc 
 	c.Log(benchmark.LogTrace, "tenant-aware and CTI-aware SELECT test iteration")
 
 	tableName := testDesc.table.TableName
-	query := buildTenantAwareQuery(tableName)
+	query := buildTenantAwareQuery(c.database.DialectName(), tableName)
 	ctiUUID, err := b.Vault.(*DBTestData).TenantsCache.GetRandomCTIUUID(b.Randomizer.GetWorker(c.WorkerID), 0)
 	if err != nil {
 		b.Exit(err)
 	}
-	ctiAwareQuery := query + fmt.Sprintf(
-		" JOIN `%[1]s` AS `cti_ent` "+
-			"ON `cti_ent`.`uuid` = `%[2]s`.`cti_entity_uuid` AND `%[2]s`.`cti_entity_uuid` IN ('%[4]s') "+
-			"LEFT JOIN `%[3]s` as `cti_prov` "+
-			"ON `cti_prov`.`tenant_id` = `tenants_child`.`id` AND `cti_prov`.`cti_entity_uuid` = `%[2]s`.`cti_entity_uuid` "+
-			"WHERE `cti_prov`.`state` = 1 OR `cti_ent`.`global_state` = 1",
-		tenants.TableNameCtiEntities, tableName, tenants.TableNameCtiProvisioning, string(ctiUUID))
+
+	// TODO: Unify the query building for all dialects
+	var ctiAwareQuery string
+	switch c.database.DialectName() {
+	case db.POSTGRES:
+		ctiAwareQuery = query + fmt.Sprintf(
+			" JOIN `%[1]s` AS `cti_ent` "+
+				"ON `cti_ent`.`uuid`::uuid = `%[2]s`.`cti_entity_uuid` AND `%[2]s`.`cti_entity_uuid` IN ('%[4]s') "+
+				"LEFT JOIN `%[3]s` as `cti_prov` "+
+				"ON `cti_prov`.`tenant_id` = `tenants_child`.`id` AND `cti_prov`.`cti_entity_uuid`::uuid = `%[2]s`.`cti_entity_uuid` "+
+				"WHERE `cti_prov`.`state` = 1 OR `cti_ent`.`global_state` = 1",
+			tenants.TableNameCtiEntities, tableName, tenants.TableNameCtiProvisioning, ctiUUID.String())
+	default:
+		ctiAwareQuery = query + fmt.Sprintf(
+			" JOIN `%[1]s` AS `cti_ent` "+
+				"ON `cti_ent`.`uuid` = `%[2]s`.`cti_entity_uuid` AND `%[2]s`.`cti_entity_uuid` IN ('%[4]s') "+
+				"LEFT JOIN `%[3]s` as `cti_prov` "+
+				"ON `cti_prov`.`tenant_id` = `tenants_child`.`id` AND `cti_prov`.`cti_entity_uuid` = `%[2]s`.`cti_entity_uuid` "+
+				"WHERE `cti_prov`.`state` = 1 OR `cti_ent`.`global_state` = 1",
+			tenants.TableNameCtiEntities, tableName, tenants.TableNameCtiProvisioning, ctiUUID.String())
+	}
 
 	return tenantAwareGenericWorker(b, c, ctiAwareQuery, orderBy)
 }
 
 func tenantAwareWorker(b *benchmark.Benchmark, c *DBConnector, testDesc *TestDesc, orderBy string, batch int) (loops int) { //nolint:revive
-	query := buildTenantAwareQuery(testDesc.table.TableName)
+	query := buildTenantAwareQuery(c.database.DialectName(), testDesc.table.TableName)
 
 	return tenantAwareGenericWorker(b, c, query, orderBy)
 }
 
-func buildTenantAwareQuery(tableName string) string {
-	return fmt.Sprintf("SELECT `%[1]s`.`id` id, `%[1]s`.`tenant_id` FROM `%[1]s` "+
-		"JOIN `%[2]s` AS `tenants_child` ON ((`tenants_child`.`uuid` = `%[1]s`.`tenant_id`) AND (`tenants_child`.`is_deleted` != {true})) "+
-		"JOIN `%[3]s` AS `tenants_closure` ON ((`tenants_closure`.`child_id` = `tenants_child`.`id`) AND (`tenants_closure`.`barrier` <= 0)) "+
-		"JOIN `%[2]s` AS `tenants_parent` ON ((`tenants_parent`.`id` = `tenants_closure`.`parent_id`) "+
-		"AND (`tenants_parent`.`uuid` IN ('{tenant_uuid}')) AND (`tenants_parent`.`is_deleted` != {true}))",
-		tableName, tenants.TableNameTenants, tenants.TableNameTenantClosure)
+func buildTenantAwareQuery(dialectName db.DialectName, tableName string) string {
+	var tenantAwareQuery string
+
+	// TODO: Unify the query building for all dialects
+	switch dialectName {
+	case db.POSTGRES:
+		tenantAwareQuery = fmt.Sprintf("SELECT `%[1]s`.`id` id, `%[1]s`.`tenant_id` FROM `%[1]s` "+
+			"JOIN `%[2]s` AS `tenants_child` ON ((`tenants_child`.`uuid`::uuid = `%[1]s`.`tenant_id`) AND (`tenants_child`.`is_deleted` != {true})) "+
+			"JOIN `%[3]s` AS `tenants_closure` ON ((`tenants_closure`.`child_id` = `tenants_child`.`id`) AND (`tenants_closure`.`barrier` <= 0)) "+
+			"JOIN `%[2]s` AS `tenants_parent` ON ((`tenants_parent`.`id` = `tenants_closure`.`parent_id`) "+
+			"AND (`tenants_parent`.`uuid` IN ('{tenant_uuid}')) AND (`tenants_parent`.`is_deleted` != {true}))",
+			tableName, tenants.TableNameTenants, tenants.TableNameTenantClosure)
+	default:
+		tenantAwareQuery = fmt.Sprintf("SELECT `%[1]s`.`id` id, `%[1]s`.`tenant_id` FROM `%[1]s` "+
+			"JOIN `%[2]s` AS `tenants_child` ON ((`tenants_child`.`uuid` = `%[1]s`.`tenant_id`) AND (`tenants_child`.`is_deleted` != {true})) "+
+			"JOIN `%[3]s` AS `tenants_closure` ON ((`tenants_closure`.`child_id` = `tenants_child`.`id`) AND (`tenants_closure`.`barrier` <= 0)) "+
+			"JOIN `%[2]s` AS `tenants_parent` ON ((`tenants_parent`.`id` = `tenants_closure`.`parent_id`) "+
+			"AND (`tenants_parent`.`uuid` IN ('{tenant_uuid}')) AND (`tenants_parent`.`is_deleted` != {true}))",
+			tableName, tenants.TableNameTenants, tenants.TableNameTenantClosure)
+	}
+
+	return tenantAwareQuery
 }
 
 func tenantAwareGenericWorker(b *benchmark.Benchmark, c *DBConnector, query string, orderBy string) (loops int) {
@@ -2113,7 +2142,7 @@ var TestSelectMediumLastTenant = TestDesc{
 	table:       TestTableMedium,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
 		worker := func(b *benchmark.Benchmark, c *DBConnector, testDesc *TestDesc, batch int) (loops int) { //nolint:revive
-			return tenantAwareWorker(b, c, testDesc, "ORDER BY enqueue_time_ns DESC", 1)
+			return tenantAwareWorker(b, c, testDesc, "ORDER BY enqueue_time DESC", 1)
 		}
 		testGeneric(b, testDesc, worker, 1)
 	},
@@ -2149,7 +2178,7 @@ var TestSelectHeavyLastTenant = TestDesc{
 	table:       TestTableHeavy,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
 		worker := func(b *benchmark.Benchmark, c *DBConnector, testDesc *TestDesc, batch int) (loops int) { //nolint:revive
-			return tenantAwareWorker(b, c, testDesc, "ORDER BY enqueue_time_ns DESC", 1)
+			return tenantAwareWorker(b, c, testDesc, "ORDER BY enqueue_time DESC", 1)
 		}
 		testGeneric(b, testDesc, worker, 1)
 	},
@@ -2167,7 +2196,7 @@ var TestSelectHeavyLastTenantCTI = TestDesc{
 	table:       TestTableHeavy,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
 		worker := func(b *benchmark.Benchmark, c *DBConnector, testDesc *TestDesc, batch int) (loops int) { //nolint:revive
-			return tenantAwareCTIAwareWorker(b, c, testDesc, "ORDER BY enqueue_time_ns DESC", 1)
+			return tenantAwareCTIAwareWorker(b, c, testDesc, "ORDER BY enqueue_time DESC", 1)
 		}
 		testGeneric(b, testDesc, worker, 1)
 	},

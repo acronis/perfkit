@@ -952,7 +952,7 @@ func (tc *TenantsCache) GetTenantUuidBoundId(rw *benchmark.RandomizerWorker, ten
 }
 
 // GetRandomCTIUUID returns random CTI uuid from cache
-func (tc *TenantsCache) GetRandomCTIUUID(rw *benchmark.RandomizerWorker, testCardinality int) (CTIUUID, error) {
+func (tc *TenantsCache) GetRandomCTIUUID(rw *benchmark.RandomizerWorker, testCardinality int) (guuid.UUID, error) {
 	var cardinality int
 	if testCardinality == 0 {
 		cardinality = tc.ctisWorkingSetLimit
@@ -973,7 +973,8 @@ func (tc *TenantsCache) GetRandomCTIUUID(rw *benchmark.RandomizerWorker, testCar
 		tc.Exit(msg)
 	}
 
-	return tc.ctiUuids[rw.IntnExp(cardinality)], nil
+	var value, _ = guuid.ParseBytes([]byte(tc.ctiUuids[rw.IntnExp(cardinality)]))
+	return value, nil
 }
 
 func (tc *TenantsCache) GenCommonFakeValue(columnType string, rw *benchmark.RandomizerWorker, cardinality int) (bool, interface{}) {
