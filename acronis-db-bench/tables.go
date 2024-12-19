@@ -320,7 +320,7 @@ var TestTableHeavy = TestTable{
 		{"cti_entity_uuid", "cti_uuid", 0},
 
 		{"tenant_id", "tenant_uuid", 0},
-		{"tenant_vis_list", "tenant_uuid_parents", 0},
+		// {"tenant_vis_list", "tenant_uuid_parents", 0},
 
 		{"workflow_id", "int", 2147483647},
 		{"state", "int", 16},
@@ -358,9 +358,11 @@ var TestTableHeavy = TestTable{
 
 		{"result_code", "int", 32},
 		{"result_payload", "rbyte", 0, 256},
+
+		{"const_val", "int", 1},
 	},
 	InsertColumns: []string{}, // all
-	UpdateColumns: []string{"progress", "result_payload", "update_time_str", "update_time_ns", "completion_time_str", "completion_time_ns"},
+	UpdateColumns: []string{"progress", "result_payload", "update_time", "completion_time"},
 	TableDefinition: func(dialect db.DialectName) *db.TableDefinition {
 		var tableRows []db.TableRow
 
@@ -397,7 +399,7 @@ var TestTableHeavy = TestTable{
 			db.TableRow{Name: "priority", Type: db.DataTypeInt, NotNull: true, Indexed: true},
 
 			db.TableRow{Name: "issuer_id", Type: db.DataTypeUUID, NotNull: true, Indexed: true},
-			db.TableRow{Name: "issuer_cluster_id", Type: db.DataTypeUUID, NotNull: true, Indexed: true},
+			db.TableRow{Name: "issuer_cluster_id", Type: db.DataTypeUUID, Indexed: true},
 
 			db.TableRow{Name: "heartbeat_ivl_ns", Type: db.DataTypeInt},
 			db.TableRow{Name: "queue_timeout_ns", Type: db.DataTypeInt},
@@ -443,6 +445,8 @@ var TestTableHeavy = TestTable{
 			db.TableRow{Name: "result_error", Type: db.DataTypeString},
 			db.TableRow{Name: "result_warnings", Type: db.DataTypeString},
 			db.TableRow{Name: "result_payload", Type: db.DataTypeString},
+
+			db.TableRow{Name: "const_val", Type: db.DataTypeInt},
 		)
 
 		var tableDef = &db.TableDefinition{
