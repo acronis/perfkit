@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -229,7 +230,94 @@ func testSelect(
 
 		rows.Close()
 
-		return 1
+		return batch
+	}
+
+	b.Run()
+
+	b.Vault.(*DBTestData).scores[testDesc.category] = append(b.Vault.(*DBTestData).scores[testDesc.category], b.Score)
+}
+
+func testSelectRawSQLQuery(
+	b *benchmark.Benchmark,
+	testDesc *TestDesc,
+	fromFunc func(b *benchmark.Benchmark, workerId int) string,
+	what string,
+	whereFunc func(b *benchmark.Benchmark, workerId int) string,
+	orderByFunc func(b *benchmark.Benchmark) string,
+	rowsRequired uint64,
+) {
+	initCommon(b, testDesc, rowsRequired)
+	batch := b.Vault.(*DBTestData).EffectiveBatch
+
+	b.Worker = func(workerId int) (loops int) {
+		c := b.WorkerData[workerId].(*DBWorkerData).workingConn
+
+		from := testDesc.table.TableName
+		if fromFunc != nil {
+			from = fromFunc(b, workerId)
+		}
+		where := ""
+		if whereFunc != nil {
+			where = whereFunc(b, workerId)
+		}
+		orderBy := ""
+		if orderByFunc != nil {
+			orderBy = orderByFunc(b)
+		}
+
+		var dialectName = c.database.DialectName()
+
+		var query string
+		switch dialectName {
+		case db.MSSQL:
+			query = fmt.Sprintf("SELECT {LIMIT} %s FROM %s {WHERE} {ORDERBY}", what, from)
+		default:
+			query = fmt.Sprintf("SELECT %s FROM %s {WHERE} {ORDERBY} {LIMIT}", what, from)
+		}
+
+		if where == "" {
+			query = strings.Replace(query, "{WHERE}", "", -1)
+		} else {
+			query = strings.Replace(query, "{WHERE}", fmt.Sprintf("WHERE %s", where), -1) //nolint:perfsprint
+		}
+
+		if batch == 0 {
+			query = strings.Replace(query, "{LIMIT}", "", -1)
+		} else {
+			switch dialectName {
+			case db.MSSQL:
+				query = strings.Replace(query, "{LIMIT}", fmt.Sprintf("TOP %d", batch), -1)
+			default:
+				query = strings.Replace(query, "{LIMIT}", fmt.Sprintf("LIMIT %d", batch), -1)
+			}
+		}
+
+		if orderBy == "" {
+			query = strings.Replace(query, "{ORDERBY}", "", -1)
+		} else {
+			query = strings.Replace(query, "{ORDERBY}", fmt.Sprintf("ORDER BY %s", orderBy), -1) //nolint:perfsprint
+		}
+
+		if dialectName == db.MYSQL || dialectName == db.SQLITE || dialectName == db.CASSANDRA {
+			query = regexp.MustCompile(`\$\d+`).ReplaceAllString(query, "?")
+		}
+
+		var session = c.database.Session(c.database.Context(context.Background()))
+		var rows, err = session.Query(query)
+		if err != nil {
+			b.Exit("db: cannot select rows: %v", err)
+		}
+
+		for rows.Next() {
+			if err != nil {
+				b.Exit(err)
+			}
+		}
+
+		rows.Close()
+
+		return batch
 	}
 
 	b.Run()

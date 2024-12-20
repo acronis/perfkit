@@ -110,6 +110,8 @@ var (
 	RELATIONAL = []db.DialectName{db.POSTGRES, db.MYSQL, db.MSSQL, db.SQLITE}
 	// PMWSA is a list of all supported databases except ClickHouse
 	PMWSA = []db.DialectName{db.POSTGRES, db.MYSQL, db.MSSQL, db.SQLITE, db.CASSANDRA}
+	// VECTOR is a list of all supported vector databases
+	VECTOR = []db.DialectName{db.ELASTICSEARCH, db.OPENSEARCH}
 )
 
 // TestBaseAll tests all tests in the 'base' group
@@ -165,7 +167,7 @@ var TestRawQuery = TestDesc{
 					if err != nil {
 						b.Exit(err)
 					}
-					q = strings.Replace(q, "{CTI}", "'"+string(ctiUUID)+"'", -1)
+					q = strings.Replace(q, "{CTI}", "'"+ctiUUID.String()+"'", -1)
 				}
 				if strings.Contains(query, "{TENANT}") {
 					rw := b.Randomizer.GetWorker(c.WorkerID)
@@ -485,7 +487,7 @@ var TestSelectHeavyMinMaxTenant = TestDesc{
 
 			return map[string][]string{"tenant_id": {fmt.Sprintf("%s", (*w)["tenant_id"])}}
 		}
-		testSelect(b, testDesc, nil, []string{"min(completion_time_ns)", "max(completion_time_ns)"}, where, nil, 1)
+		testSelect(b, testDesc, nil, []string{"min(completion_time)", "max(completion_time)"}, where, nil, 1)
 	},
 }
 
@@ -493,7 +495,7 @@ var TestSelectHeavyMinMaxTenant = TestDesc{
 var TestSelectHeavyMinMaxTenantAndState = TestDesc{
 	name:        "select-heavy-minmax-in-tenant-and-state",
 	metric:      "rows/sec",
-	description: "select min(completion_time_ns) and max(completion_time_ns) value from the 'heavy' table WHERE tenant_id = {} AND state = {}",
+	description: "select min(completion_time) and max(completion_time) value from the 'heavy' table WHERE tenant_id = {} AND state = {}",
 	category:    TestSelect,
 	isReadonly:  true,
 	isDBRTest:   false,
@@ -508,11 +510,11 @@ var TestSelectHeavyMinMaxTenantAndState = TestDesc{
 
 			return map[string][]string{
 				"tenant_id": {fmt.Sprintf("%s", (*w)["tenant_id"])},
-				"state":     {fmt.Sprintf("%s", (*w)["state"])},
+				"state":     {fmt.Sprintf("%d", (*w)["state"])},
 			}
 		}
 
-		testSelect(b, testDesc, nil, []string{"min(completion_time_ns)", "max(completion_time_ns)"}, where, nil, 1)
+		testSelect(b, testDesc, nil, []string{"min(completion_time)", "max(completion_time)"}, where, nil, 1)
 	},
 }
 
@@ -1384,7 +1386,7 @@ var TestSelectJSONByIndexedValue = TestDesc{
 	databases:   RELATIONAL,
 	table:       TestTableJSON,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
-		var where = func(b *benchmark.Benchmark, workerId int) map[string][]string {
+		where := func(b *benchmark.Benchmark, workerId int) string {
 			id := b.Randomizer.GetWorker(workerId).Uintn64(testDesc.table.RowsCount - 1)
 
 			var dialectName, err = db.GetDialectName(b.TestOpts.(*TestOpts).DBOpts.ConnString)
@@ -1392,27 +1394,21 @@ var TestSelectJSONByIndexedValue = TestDesc{
 				b.Exit(err)
 			}
 
-			var selector = map[string][]string{
-				"id": {fmt.Sprintf("gt(%s)", strconv.FormatUint(id, 10))},
-			}
-
 			switch dialectName {
 			case db.MYSQL:
-				selector["_data_f0f0"] = []string{"10"}
+				return "_data_f0f0 = '10' AND id > " + strconv.FormatUint(id, 10)
 			case db.POSTGRES:
-				// return "json_data @> '{\"field0\": {\"field0\": 10}}' AND id > " + strconv.FormatUint(id, 10)
+				return "json_data @> '{\"field0\": {\"field0\": 10}}' AND id > " + strconv.FormatUint(id, 10)
 			default:
 				b.Exit("The %s test is not supported on driver: %s", testDesc.name, dialectName)
 			}
 
-			return selector
+			return ""
 		}
-
-		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { //nolint:revive
-			return []string{"asc(id)"}
+		orderby := func(b *benchmark.Benchmark) string { //nolint:revive
+			return "id ASC"
 		}
-
-		testSelect(b, testDesc, nil, []string{"id"}, where, orderBy, 1)
+		testSelectRawSQLQuery(b, testDesc, nil, "id", where, orderby, 1)
 	},
 }
 
@@ -1427,7 +1423,7 @@ var TestSearchJSONByIndexedValue = TestDesc{
 	databases:   RELATIONAL,
 	table:       TestTableJSON,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
-		var where = func(b *benchmark.Benchmark, workerId int) map[string][]string {
+		where := func(b *benchmark.Benchmark, workerId int) string {
 			id := b.Randomizer.GetWorker(workerId).Uintn64(testDesc.table.RowsCount - 1)
 
 			var dialectName, err = db.GetDialectName(b.TestOpts.(*TestOpts).DBOpts.ConnString)
@@ -1435,26 +1431,21 @@ var TestSearchJSONByIndexedValue = TestDesc{
 				b.Exit(err)
 			}
 
-			var selector = map[string][]string{
-				"id": {fmt.Sprintf("gt(%s)", strconv.FormatUint(id, 10))},
-			}
-
 			switch dialectName {
 			case db.MYSQL:
-				selector["_data_f0f0f0"] = []string{"like(eedl)"}
+				return "_data_f0f0f0 LIKE '%eedl%' AND id > " + strconv.FormatUint(id, 10)
 			case db.POSTGRES:
-				selector["json_data->'field0'->'field0'->>'field0'"] = []string{"like(eedl)"}
+				return "json_data->'field0'->'field0'->>'field0' LIKE '%eedl%' AND id > " + strconv.FormatUint(id, 10) // searching for the 'needle' word
 			default:
 				b.Exit("The %s test is not supported on driver: %s", testDesc.name, dialectName)
 			}
 
-			return selector
+			return ""
 		}
-
-		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { //nolint:revive
-			return []string{"asc(id)"}
+		orderby := func(b *benchmark.Benchmark) string { //nolint:revive
+			return "id ASC"
 		}
-		testSelect(b, testDesc, nil, []string{"id"}, where, orderBy, 1)
+		testSelectRawSQLQuery(b, testDesc, nil, "id", where, orderby, 1)
 	},
 }
 
@@ -1469,7 +1460,7 @@ var TestSelectJSONByNonIndexedValue = TestDesc{
 	databases:   RELATIONAL,
 	table:       TestTableJSON,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
-		var where = func(b *benchmark.Benchmark, workerId int) map[string][]string {
+		where := func(b *benchmark.Benchmark, workerId int) string {
 			id := b.Randomizer.GetWorker(workerId).Uintn64(testDesc.table.RowsCount - 1)
 
 			var dialectName, err = db.GetDialectName(b.TestOpts.(*TestOpts).DBOpts.ConnString)
@@ -1477,27 +1468,21 @@ var TestSelectJSONByNonIndexedValue = TestDesc{
 				b.Exit(err)
 			}
 
-			var selector = map[string][]string{
-				"id": {fmt.Sprintf("gt(%s)", strconv.FormatUint(id, 10))},
-			}
-
 			switch dialectName {
 			case db.MYSQL:
-				selector["JSON_EXTRACT(json_data, '$.field0.field1')"] = []string{"10"}
+				return "JSON_EXTRACT(json_data, '$.field0.field1') = '10' AND id > " + strconv.FormatUint(id, 10)
 			case db.POSTGRES:
-				// return "json_data @> '{\"field0\": {\"field1\": 10}}' AND id > " + strconv.FormatUint(id, 10)
+				return "json_data @> '{\"field0\": {\"field1\": 10}}' AND id > " + strconv.FormatUint(id, 10)
 			default:
 				b.Exit("The %s test is not supported on driver: %s", testDesc.name, dialectName)
 			}
 
-			return selector
+			return ""
 		}
-
-		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { //nolint:revive
-			return []string{"asc(id)"}
+		orderby := func(b *benchmark.Benchmark) string { //nolint:revive
+			return "id ASC"
 		}
-
-		testSelect(b, testDesc, nil, []string{"id"}, where, orderBy, 1)
+		testSelectRawSQLQuery(b, testDesc, nil, "id", where, orderby, 1)
 	},
 }
 
@@ -1512,7 +1497,7 @@ var TestSearchJSONByNonIndexedValue = TestDesc{
 	databases:   RELATIONAL,
 	table:       TestTableJSON,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
-		var where = func(b *benchmark.Benchmark, workerId int) map[string][]string {
+		where := func(b *benchmark.Benchmark, workerId int) string {
 			id := b.Randomizer.GetWorker(workerId).Uintn64(testDesc.table.RowsCount - 1)
 
 			var dialectName, err = db.GetDialectName(b.TestOpts.(*TestOpts).DBOpts.ConnString)
@@ -1520,27 +1505,21 @@ var TestSearchJSONByNonIndexedValue = TestDesc{
 				b.Exit(err)
 			}
 
-			var selector = map[string][]string{
-				"id": {fmt.Sprintf("gt(%s)", strconv.FormatUint(id, 10))},
-			}
-
 			switch dialectName {
 			case db.MYSQL:
-				selector["JSON_EXTRACT(json_data, '$.field0.field1')"] = []string{"like(eedl)"}
+				return "JSON_EXTRACT(json_data, '$.field0.field1') LIKE '%eedl%' AND id > " + strconv.FormatUint(id, 10)
 			case db.POSTGRES:
-				selector["json_data->'field0'->'field1'->>'field0'"] = []string{"like(eedl)"}
+				return "json_data->'field0'->'field0'->>'field0' LIKE '%eedl%' AND id > " + strconv.FormatUint(id, 10) // searching for the 'needle' word
 			default:
 				b.Exit("The %s test is not supported on driver: %s", testDesc.name, dialectName)
 			}
 
-			return selector
+			return ""
 		}
-
-		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { //nolint:revive
-			return []string{"asc(id)"}
+		orderby := func(b *benchmark.Benchmark) string { //nolint:revive
+			return "id ASC"
 		}
-
-		testSelect(b, testDesc, nil, []string{"id"}, where, orderBy, 1)
+		testSelectRawSQLQuery(b, testDesc, nil, "id", where, orderby, 1)
 	},
 }
 
@@ -1762,23 +1741,18 @@ var TestSelectTimeSeriesSQL = TestDesc{
 			b.Vault.(*DBTestData).EffectiveBatch = 256
 		}
 
-		var colConfs = testDesc.table.GetColumnsConf([]string{"tenant_id", "device_id", "metric_id"}, false)
+		colConfs := testDesc.table.GetColumnsConf([]string{"tenant_id", "device_id", "metric_id"}, false)
 
-		var where = func(b *benchmark.Benchmark, workerId int) map[string][]string {
+		where := func(b *benchmark.Benchmark, workerId int) string {
 			w := b.GenFakeDataAsMap(workerId, colConfs, false)
 
-			return map[string][]string{
-				"tenant_id": {fmt.Sprintf("%s", (*w)["tenant_id"])},
-				"device_id": {fmt.Sprintf("%s", (*w)["device_id"])},
-				"metric_id": {fmt.Sprintf("%s", (*w)["metric_id"])},
-			}
+			return fmt.Sprintf("tenant_id = '%s' AND device_id = '%s' AND metric_id = '%s'", (*w)["tenant_id"], (*w)["device_id"], (*w)["metric_id"])
+		}
+		orderby := func(b *benchmark.Benchmark) string { //nolint:revive
+			return "id DESC"
 		}
 
-		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { //nolint:revive
-			return []string{"desc(id)"}
-		}
-
-		testSelect(b, testDesc, nil, []string{"id"}, where, orderBy, 1)
+		testSelectRawSQLQuery(b, testDesc, nil, "id", where, orderby, 1)
 
 		b.Vault.(*DBTestData).EffectiveBatch = origBatch
 	},
@@ -2028,35 +2002,64 @@ func tenantAwareCTIAwareWorker(b *benchmark.Benchmark, c *DBConnector, testDesc 
 	c.Log(benchmark.LogTrace, "tenant-aware and CTI-aware SELECT test iteration")
 
 	tableName := testDesc.table.TableName
-	query := buildTenantAwareQuery(tableName)
+	query := buildTenantAwareQuery(c.database.DialectName(), tableName)
 	ctiUUID, err := b.Vault.(*DBTestData).TenantsCache.GetRandomCTIUUID(b.Randomizer.GetWorker(c.WorkerID), 0)
 	if err != nil {
 		b.Exit(err)
 	}
-	ctiAwareQuery := query + fmt.Sprintf(
-		" JOIN `%[1]s` AS `cti_ent` "+
-			"ON `cti_ent`.`uuid` = `%[2]s`.`cti_entity_uuid` AND `%[2]s`.`cti_entity_uuid` IN ('%[4]s') "+
-			"LEFT JOIN `%[3]s` as `cti_prov` "+
-			"ON `cti_prov`.`tenant_id` = `tenants_child`.`id` AND `cti_prov`.`cti_entity_uuid` = `%[2]s`.`cti_entity_uuid` "+
-			"WHERE `cti_prov`.`state` = 1 OR `cti_ent`.`global_state` = 1",
-		tenants.TableNameCtiEntities, tableName, tenants.TableNameCtiProvisioning, string(ctiUUID))
+
+	// TODO: Unify the query building for all dialects
+	var ctiAwareQuery string
+	switch c.database.DialectName() {
+	case db.POSTGRES:
+		ctiAwareQuery = query + fmt.Sprintf(
+			" JOIN `%[1]s` AS `cti_ent` "+
+				"ON `cti_ent`.`uuid`::uuid = `%[2]s`.`cti_entity_uuid` AND `%[2]s`.`cti_entity_uuid` IN ('%[4]s') "+
+				"LEFT JOIN `%[3]s` as `cti_prov` "+
+				"ON `cti_prov`.`tenant_id` = `tenants_child`.`id` AND `cti_prov`.`cti_entity_uuid`::uuid = `%[2]s`.`cti_entity_uuid` "+
+				"WHERE `cti_prov`.`state` = 1 OR `cti_ent`.`global_state` = 1",
+			tenants.TableNameCtiEntities, tableName, tenants.TableNameCtiProvisioning, ctiUUID.String())
+	default:
+		ctiAwareQuery = query + fmt.Sprintf(
+			" JOIN `%[1]s` AS `cti_ent` "+
+				"ON `cti_ent`.`uuid` = `%[2]s`.`cti_entity_uuid` AND `%[2]s`.`cti_entity_uuid` IN ('%[4]s') "+
+				"LEFT JOIN `%[3]s` as `cti_prov` "+
+				"ON `cti_prov`.`tenant_id` = `tenants_child`.`id` AND `cti_prov`.`cti_entity_uuid` = `%[2]s`.`cti_entity_uuid` "+
+				"WHERE `cti_prov`.`state` = 1 OR `cti_ent`.`global_state` = 1",
+			tenants.TableNameCtiEntities, tableName, tenants.TableNameCtiProvisioning, ctiUUID.String())
+	}
 
 	return tenantAwareGenericWorker(b, c, ctiAwareQuery, orderBy)
 }
 
 func tenantAwareWorker(b *benchmark.Benchmark, c *DBConnector, testDesc *TestDesc, orderBy string, batch int) (loops int) { //nolint:revive
-	query := buildTenantAwareQuery(testDesc.table.TableName)
+	query := buildTenantAwareQuery(c.database.DialectName(), testDesc.table.TableName)
 
 	return tenantAwareGenericWorker(b, c, query, orderBy)
 }
 
-func buildTenantAwareQuery(tableName string) string {
-	return fmt.Sprintf("SELECT `%[1]s`.`id` id, `%[1]s`.`tenant_id` FROM `%[1]s` "+
-		"JOIN `%[2]s` AS `tenants_child` ON ((`tenants_child`.`uuid` = `%[1]s`.`tenant_id`) AND (`tenants_child`.`is_deleted` != {true})) "+
-		"JOIN `%[3]s` AS `tenants_closure` ON ((`tenants_closure`.`child_id` = `tenants_child`.`id`) AND (`tenants_closure`.`barrier` <= 0)) "+
-		"JOIN `%[2]s` AS `tenants_parent` ON ((`tenants_parent`.`id` = `tenants_closure`.`parent_id`) "+
-		"AND (`tenants_parent`.`uuid` IN ('{tenant_uuid}')) AND (`tenants_parent`.`is_deleted` != {true}))",
-		tableName, tenants.TableNameTenants, tenants.TableNameTenantClosure)
+func buildTenantAwareQuery(dialectName db.DialectName, tableName string) string {
+	var tenantAwareQuery string
+
+	// TODO: Unify the query building for all dialects
+	switch dialectName {
+	case db.POSTGRES:
+		tenantAwareQuery = fmt.Sprintf("SELECT `%[1]s`.`id` id, `%[1]s`.`tenant_id` FROM `%[1]s` "+
+			"JOIN `%[2]s` AS `tenants_child` ON ((`tenants_child`.`uuid`::uuid = `%[1]s`.`tenant_id`) AND (`tenants_child`.`is_deleted` != {true})) "+
+			"JOIN `%[3]s` AS `tenants_closure` ON ((`tenants_closure`.`child_id` = `tenants_child`.`id`) AND (`tenants_closure`.`barrier` <= 0)) "+
+			"JOIN `%[2]s` AS `tenants_parent` ON ((`tenants_parent`.`id` = `tenants_closure`.`parent_id`) "+
+			"AND (`tenants_parent`.`uuid` IN ('{tenant_uuid}')) AND (`tenants_parent`.`is_deleted` != {true}))",
+			tableName, tenants.TableNameTenants, tenants.TableNameTenantClosure)
+	default:
+		tenantAwareQuery = fmt.Sprintf("SELECT `%[1]s`.`id` id, `%[1]s`.`tenant_id` FROM `%[1]s` "+
+			"JOIN `%[2]s` AS `tenants_child` ON ((`tenants_child`.`uuid` = `%[1]s`.`tenant_id`) AND (`tenants_child`.`is_deleted` != {true})) "+
+			"JOIN `%[3]s` AS `tenants_closure` ON ((`tenants_closure`.`child_id` = `tenants_child`.`id`) AND (`tenants_closure`.`barrier` <= 0)) "+
+			"JOIN `%[2]s` AS `tenants_parent` ON ((`tenants_parent`.`id` = `tenants_closure`.`parent_id`) "+
+			"AND (`tenants_parent`.`uuid` IN ('{tenant_uuid}')) AND (`tenants_parent`.`is_deleted` != {true}))",
+			tableName, tenants.TableNameTenants, tenants.TableNameTenantClosure)
+	}
+
+	return tenantAwareQuery
 }
 
 func tenantAwareGenericWorker(b *benchmark.Benchmark, c *DBConnector, query string, orderBy string) (loops int) {
@@ -2111,7 +2114,7 @@ var TestSelectMediumLastTenant = TestDesc{
 	table:       TestTableMedium,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
 		worker := func(b *benchmark.Benchmark, c *DBConnector, testDesc *TestDesc, batch int) (loops int) { //nolint:revive
-			return tenantAwareWorker(b, c, testDesc, "ORDER BY enqueue_time_ns DESC", 1)
+			return tenantAwareWorker(b, c, testDesc, "ORDER BY enqueue_time DESC", 1)
 		}
 		testGeneric(b, testDesc, worker, 1)
 	},
@@ -2147,7 +2150,7 @@ var TestSelectHeavyLastTenant = TestDesc{
 	table:       TestTableHeavy,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
 		worker := func(b *benchmark.Benchmark, c *DBConnector, testDesc *TestDesc, batch int) (loops int) { //nolint:revive
-			return tenantAwareWorker(b, c, testDesc, "ORDER BY enqueue_time_ns DESC", 1)
+			return tenantAwareWorker(b, c, testDesc, "ORDER BY enqueue_time DESC", 1)
 		}
 		testGeneric(b, testDesc, worker, 1)
 	},
@@ -2165,7 +2168,7 @@ var TestSelectHeavyLastTenantCTI = TestDesc{
 	table:       TestTableHeavy,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
 		worker := func(b *benchmark.Benchmark, c *DBConnector, testDesc *TestDesc, batch int) (loops int) { //nolint:revive
-			return tenantAwareCTIAwareWorker(b, c, testDesc, "ORDER BY enqueue_time_ns DESC", 1)
+			return tenantAwareCTIAwareWorker(b, c, testDesc, "ORDER BY enqueue_time DESC", 1)
 		}
 		testGeneric(b, testDesc, worker, 1)
 	},
