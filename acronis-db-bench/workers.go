@@ -230,7 +230,7 @@ func testSelect(
 
 		rows.Close()
 
-		return 1
+		return batch
 	}
 
 	b.Run()
@@ -317,7 +317,7 @@ func testSelectRawSQLQuery(
 
 		rows.Close()
 
-		return 1
+		return batch
 	}
 
 	b.Run()
