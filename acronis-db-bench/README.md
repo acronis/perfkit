@@ -228,6 +228,13 @@ Acronis Database Benchmark: version v1-main-dev
   update-heavy                            : [PMWS----] : update random row in the 'heavy' table
   update-medium                           : [PMWS----] : update random row in the 'medium' table
 
+  -- Vector tests group -----------------------------------------------------------------------------------------------------------
+
+  insert-email-security-multivalue        : [P-----EO] : insert an email security data into the 'email_security' table by batches
+  insert-vector-768-multivalue            : [P-----EO] : insert a 768-dim vectors with ids into the 'vector' table by batches
+  select-email-security-768-nearest-l2    : [P-----EO] : selects k nearest emails by vector L2 norm from the 'email_security' table to the given vectorized 768-dim email
+  select-vector-768-nearest-l2            : [P-----EO] : selects k nearest vectors by L2 norm from the 'vector' table to the given 768-dim vector
+
   -- Advanced tests group ---------------------------------------------------------------------------------------------------------
 
   bulkupdate-heavy                        : [PMWS----] : update N rows (see --batch=, default 50000) in the 'heavy' table by single transaction
@@ -292,6 +299,96 @@ Databases symbol legend:
 
   P - PostgreSQL; M - MySQL/MariaDB; W - MSSQL; S - SQLite; C - ClickHouse; A - Cassandra; E - Elasticsearch; O - OpenSearch;
 ```
+
+### Tests with external data source
+
+Some benchmark tests require an external data source to run.
+For instance, the `insert-vector-768-multivalue` test needs a vector data source.
+To supply this data in Parquet format, use the `--parquet-data-source option`.
+This allows you to prepare the data source in advance rather than generating it dynamically during the test.
+
+To run it with the Parquet data source, use the following command:
+
+```bash
+acronis-db-bench --connection-string <conn_string> -t insert-vector-768-multivalue --parquet-data-source datasource.parquet
+```
+
+The recommended library for constructing Parquet data sources is Apache Arrow. 
+It is widely used, language-agnostic, and provides bindings for many programming languages.
+
+For command-line operations with Parquet files, you can use the `parquet-cli` tool provided by Apache.
+
+#### Vector tests
+
+These tests are aimed to measure the performance of vector ingest and search operations.
+
+* `insert-vector-768-multivalue` - insert a 768-dim vectors with ids into the 'vector' table by batches
+* `select-vector-768-nearest-l2` - selects k nearest vectors by L2 norm from the 'vector' table to the given 768-dim vector
+  
+Both tests require a vector data source to run the tests.
+Parquet file should have the following format:
+```bash
+parquet meta datasource.parquet
+...
+Schema:
+message root {
+  optional int64 id;
+  optional group emb (LIST) {
+    repeated group list {
+      optional float item;
+    }
+  }
+}
+
+Row group 0:  count: ...
+--------------------------------------------------------------------------------
+               type      encodings
+id             INT64     Z RB_
+emb.list.item  FLOAT     Z RR_
+```
+Each emb.list item should have 768 float values.
+
+
+#### Email Security tests
+
+These tests are inspired by typical DB access patterns in Email Security services.
+They are aimed to measure the performance of email security data ingest and search operations.
+
+* `insert-email-security-multivalue` - insert an email security data into the 'email_security' table by batches
+* `select-email-security-768-nearest-l2` - selects k nearest emails by vector L2 norm from the 'email_security' table to the given vectorized 768-dim email
+
+Both tests require a vector data source to run the tests.
+Parquet file should have the following format:
+```bash
+parquet meta datasource.parquet
+...
+Schema:
+message schema {
+  optional int64 id;
+  optional binary Date (STRING);
+  optional binary From (STRING);
+  optional binary To (STRING);
+  optional binary Subject (STRING);
+  optional binary Body (STRING);
+  optional group Embedding (LIST) {
+    repeated group list {
+      optional float element;
+    }
+  }
+}
+
+Row group 0:  count: ...
+--------------------------------------------------------------------------------
+                        type      encodings
+id                      INT64     S _ R
+Date                    BINARY    S _ R
+From                    BINARY    S _ R
+To                      BINARY    S _ R
+Subject                 BINARY    S _ R
+Body                    BINARY    S _ R_ F
+Embedding.list.element  FLOAT     S _ R_ F
+```
+Each Embedding.list item should have 768 float values.
 
 ## Versions
 
