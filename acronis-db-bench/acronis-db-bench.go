@@ -137,6 +137,11 @@ func Main() {
 		b.Exit("db type conversion error")
 	}
 
+	var connStringErr error
+	if testOpts.DBOpts.ConnString, connStringErr = constructConnStringFromOpts(testOpts.DBOpts); connStringErr != nil {
+		b.Exit("failed to construct connection string: %v", connStringErr)
+	}
+
 	d := DBTestData{}
 	b.Vault = &d
 

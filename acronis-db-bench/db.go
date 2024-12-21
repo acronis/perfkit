@@ -14,7 +14,11 @@ const SequenceName = "acronis_db_bench_sequence" // SequenceName is the name of 
 
 // DatabaseOpts represents common flags for every test
 type DatabaseOpts struct {
-	ConnString   string `long:"connection-string" description:"connection string" default:"sqlite://:memory:" required:"false"`
+	// Driver and Dsn are deprecated, keep for backward compatibility, use ConnString instead
+	Driver string `long:"driver" description:"(deprecated) db driver (postgres|mysql|sqlite3)" required:"false"`
+	Dsn    string `long:"dsn" description:"(deprecated) dsn connection string" required:"false"`
+
+	ConnString   string `long:"connection-string" description:"connection string" required:"false"`
 	MaxOpenConns int    `long:"max-open-cons" description:"max open connections per worker" default:"2" required:"false"`
 	Reconnect    bool   `long:"reconnect" description:"reconnect to DB before every test iteration" required:"false"`
 
