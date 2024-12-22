@@ -55,7 +55,7 @@ Replace <connection_string> with the data source for your database.
 #### Database options
 
 ```
-  --connection-string=   connection string (default: sqlite://:memory:)
+  --connection-string=   connection string for the database in URI format
   --maxopencons=         Set sql/db MaxOpenConns per worker, default value is set to 2 because the benchmark uses it's own workers pool (default: 2)
   --reconnect            reconnect to DB before every test iteration
   --dry-run              do not execute any INSERT/UPDATE/DELETE queries on DB-side
