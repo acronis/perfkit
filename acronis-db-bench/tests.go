@@ -1259,7 +1259,7 @@ var TestInsertHeavyDBR = TestDesc{
 	category:    TestInsert,
 	isReadonly:  false,
 	isDBRTest:   true,
-	databases:   RELATIONAL,
+	databases:   []db.DialectName{db.POSTGRES, db.ELASTICSEARCH, db.OPENSEARCH},
 	table:       TestTableHeavy,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
 		testInsertGeneric(b, testDesc)
@@ -1273,7 +1273,7 @@ var TestInsertVector768MultiValue = TestDesc{
 	description: "insert a 768-dim vectors with ids into the 'vector' table by batches",
 	category:    TestInsert,
 	isReadonly:  false,
-	databases:   RELATIONAL,
+	databases:   []db.DialectName{db.POSTGRES, db.ELASTICSEARCH, db.OPENSEARCH},
 	table:       TestTableVector768,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
 		testGeneric(b, testDesc, insertMultiValueDataWorker, 0)
@@ -1284,10 +1284,10 @@ var TestInsertVector768MultiValue = TestDesc{
 var TestSelectVector768NearestL2 = TestDesc{
 	name:        "select-vector-768-nearest-l2",
 	metric:      "rows/sec",
-	description: "selects k nearest vectors from the 'vector' table to the given vector",
+	description: "selects k nearest vectors by L2 norm from the 'vector' table to the given 768-dim vector",
 	category:    TestSelect,
 	isReadonly:  false,
-	databases:   RELATIONAL,
+	databases:   []db.DialectName{db.POSTGRES, db.ELASTICSEARCH, db.OPENSEARCH},
 	table:       TestTableVector768,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
 		var colConfs = []benchmark.DBFakeColumnConf{
@@ -1309,10 +1309,10 @@ var TestSelectVector768NearestL2 = TestDesc{
 var TestInsertEmailSecurityMultiValue = TestDesc{
 	name:        "insert-email-security-multivalue",
 	metric:      "rows/sec",
-	description: "insert a email security data into the 'email_security' table by batches",
+	description: "insert an email security data into the 'email_security' table by batches",
 	category:    TestInsert,
 	isReadonly:  false,
-	databases:   ALL,
+	databases:   []db.DialectName{db.POSTGRES, db.ELASTICSEARCH, db.OPENSEARCH},
 	table:       TestTableEmailSecurity,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
 		testGeneric(b, testDesc, insertMultiValueDataWorker, 0)
@@ -1323,10 +1323,10 @@ var TestInsertEmailSecurityMultiValue = TestDesc{
 var TestSelectEmailByEmbeddingNearestL2 = TestDesc{
 	name:        "select-email-security-768-nearest-l2",
 	metric:      "rows/sec",
-	description: "selects k nearest emails from the 'email_security' table to the given vector",
+	description: "selects k nearest emails by vector L2 norm from the 'email_security' table to the given vectorized 768-dim email",
 	category:    TestSelect,
 	isReadonly:  false,
-	databases:   ALL,
+	databases:   []db.DialectName{db.POSTGRES, db.ELASTICSEARCH, db.OPENSEARCH},
 	table:       TestTableEmailSecurity,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
 		var colConfs = []benchmark.DBFakeColumnConf{
@@ -2206,10 +2206,6 @@ func GetTests() ([]*TestGroup, map[string]*TestDesc) {
 	tg.add(&TestCopyHeavy)
 	tg.add(&TestUpdateMedium)
 	tg.add(&TestUpdateHeavy)
-	tg.add(&TestInsertVector768MultiValue)
-	tg.add(&TestSelectVector768NearestL2)
-	tg.add(&TestInsertEmailSecurityMultiValue)
-	tg.add(&TestSelectEmailByEmbeddingNearestL2)
 	tg.add(&TestSelectOne)
 	tg.add(&TestSelectMediumLast)
 	tg.add(&TestSelectMediumRand)
@@ -2228,6 +2224,14 @@ func GetTests() ([]*TestGroup, map[string]*TestDesc) {
 	tg.add(&TestSelectHeavyRandPartnerStartUpdateTimePage)
 
 	tg.add(&TestBaseAll)
+
+	tg = NewTestGroup("Vector tests group")
+	g = append(g, tg)
+
+	tg.add(&TestInsertVector768MultiValue)
+	tg.add(&TestSelectVector768NearestL2)
+	tg.add(&TestInsertEmailSecurityMultiValue)
+	tg.add(&TestSelectEmailByEmbeddingNearestL2)
 
 	tg = NewTestGroup("Advanced tests group")
 	g = append(g, tg)
