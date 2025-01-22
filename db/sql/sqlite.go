@@ -68,9 +68,9 @@ func (d *sqliteDialect) getType(id db.DataType) string {
 	switch id {
 	case db.DataTypeInt:
 		return "INT"
-	case db.DataTypeString:
+	case db.DataTypeVarChar:
 		return "VARCHAR"
-	case db.DataTypeString256:
+	case db.DataTypeVarChar256:
 		return "VARCHAR(256)"
 	case db.DataTypeText:
 		return "VARCHAR"

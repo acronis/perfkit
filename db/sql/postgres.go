@@ -80,18 +80,28 @@ func (d *pgDialect) getType(id db.DataType) string {
 	switch id {
 	case db.DataTypeInt:
 		return "INT"
-	case db.DataTypeString:
+	case db.DataTypeVarChar:
 		return "VARCHAR"
-	case db.DataTypeString256:
+	case db.DataTypeVarChar32:
+		return "VARCHAR(32)"
+	case db.DataTypeVarChar64:
+		return "VARCHAR(64)"
+	case db.DataTypeVarChar128:
+		return "VARCHAR(128)"
+	case db.DataTypeVarChar256:
 		return "VARCHAR(256)"
 	case db.DataTypeText:
 		return "VARCHAR"
+	case db.DataTypeJSON:
+		return "JSONB"
 	case db.DataTypeBigInt:
 		return "BIGINT"
 	case db.DataTypeBigIntAutoIncPK:
 		return "BIGSERIAL PRIMARY KEY"
 	case db.DataTypeBigIntAutoInc:
 		return "BIGSERIAL"
+	case db.DataTypeSmallInt:
+		return "SMALLINT"
 	case db.DataTypeAscii:
 		return ""
 	case db.DataTypeUUID:

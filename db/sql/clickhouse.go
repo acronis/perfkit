@@ -62,9 +62,9 @@ func (d *clickHouseDialect) getType(id db.DataType) string {
 	switch id {
 	case db.DataTypeInt:
 		return "UInt64" // Int for integers
-	case db.DataTypeString:
+	case db.DataTypeVarChar:
 		return "String"
-	case db.DataTypeString256:
+	case db.DataTypeVarChar256:
 		return "String"
 	case db.DataTypeText:
 		return "String"
