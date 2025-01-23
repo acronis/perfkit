@@ -112,7 +112,7 @@ func (suite *TestingSuite) makeTestSession() (db.Database, db.Session, *db.Conte
 		QueryLogger:     logger,
 	})
 
-	require.NoError(suite.T(), err, "making test esSession")
+	require.NoError(suite.T(), err, "making test sqlSession")
 
 	var tableSpec = testTableDefinition(dbo.DialectName())
 

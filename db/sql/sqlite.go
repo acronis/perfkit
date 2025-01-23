@@ -204,6 +204,7 @@ func (c *sqliteConnector) ConnectionPool(cfg db.Config) (db.Database, error) {
 	rwc.SetMaxIdleConns(cfg.MaxOpenConns)
 
 	dbo.dialect = &dia
+	dbo.encodeParams = cfg.EncodeParams
 	dbo.queryLogger = cfg.QueryLogger
 
 	return dbo, nil

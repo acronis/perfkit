@@ -59,8 +59,10 @@ type Config struct {
 	MaxOpenConns    int
 	MaxConnLifetime time.Duration
 	MaxPacketSize   int
-	DryRun          bool
-	UseTruncate     bool
+
+	EncodeParams bool
+	DryRun       bool
+	UseTruncate  bool
 
 	TLSEnabled bool
 	TLSCACert  []byte

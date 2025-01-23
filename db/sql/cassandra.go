@@ -212,6 +212,7 @@ func (c *cassandraConnector) ConnectionPool(cfg db.Config) (db.Database, error) 
 	rwc.SetMaxIdleConns(maxConn)
 
 	dbo.dialect = &cassandraDialect{keySpace: keySpace}
+	dbo.encodeParams = cfg.EncodeParams
 	dbo.queryLogger = cfg.QueryLogger
 
 	return dbo, nil

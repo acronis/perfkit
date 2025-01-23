@@ -183,6 +183,7 @@ func (c *msConnector) ConnectionPool(cfg db.Config) (db.Database, error) {
 	}
 
 	dbo.dialect = &msDialect{}
+	dbo.encodeParams = cfg.EncodeParams
 	dbo.queryLogger = cfg.QueryLogger
 
 	return dbo, nil

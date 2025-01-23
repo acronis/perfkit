@@ -183,6 +183,7 @@ func (c *clickhouseConnector) ConnectionPool(cfg db.Config) (db.Database, error)
 	}
 
 	dbo.dialect = &clickHouseDialect{}
+	dbo.encodeParams = cfg.EncodeParams
 	dbo.queryLogger = cfg.QueryLogger
 
 	return dbo, nil

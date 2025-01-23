@@ -195,7 +195,7 @@ func (d *pgDialect) recommendations() []db.Recommendation {
 		{Setting: "min_wal_size", Meaning: "min WAL size", MinVal: int64(32 * db.MByte), RecommendedVal: int64(64 * db.MByte)},
 		{Setting: "max_connections", Meaning: "max allowed number of DB connections", MinVal: int64(512), RecommendedVal: int64(2048)},
 		{Setting: "random_page_cost", Meaning: "it should be 1.1 as it is typical for SSD", ExpectedValue: "1.1"},
-		{Setting: "track_activities", Meaning: "collects esSession activities info", ExpectedValue: "on"},
+		{Setting: "track_activities", Meaning: "collects session activities info", ExpectedValue: "on"},
 		{Setting: "track_counts", Meaning: "track tables/indexes access count", ExpectedValue: "on"},
 		{Setting: "log_checkpoints", Meaning: "logs information about each checkpoint", ExpectedValue: "on"},
 		{Setting: "jit", Meaning: "JIT compilation feature", ExpectedValue: "off"},
@@ -290,6 +290,7 @@ func (c *pgConnector) ConnectionPool(cfg db.Config) (db.Database, error) {
 	rwc.SetConnMaxLifetime(cfg.MaxConnLifetime)
 
 	dbo.dialect = dia
+	dbo.encodeParams = cfg.EncodeParams
 	dbo.queryLogger = cfg.QueryLogger
 
 	return dbo, nil

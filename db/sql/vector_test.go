@@ -20,7 +20,7 @@ func (suite *TestingSuite) makeVectorTestSession() (db.Database, db.Session, *db
 		QueryLogger:     logger,
 	})
 
-	require.NoError(suite.T(), err, "making test esSession")
+	require.NoError(suite.T(), err, "making test sqlSession")
 
 	var tableSpec = testVectorTableDefinition(dbo.DialectName())
 
