@@ -116,6 +116,8 @@ func (d *pgDialect) getType(id db.DataType) string {
 		return "TIMESTAMP"
 	case db.DataTypeDateTime6:
 		return "TIMESTAMP(6)"
+	case db.DataTypeTimestamp:
+		return "TIMESTAMP"
 	case db.DataTypeTimestamp6:
 		return "TIMESTAMP(6)"
 	case db.DataTypeCurrentTimeStamp6:

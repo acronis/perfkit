@@ -692,7 +692,7 @@ var TestTableTimeSeriesSQL = TestTable{
 				{Name: "tenant_id", Type: db.DataTypeUUID, NotNull: true, Indexed: true},
 				{Name: "device_id", Type: db.DataTypeVarChar64, NotNull: true, Indexed: true},
 				{Name: "metric_id", Type: db.DataTypeUUID, NotNull: true, Indexed: true},
-				{Name: "ts", Type: db.DataTypeDateTime, NotNull: true, Indexed: true},
+				{Name: "ts", Type: db.DataTypeTimestamp, NotNull: true, Indexed: true},
 				{Name: "value", Type: db.DataTypeInt, NotNull: true},
 			},
 			PrimaryKey: []string{"id"},

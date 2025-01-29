@@ -88,7 +88,8 @@ func (d *mysqlDialect) encodeBytes(bs []byte) string {
 }
 
 func (d *mysqlDialect) encodeTime(timestamp time.Time) string {
-	return fmt.Sprintf("'%s'", timestamp.UTC().Format(time.RFC3339Nano))
+	// return fmt.Sprintf("%d", timestamp.UnixNano())
+	return fmt.Sprintf("'%s'", timestamp.UTC().Truncate(time.Second).Format("2006-01-02T15:04:05"))
 }
 
 // GetType returns MySQL-specific types
