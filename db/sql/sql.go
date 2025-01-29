@@ -79,21 +79,23 @@ func inTx(ctx context.Context, t transactor, d dialect, fn func(q querier, d dia
 }
 
 type sqlGateway struct {
-	ctx        context.Context
-	rw         querier
-	dialect    dialect
-	InsideTX   bool
-	MaxRetries int
+	ctx     context.Context
+	rw      querier
+	dialect dialect
+
+	InsideTX                 bool
+	MaxRetries               int
+	QueryStringInterpolation bool
 
 	queryLogger db.Logger
 }
 
-type esSession struct {
+type sqlSession struct {
 	sqlGateway
 	t transactor
 }
 
-func (s *esSession) Transact(fn func(tx db.DatabaseAccessor) error) error {
+func (s *sqlSession) Transact(fn func(tx db.DatabaseAccessor) error) error {
 	var err error
 	var maxRetries = s.MaxRetries
 	if maxRetries == 0 {
@@ -102,7 +104,7 @@ func (s *esSession) Transact(fn func(tx db.DatabaseAccessor) error) error {
 
 	for i := 0; i < maxRetries; i++ {
 		err = inTx(s.ctx, s.t, s.dialect, func(q querier, dl dialect) error {
-			gw := sqlGateway{s.ctx, q, dl, true, s.MaxRetries, s.queryLogger}
+			gw := sqlGateway{s.ctx, q, dl, true, s.MaxRetries, s.QueryStringInterpolation, s.queryLogger}
 			return fn(&gw) // bad but will work for now?
 		})
 
@@ -115,10 +117,12 @@ func (s *esSession) Transact(fn func(tx db.DatabaseAccessor) error) error {
 
 // database is a wrapper for DB connection
 type sqlDatabase struct {
-	rw          accessor
-	t           transactor
-	dialect     dialect
-	useTruncate bool
+	rw      accessor
+	t       transactor
+	dialect dialect
+
+	useTruncate              bool
+	queryStringInterpolation bool
 
 	queryLogger      db.Logger
 	readedRowsLogger db.Logger
@@ -381,13 +385,14 @@ func (d *sqlDatabase) Context(ctx context.Context) *db.Context {
 }
 
 func (d *sqlDatabase) Session(c *db.Context) db.Session {
-	return &esSession{
+	return &sqlSession{
 		sqlGateway: sqlGateway{
-			ctx:         c.Ctx,
-			rw:          timedQuerier{q: d.rw, dbtime: atomic.NewInt64(c.DBtime.Nanoseconds()), queryLogger: d.queryLogger},
-			dialect:     d.dialect,
-			InsideTX:    false,
-			queryLogger: d.queryLogger,
+			ctx:                      c.Ctx,
+			rw:                       timedQuerier{q: d.rw, dbtime: atomic.NewInt64(c.DBtime.Nanoseconds()), queryLogger: d.queryLogger},
+			dialect:                  d.dialect,
+			InsideTX:                 false,
+			QueryStringInterpolation: d.queryStringInterpolation,
+			queryLogger:              d.queryLogger,
 		},
 		t: timedTransactor{
 			t:           d.t,

@@ -59,8 +59,10 @@ type Config struct {
 	MaxOpenConns    int
 	MaxConnLifetime time.Duration
 	MaxPacketSize   int
-	DryRun          bool
-	UseTruncate     bool
+
+	QueryStringInterpolation bool
+	DryRun                   bool
+	UseTruncate              bool
 
 	TLSEnabled bool
 	TLSCACert  []byte
@@ -300,12 +302,17 @@ type DataType string
 const (
 	DataTypeId                DataType = "{$id}"
 	DataTypeInt               DataType = "{$int}"
-	DataTypeString            DataType = "{$string}"
-	DataTypeString256         DataType = "{$string256}"
+	DataTypeVarChar           DataType = "{$varchar}"
+	DataTypeVarChar32         DataType = "{$varchar32}"
+	DataTypeVarChar64         DataType = "{$varchar64}"
+	DataTypeVarChar128        DataType = "{$varchar128}"
+	DataTypeVarChar256        DataType = "{$varchar256}"
 	DataTypeText              DataType = "{$text}"
+	DataTypeJSON              DataType = "{$json}"
 	DataTypeBigInt            DataType = "{$bigint}"
 	DataTypeBigIntAutoIncPK   DataType = "{$bigint_autoinc_pk}"
 	DataTypeBigIntAutoInc     DataType = "{$bigint_autoinc}"
+	DataTypeSmallInt          DataType = "{$smallint}"
 	DataTypeAscii             DataType = "{$ascii}"
 	DataTypeUUID              DataType = "{$uuid}"
 	DataTypeVarCharUUID       DataType = "{$varchar_uuid}"
@@ -313,6 +320,7 @@ const (
 	DataTypeHugeBlob          DataType = "{$hugeblob}"
 	DataTypeDateTime          DataType = "{$datetime}"
 	DataTypeDateTime6         DataType = "{$datetime6}"
+	DataTypeTimestamp         DataType = "{$timestamp}"
 	DataTypeTimestamp6        DataType = "{$timestamp6}"
 	DataTypeCurrentTimeStamp6 DataType = "{$current_timestamp6}"
 	DataTypeBinary20          DataType = "{$binary20}"

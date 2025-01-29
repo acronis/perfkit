@@ -22,6 +22,8 @@ type DatabaseOpts struct {
 	MaxOpenConns int    `long:"max-open-cons" description:"max open connections per worker" default:"2" required:"false"`
 	Reconnect    bool   `long:"reconnect" description:"reconnect to DB before every test iteration" required:"false"`
 
+	EnableQueryStringInterpolation bool `long:"enable-query-string-interpolation" description:"enable query string interpolation during insert queries construction" required:"false"`
+
 	DryRun bool `long:"dry-run" description:"do not execute any INSERT/UPDATE/DELETE queries on DB-side" required:"false"`
 
 	LogQueries    bool `long:"log-queries" description:"log queries" required:"false"`
@@ -147,10 +149,11 @@ func NewDBConnector(dbOpts *DatabaseOpts, workerID int, logger *benchmark.Logger
 	}
 
 	var dbConn, err = db.Open(db.Config{
-		ConnString:   dbOpts.ConnString,
-		MaxOpenConns: dbOpts.MaxOpenConns,
-		DryRun:       dbOpts.DryRun,
-		UseTruncate:  dbOpts.UseTruncate,
+		ConnString:               dbOpts.ConnString,
+		MaxOpenConns:             dbOpts.MaxOpenConns,
+		QueryStringInterpolation: dbOpts.EnableQueryStringInterpolation,
+		DryRun:                   dbOpts.DryRun,
+		UseTruncate:              dbOpts.UseTruncate,
 
 		QueryLogger:      queryLogger,
 		ReadedRowsLogger: readedRowsLogger,

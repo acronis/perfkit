@@ -33,7 +33,7 @@ func createSelectQueryBuilder(tableName string, tableRows []db.TableRow) error {
 			queryBuilder.queryable[row.Name] = idCond()
 		case db.DataTypeUUID:
 			queryBuilder.queryable[row.Name] = uuidCond()
-		case db.DataTypeString, db.DataTypeString256, db.DataTypeLongText:
+		case db.DataTypeVarChar, db.DataTypeVarChar256, db.DataTypeLongText:
 			queryBuilder.queryable[row.Name] = stringCond(256, true)
 		case db.DataTypeDateTime:
 			queryBuilder.queryable[row.Name] = timeCond()

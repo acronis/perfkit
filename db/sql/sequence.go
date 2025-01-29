@@ -7,7 +7,7 @@ import (
 )
 
 // GetNextVal returns the next value from a sequence
-func (s *esSession) GetNextVal(sequenceName string) (uint64, error) {
+func (s *sqlSession) GetNextVal(sequenceName string) (uint64, error) {
 	var nextVal uint64
 
 	switch s.dialect.name() {

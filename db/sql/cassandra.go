@@ -66,9 +66,9 @@ func (d *cassandraDialect) getType(dataType db.DataType) string {
 	switch dataType {
 	case db.DataTypeInt:
 		return "INT"
-	case db.DataTypeString:
+	case db.DataTypeVarChar:
 		return "VARCHAR"
-	case db.DataTypeString256:
+	case db.DataTypeVarChar256:
 		return "VARCHAR(256)"
 	case db.DataTypeText:
 		return "VARCHAR"
@@ -212,6 +212,7 @@ func (c *cassandraConnector) ConnectionPool(cfg db.Config) (db.Database, error) 
 	rwc.SetMaxIdleConns(maxConn)
 
 	dbo.dialect = &cassandraDialect{keySpace: keySpace}
+	dbo.queryStringInterpolation = cfg.QueryStringInterpolation
 	dbo.queryLogger = cfg.QueryLogger
 
 	return dbo, nil

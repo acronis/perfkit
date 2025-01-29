@@ -89,7 +89,7 @@ func testTableDefinition(dia db.DialectName) *db.TableDefinition {
 			TableRows: []db.TableRow{
 				{Name: "origin", Type: db.DataTypeInt, NotNull: true},
 				{Name: "type", Type: db.DataTypeInt, NotNull: true},
-				{Name: "name", Type: db.DataTypeString256, NotNull: false},
+				{Name: "name", Type: db.DataTypeVarChar256, NotNull: false},
 			},
 			PrimaryKey: []string{"origin", "type", "name"},
 		}
@@ -112,7 +112,7 @@ func (suite *TestingSuite) makeTestSession() (db.Database, db.Session, *db.Conte
 		QueryLogger:     logger,
 	})
 
-	require.NoError(suite.T(), err, "making test esSession")
+	require.NoError(suite.T(), err, "making test sqlSession")
 
 	var tableSpec = testTableDefinition(dbo.DialectName())
 

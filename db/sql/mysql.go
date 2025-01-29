@@ -88,7 +88,8 @@ func (d *mysqlDialect) encodeBytes(bs []byte) string {
 }
 
 func (d *mysqlDialect) encodeTime(timestamp time.Time) string {
-	return fmt.Sprintf("'%s'", timestamp.UTC().Format(time.RFC3339Nano))
+	// return fmt.Sprintf("%d", timestamp.UnixNano())
+	return fmt.Sprintf("'%s'", timestamp.UTC().Truncate(time.Second).Format("2006-01-02T15:04:05"))
 }
 
 // GetType returns MySQL-specific types
@@ -96,20 +97,30 @@ func (d *mysqlDialect) getType(id db.DataType) string {
 	switch id {
 	case db.DataTypeInt:
 		return "INT"
-	case db.DataTypeString:
+	case db.DataTypeVarChar:
 		return "VARCHAR"
-	case db.DataTypeString256:
+	case db.DataTypeVarChar32:
+		return "VARCHAR(32)"
+	case db.DataTypeVarChar64:
+		return "VARCHAR(64)"
+	case db.DataTypeVarChar128:
+		return "VARCHAR(128)"
+	case db.DataTypeVarChar256:
 		return "VARCHAR(256)"
 	case db.DataTypeText:
-		return "VARCHAR"
+		return "TEXT"
+	case db.DataTypeJSON:
+		return "JSON"
 	case db.DataTypeBigInt:
 		return "BIGINT"
 	case db.DataTypeBigIntAutoIncPK:
 		return "BIGINT AUTO_INCREMENT PRIMARY KEY"
 	case db.DataTypeBigIntAutoInc:
 		return "BIGINT AUTO_INCREMENT"
+	case db.DataTypeSmallInt:
+		return "SMALLINT"
 	case db.DataTypeAscii:
-		return "character set ascii"
+		return "CHARACTER SET ascii"
 	case db.DataTypeUUID:
 		return "VARCHAR(36)"
 	case db.DataTypeVarCharUUID:
@@ -124,6 +135,8 @@ func (d *mysqlDialect) getType(id db.DataType) string {
 		return "DATETIME"
 	case db.DataTypeDateTime6:
 		return "DATETIME(6)"
+	case db.DataTypeTimestamp:
+		return "TIMESTAMP"
 	case db.DataTypeTimestamp6:
 		return "TIMESTAMP(6)"
 	case db.DataTypeCurrentTimeStamp6:
@@ -144,16 +157,20 @@ func (d *mysqlDialect) getType(id db.DataType) string {
 		return "LONGTEXT"
 	case db.DataTypeUnique:
 		return "unique"
+	case db.DataTypeEngine:
+		if d.sqlEngine == "xpand-allnodes" {
+			return "engine = xpand"
+		} else if d.sqlEngine != "" {
+			return "engine = " + d.sqlEngine
+		} else {
+			return "engine = innodb"
+		}
 	case db.DataTypeNotNull:
 		return "not null"
 	case db.DataTypeNull:
 		return "null"
-	}
-
-	if d.sqlEngine == "xpand-allnodes" {
-		return "engine = xpand"
-	} else {
-		return "engine = " + d.sqlEngine
+	default:
+		return ""
 	}
 }
 
@@ -272,6 +289,7 @@ func (c *mysqlConnector) ConnectionPool(cfg db.Config) (db.Database, error) {
 	}
 
 	dbo.dialect = &mysqlDialect{}
+	dbo.queryStringInterpolation = cfg.QueryStringInterpolation
 	dbo.queryLogger = cfg.QueryLogger
 
 	return dbo, nil

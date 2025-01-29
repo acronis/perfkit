@@ -1353,7 +1353,7 @@ var TestInsertJSON = TestDesc{
 	category:    TestInsert,
 	isReadonly:  false,
 	isDBRTest:   false,
-	databases:   RELATIONAL,
+	databases:   []db.DialectName{db.MYSQL, db.POSTGRES},
 	table:       TestTableJSON,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
 		testInsertGeneric(b, testDesc)
@@ -1383,7 +1383,7 @@ var TestSelectJSONByIndexedValue = TestDesc{
 	category:    TestSelect,
 	isReadonly:  true,
 	isDBRTest:   false,
-	databases:   RELATIONAL,
+	databases:   []db.DialectName{db.MYSQL, db.POSTGRES},
 	table:       TestTableJSON,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
 		where := func(b *benchmark.Benchmark, workerId int) string {
@@ -1420,7 +1420,7 @@ var TestSearchJSONByIndexedValue = TestDesc{
 	category:    TestSelect,
 	isReadonly:  true,
 	isDBRTest:   false,
-	databases:   RELATIONAL,
+	databases:   []db.DialectName{db.MYSQL, db.POSTGRES},
 	table:       TestTableJSON,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
 		where := func(b *benchmark.Benchmark, workerId int) string {
@@ -1457,7 +1457,7 @@ var TestSelectJSONByNonIndexedValue = TestDesc{
 	category:    TestSelect,
 	isReadonly:  true,
 	isDBRTest:   false,
-	databases:   RELATIONAL,
+	databases:   []db.DialectName{db.MYSQL, db.POSTGRES},
 	table:       TestTableJSON,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
 		where := func(b *benchmark.Benchmark, workerId int) string {
@@ -1494,7 +1494,7 @@ var TestSearchJSONByNonIndexedValue = TestDesc{
 	category:    TestSelect,
 	isReadonly:  true,
 	isDBRTest:   false,
-	databases:   RELATIONAL,
+	databases:   []db.DialectName{db.MYSQL, db.POSTGRES},
 	table:       TestTableJSON,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
 		where := func(b *benchmark.Benchmark, workerId int) string {
@@ -1770,7 +1770,7 @@ var TestInsertAdvmTasks = TestDesc{
 	category:    TestInsert,
 	isReadonly:  false,
 	isDBRTest:   false,
-	databases:   []db.DialectName{db.POSTGRES},
+	databases:   []db.DialectName{db.POSTGRES, db.MSSQL},
 	table:       TestTableAdvmTasks,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
 		testInsertGeneric(b, testDesc)
@@ -1785,7 +1785,7 @@ var TestSelectAdvmTasksLast = TestDesc{
 	category:    TestSelect,
 	isReadonly:  false,
 	isDBRTest:   false,
-	databases:   []db.DialectName{db.POSTGRES},
+	databases:   []db.DialectName{db.POSTGRES, db.MSSQL},
 	table:       TestTableAdvmTasks,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
 		var where = func(b *benchmark.Benchmark, workerId int) map[string][]string { //nolint:revive
@@ -1809,7 +1809,7 @@ var TestSelectAdvmTasksCodePerWeek = TestDesc{
 	category:    TestSelect,
 	isReadonly:  false,
 	isDBRTest:   false,
-	databases:   []db.DialectName{db.POSTGRES},
+	databases:   []db.DialectName{db.POSTGRES, db.MSSQL},
 	table:       TestTableAdvmTasks,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
 		// need to implement it
@@ -1825,7 +1825,7 @@ var TestInsertAdvmResources = TestDesc{
 	category:    TestInsert,
 	isReadonly:  false,
 	isDBRTest:   false,
-	databases:   []db.DialectName{db.POSTGRES},
+	databases:   []db.DialectName{db.POSTGRES, db.MSSQL},
 	table:       TestTableAdvmResources,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
 		testInsertGeneric(b, testDesc)
@@ -1840,7 +1840,7 @@ var TestInsertAdvmResourcesStatuses = TestDesc{
 	category:    TestInsert,
 	isReadonly:  false,
 	isDBRTest:   false,
-	databases:   []db.DialectName{db.POSTGRES},
+	databases:   []db.DialectName{db.POSTGRES, db.MSSQL},
 	table:       TestTableAdvmResourcesStatuses,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
 		testInsertGeneric(b, testDesc)
@@ -1855,7 +1855,7 @@ var TestInsertAdvmAgentResources = TestDesc{
 	category:    TestInsert,
 	isReadonly:  false,
 	isDBRTest:   false,
-	databases:   []db.DialectName{db.POSTGRES},
+	databases:   []db.DialectName{db.POSTGRES, db.MSSQL},
 	table:       TestTableAdvmAgentsResources,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
 		testInsertGeneric(b, testDesc)
@@ -1870,7 +1870,7 @@ var TestInsertAdvmAgents = TestDesc{
 	category:    TestInsert,
 	isReadonly:  false,
 	isDBRTest:   false,
-	databases:   []db.DialectName{db.POSTGRES},
+	databases:   []db.DialectName{db.POSTGRES, db.MSSQL},
 	table:       TestTableAdvmAgents,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
 		testInsertGeneric(b, testDesc)
@@ -1885,7 +1885,7 @@ var TestInsertAdvmBackupResources = TestDesc{
 	category:    TestInsert,
 	isReadonly:  false,
 	isDBRTest:   false,
-	databases:   []db.DialectName{db.POSTGRES},
+	databases:   []db.DialectName{db.POSTGRES, db.MSSQL},
 	table:       TestTableAdvmBackupResources,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
 		testInsertGeneric(b, testDesc)
@@ -1900,7 +1900,7 @@ var TestInsertAdvmBackups = TestDesc{
 	category:    TestInsert,
 	isReadonly:  false,
 	isDBRTest:   false,
-	databases:   []db.DialectName{db.POSTGRES},
+	databases:   []db.DialectName{db.POSTGRES, db.MSSQL},
 	table:       TestTableAdvmBackups,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
 		testInsertGeneric(b, testDesc)
@@ -1915,7 +1915,7 @@ var TestInsertAdvmArchives = TestDesc{
 	category:    TestInsert,
 	isReadonly:  false,
 	isDBRTest:   false,
-	databases:   []db.DialectName{db.POSTGRES},
+	databases:   []db.DialectName{db.POSTGRES, db.MSSQL},
 	table:       TestTableAdvmArchives,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
 		testInsertGeneric(b, testDesc)
@@ -1930,7 +1930,7 @@ var TestInsertAdvmVaults = TestDesc{
 	category:    TestInsert,
 	isReadonly:  false,
 	isDBRTest:   false,
-	databases:   []db.DialectName{db.POSTGRES},
+	databases:   []db.DialectName{db.POSTGRES, db.MSSQL},
 	table:       TestTableAdvmVaults,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
 		testInsertGeneric(b, testDesc)
@@ -1945,7 +1945,7 @@ var TestInsertAdvmDevices = TestDesc{
 	category:    TestInsert,
 	isReadonly:  false,
 	isDBRTest:   false,
-	databases:   []db.DialectName{db.POSTGRES},
+	databases:   []db.DialectName{db.POSTGRES, db.MSSQL},
 	table:       TestTableAdvmDevices,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
 		testInsertGeneric(b, testDesc)

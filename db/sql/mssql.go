@@ -61,9 +61,9 @@ func (d *msDialect) getType(id db.DataType) string {
 	switch id {
 	case db.DataTypeInt:
 		return "BIGINT"
-	case db.DataTypeString:
+	case db.DataTypeVarChar:
 		return "VARCHAR"
-	case db.DataTypeString256:
+	case db.DataTypeVarChar256:
 		return "VARCHAR(256)"
 	case db.DataTypeText:
 		return "VARCHAR"
@@ -183,6 +183,7 @@ func (c *msConnector) ConnectionPool(cfg db.Config) (db.Database, error) {
 	}
 
 	dbo.dialect = &msDialect{}
+	dbo.queryStringInterpolation = cfg.QueryStringInterpolation
 	dbo.queryLogger = cfg.QueryLogger
 
 	return dbo, nil

@@ -80,18 +80,28 @@ func (d *pgDialect) getType(id db.DataType) string {
 	switch id {
 	case db.DataTypeInt:
 		return "INT"
-	case db.DataTypeString:
+	case db.DataTypeVarChar:
 		return "VARCHAR"
-	case db.DataTypeString256:
+	case db.DataTypeVarChar32:
+		return "VARCHAR(32)"
+	case db.DataTypeVarChar64:
+		return "VARCHAR(64)"
+	case db.DataTypeVarChar128:
+		return "VARCHAR(128)"
+	case db.DataTypeVarChar256:
 		return "VARCHAR(256)"
 	case db.DataTypeText:
 		return "VARCHAR"
+	case db.DataTypeJSON:
+		return "JSONB"
 	case db.DataTypeBigInt:
 		return "BIGINT"
 	case db.DataTypeBigIntAutoIncPK:
 		return "BIGSERIAL PRIMARY KEY"
 	case db.DataTypeBigIntAutoInc:
 		return "BIGSERIAL"
+	case db.DataTypeSmallInt:
+		return "SMALLINT"
 	case db.DataTypeAscii:
 		return ""
 	case db.DataTypeUUID:
@@ -106,6 +116,8 @@ func (d *pgDialect) getType(id db.DataType) string {
 		return "TIMESTAMP"
 	case db.DataTypeDateTime6:
 		return "TIMESTAMP(6)"
+	case db.DataTypeTimestamp:
+		return "TIMESTAMP"
 	case db.DataTypeTimestamp6:
 		return "TIMESTAMP(6)"
 	case db.DataTypeCurrentTimeStamp6:
@@ -185,7 +197,7 @@ func (d *pgDialect) recommendations() []db.Recommendation {
 		{Setting: "min_wal_size", Meaning: "min WAL size", MinVal: int64(32 * db.MByte), RecommendedVal: int64(64 * db.MByte)},
 		{Setting: "max_connections", Meaning: "max allowed number of DB connections", MinVal: int64(512), RecommendedVal: int64(2048)},
 		{Setting: "random_page_cost", Meaning: "it should be 1.1 as it is typical for SSD", ExpectedValue: "1.1"},
-		{Setting: "track_activities", Meaning: "collects esSession activities info", ExpectedValue: "on"},
+		{Setting: "track_activities", Meaning: "collects session activities info", ExpectedValue: "on"},
 		{Setting: "track_counts", Meaning: "track tables/indexes access count", ExpectedValue: "on"},
 		{Setting: "log_checkpoints", Meaning: "logs information about each checkpoint", ExpectedValue: "on"},
 		{Setting: "jit", Meaning: "JIT compilation feature", ExpectedValue: "off"},
@@ -280,6 +292,7 @@ func (c *pgConnector) ConnectionPool(cfg db.Config) (db.Database, error) {
 	rwc.SetConnMaxLifetime(cfg.MaxConnLifetime)
 
 	dbo.dialect = dia
+	dbo.queryStringInterpolation = cfg.QueryStringInterpolation
 	dbo.queryLogger = cfg.QueryLogger
 
 	return dbo, nil
