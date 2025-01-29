@@ -290,7 +290,7 @@ func (c *pgConnector) ConnectionPool(cfg db.Config) (db.Database, error) {
 	rwc.SetConnMaxLifetime(cfg.MaxConnLifetime)
 
 	dbo.dialect = dia
-	dbo.encodeParams = cfg.EncodeParams
+	dbo.queryStringInterpolation = cfg.QueryStringInterpolation
 	dbo.queryLogger = cfg.QueryLogger
 
 	return dbo, nil

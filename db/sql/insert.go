@@ -7,7 +7,7 @@ import (
 	"github.com/acronis/perfkit/db"
 )
 
-func (g *sqlGateway) bulkInsertRaw(tableName string, rows [][]interface{}, columnNames []string) error {
+func (g *sqlGateway) bulkInsertParameterized(tableName string, rows [][]interface{}, columnNames []string) error {
 	if len(rows) == 0 {
 		return nil
 	}
@@ -70,7 +70,7 @@ func (g *sqlGateway) bulkInsertRaw(tableName string, rows [][]interface{}, colum
 	return nil
 }
 
-func (g *sqlGateway) bulkInsertEncoded(tableName string, rows [][]interface{}, columnNames []string) error {
+func (g *sqlGateway) bulkInsertLiteral(tableName string, rows [][]interface{}, columnNames []string) error {
 	if len(rows) == 0 {
 		return nil
 	}
@@ -116,9 +116,9 @@ func (g *sqlGateway) bulkInsertEncoded(tableName string, rows [][]interface{}, c
 
 // BulkInsert inserts rows into a table
 func (g *sqlGateway) BulkInsert(tableName string, rows [][]interface{}, columnNames []string) error {
-	if g.EncodeParams {
-		return g.bulkInsertEncoded(tableName, rows, columnNames)
+	if g.QueryStringInterpolation {
+		return g.bulkInsertLiteral(tableName, rows, columnNames)
 	} else {
-		return g.bulkInsertRaw(tableName, rows, columnNames)
+		return g.bulkInsertParameterized(tableName, rows, columnNames)
 	}
 }

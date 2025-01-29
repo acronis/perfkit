@@ -288,7 +288,7 @@ func (c *mysqlConnector) ConnectionPool(cfg db.Config) (db.Database, error) {
 	}
 
 	dbo.dialect = &mysqlDialect{}
-	dbo.encodeParams = cfg.EncodeParams
+	dbo.queryStringInterpolation = cfg.QueryStringInterpolation
 	dbo.queryLogger = cfg.QueryLogger
 
 	return dbo, nil

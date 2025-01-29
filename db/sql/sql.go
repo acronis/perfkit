@@ -83,9 +83,9 @@ type sqlGateway struct {
 	rw      querier
 	dialect dialect
 
-	InsideTX     bool
-	MaxRetries   int
-	EncodeParams bool
+	InsideTX                 bool
+	MaxRetries               int
+	QueryStringInterpolation bool
 
 	queryLogger db.Logger
 }
@@ -104,7 +104,7 @@ func (s *sqlSession) Transact(fn func(tx db.DatabaseAccessor) error) error {
 
 	for i := 0; i < maxRetries; i++ {
 		err = inTx(s.ctx, s.t, s.dialect, func(q querier, dl dialect) error {
-			gw := sqlGateway{s.ctx, q, dl, true, s.MaxRetries, s.EncodeParams, s.queryLogger}
+			gw := sqlGateway{s.ctx, q, dl, true, s.MaxRetries, s.QueryStringInterpolation, s.queryLogger}
 			return fn(&gw) // bad but will work for now?
 		})
 
@@ -121,8 +121,8 @@ type sqlDatabase struct {
 	t       transactor
 	dialect dialect
 
-	useTruncate  bool
-	encodeParams bool
+	useTruncate              bool
+	queryStringInterpolation bool
 
 	queryLogger      db.Logger
 	readedRowsLogger db.Logger
@@ -387,12 +387,12 @@ func (d *sqlDatabase) Context(ctx context.Context) *db.Context {
 func (d *sqlDatabase) Session(c *db.Context) db.Session {
 	return &sqlSession{
 		sqlGateway: sqlGateway{
-			ctx:          c.Ctx,
-			rw:           timedQuerier{q: d.rw, dbtime: atomic.NewInt64(c.DBtime.Nanoseconds()), queryLogger: d.queryLogger},
-			dialect:      d.dialect,
-			InsideTX:     false,
-			EncodeParams: d.encodeParams,
-			queryLogger:  d.queryLogger,
+			ctx:                      c.Ctx,
+			rw:                       timedQuerier{q: d.rw, dbtime: atomic.NewInt64(c.DBtime.Nanoseconds()), queryLogger: d.queryLogger},
+			dialect:                  d.dialect,
+			InsideTX:                 false,
+			QueryStringInterpolation: d.queryStringInterpolation,
+			queryLogger:              d.queryLogger,
 		},
 		t: timedTransactor{
 			t:           d.t,
