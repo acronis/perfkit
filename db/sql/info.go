@@ -390,7 +390,7 @@ func getTableSizeMB(q querier, d dialect, tableName string) (int64, error) {
 	case db.POSTGRES:
 		query = `SELECT pg_total_relation_size('%s') / (1024 * 1024);`
 	case db.MYSQL:
-		query = `SELECT Data_length / (1024 * 1024) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '%s';`
+		query = `SELECT CAST(Data_length / (1024 * 1024) AS UNSIGNED) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '%s';`
 	default:
 		return -1, nil
 	}
@@ -413,7 +413,7 @@ func getIndexesSizeMB(q querier, d dialect, tableName string) (int64, error) {
 	case db.POSTGRES:
 		query = "SELECT pg_indexes_size('%s') / (1024 * 1024)"
 	case db.MYSQL:
-		query = "SELECT Index_length / (1024 * 1024) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '%s'"
+		query = "SELECT CAST(Index_length / (1024 * 1024) AS UNSIGNED) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '%s'"
 	default:
 		return -1, nil
 	}
