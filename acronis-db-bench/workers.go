@@ -46,6 +46,11 @@ func initWorker(b *benchmark.Benchmark, workerID int, testDesc *TestDesc, rowsRe
 		testData := b.Vault.(*DBTestData)
 		testData.TestDesc = testDesc
 
+		// Initialize TenantsCache if it's nil
+		if testData.TenantsCache == nil {
+			testData.TenantsCache = tenants.NewTenantsCache(b)
+		}
+
 		tableName := testDesc.table.TableName
 
 		t := TestTables[tableName]
@@ -98,7 +103,7 @@ func initWorker(b *benchmark.Benchmark, workerID int, testDesc *TestDesc, rowsRe
 			tenantCacheDatabase = conn.database
 		}
 
-		if err := b.Vault.(*DBTestData).TenantsCache.Init(tenantCacheDatabase); err != nil {
+		if err := testData.TenantsCache.Init(tenantCacheDatabase); err != nil {
 			b.Exit("db: cannot initialize tenants cache: %v", err)
 		}
 	}
