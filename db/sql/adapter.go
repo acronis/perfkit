@@ -63,3 +63,12 @@ func (t *sqlTransaction) commit() error {
 func (t *sqlTransaction) rollback() error {
 	return t.be.Rollback()
 }
+
+type sqlSurrogateResult struct{}
+
+func (r *sqlSurrogateResult) LastInsertId() (int64, error) {
+	return 0, nil
+}
+func (r *sqlSurrogateResult) RowsAffected() (int64, error) {
+	return 0, nil
+}

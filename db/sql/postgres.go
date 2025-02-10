@@ -159,6 +159,10 @@ func (d *pgDialect) randFunc() string {
 	return "RANDOM()"
 }
 
+func (d *pgDialect) supportTransactions() bool {
+	return true
+}
+
 func (d *pgDialect) isRetriable(err error) bool {
 	if pqErr, ok := err.(*pq.Error); ok {
 		if pqErr.Code == "40P01" { // deadlock error
@@ -293,6 +297,7 @@ func (c *pgConnector) ConnectionPool(cfg db.Config) (db.Database, error) {
 
 	dbo.dialect = dia
 	dbo.queryStringInterpolation = cfg.QueryStringInterpolation
+	dbo.dryRun = cfg.DryRun
 	dbo.queryLogger = cfg.QueryLogger
 
 	return dbo, nil

@@ -74,16 +74,55 @@ func (g *sqlGateway) StatementExit(statement string, startTime time.Time, err er
 	*/
 }
 
+type sqlStatement interface {
+	Exec(args ...any) (sql.Result, error)
+	Close() error
+}
+
 type sqlStmt struct {
 	stmt *sql.Stmt
 }
 
-func (s *sqlStmt) Exec(args ...any) (db.Result, error) {
+func (s *sqlStmt) Exec(args ...any) (sql.Result, error) {
 	return s.stmt.Exec(args...)
 }
 
 func (s *sqlStmt) Close() error {
 	return s.stmt.Close()
+}
+
+// wrapperStmt is a wrapper for sqlStmt that adds additional features:
+// - logging of queries
+// - dry-run mode
+type wrapperStmt struct {
+	stmt sqlStatement
+
+	dryRun      bool
+	queryLogger db.Logger
+}
+
+func (ws *wrapperStmt) Exec(args ...any) (db.Result, error) {
+	if ws.queryLogger != nil {
+		if ws.dryRun {
+			ws.queryLogger.Log("-- EXECUTE stmt -- skip because of 'dry-run' mode")
+		} else {
+			ws.queryLogger.Log("EXECUTE stmt;")
+		}
+	}
+
+	if ws.dryRun {
+		return &sqlSurrogateResult{}, nil
+	}
+
+	return ws.stmt.Exec(args...)
+}
+
+func (ws *wrapperStmt) Close() error {
+	if ws.queryLogger != nil {
+		ws.queryLogger.Log("DEALLOCATE PREPARE stmt;")
+	}
+
+	return ws.stmt.Close()
 }
 
 func (g *sqlGateway) Prepare(query string) (db.Stmt, error) {
@@ -92,7 +131,11 @@ func (g *sqlGateway) Prepare(query string) (db.Stmt, error) {
 		return nil, err
 	}
 
-	return &sqlStmt{stmt: stmt}, err
+	return &wrapperStmt{
+		stmt:        &sqlStmt{stmt: stmt},
+		dryRun:      g.dryRun,
+		queryLogger: g.queryLogger,
+	}, err
 }
 
 // getElapsedTime returns elapsed time since startTime

@@ -133,6 +133,10 @@ func (d *msDialect) isDeadlock(err error) bool {
 	return false
 }
 
+func (d *msDialect) supportTransactions() bool {
+	return true
+}
+
 func (d *msDialect) isRetriable(err error) bool {
 	return d.isDeadlock(err)
 }
@@ -184,6 +188,7 @@ func (c *msConnector) ConnectionPool(cfg db.Config) (db.Database, error) {
 
 	dbo.dialect = &msDialect{}
 	dbo.queryStringInterpolation = cfg.QueryStringInterpolation
+	dbo.dryRun = cfg.DryRun
 	dbo.queryLogger = cfg.QueryLogger
 
 	return dbo, nil

@@ -125,6 +125,10 @@ func (d *clickHouseDialect) randFunc() string {
 	return ""
 }
 
+func (d *clickHouseDialect) supportTransactions() bool {
+	return true
+}
+
 func (d *clickHouseDialect) isRetriable(err error) bool {
 	return false
 }
@@ -184,6 +188,7 @@ func (c *clickhouseConnector) ConnectionPool(cfg db.Config) (db.Database, error)
 
 	dbo.dialect = &clickHouseDialect{}
 	dbo.queryStringInterpolation = cfg.QueryStringInterpolation
+	dbo.dryRun = cfg.DryRun
 	dbo.queryLogger = cfg.QueryLogger
 
 	return dbo, nil

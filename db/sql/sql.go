@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"strings"
 	"time"
 
 	"database/sql"
@@ -88,6 +89,7 @@ type sqlGateway struct {
 	QueryStringInterpolation bool
 
 	queryLogger db.Logger
+	dryRun      bool
 }
 
 type sqlSession struct {
@@ -104,7 +106,15 @@ func (s *sqlSession) Transact(fn func(tx db.DatabaseAccessor) error) error {
 
 	for i := 0; i < maxRetries; i++ {
 		err = inTx(s.ctx, s.t, s.dialect, func(q querier, dl dialect) error {
-			gw := sqlGateway{s.ctx, q, dl, true, s.MaxRetries, s.QueryStringInterpolation, s.queryLogger}
+			gw := sqlGateway{
+				s.ctx,
+				q,
+				dl,
+				true,
+				s.MaxRetries,
+				s.QueryStringInterpolation,
+				s.queryLogger,
+				s.dryRun}
 			return fn(&gw) // bad but will work for now?
 		})
 
@@ -123,6 +133,7 @@ type sqlDatabase struct {
 
 	useTruncate              bool
 	queryStringInterpolation bool
+	dryRun                   bool
 
 	queryLogger      db.Logger
 	readedRowsLogger db.Logger
@@ -235,148 +246,209 @@ func accountTime(t *atomic.Int64, since time.Time) {
 	t.Add(time.Since(since).Nanoseconds())
 }
 
-type timedQuerier struct {
-	dbtime *atomic.Int64 // Do not move
-	q      querier
+// wrapperQuerier is a wrapper for querier that implements following functionality:
+// - measuring time of queries
+// - logging of queries
+// - dry-run mode
+type wrapperQuerier struct {
+	q querier
 
+	dbtime      *atomic.Int64 // Do not move
+	dryRun      bool
 	queryLogger db.Logger
 }
 
-func (tq timedQuerier) execContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
-	defer accountTime(tq.dbtime, time.Now())
+func (wq wrapperQuerier) execContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
+	defer accountTime(wq.dbtime, time.Now())
 
-	if tq.queryLogger != nil {
-		tq.queryLogger.Log(query)
+	if wq.queryLogger != nil {
+		if wq.dryRun {
+			if !strings.Contains(query, "\n") {
+				wq.queryLogger.Log(fmt.Sprintf("-- %s -- skip because of 'dry-run' mode", query))
+			} else {
+				wq.queryLogger.Log("-- skip because of 'dry-run' mode")
+				formattedQuery := fmt.Sprintf("/*\n%s\n*/", query)
+				wq.queryLogger.Log(formattedQuery)
+			}
+		} else {
+			wq.queryLogger.Log(query)
+		}
 	}
 
-	return tq.q.execContext(ctx, query, args...)
-}
-
-func (tq timedQuerier) queryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row {
-	defer accountTime(tq.dbtime, time.Now())
-
-	if tq.queryLogger != nil {
-		tq.queryLogger.Log(query)
+	if wq.dryRun {
+		return &sqlSurrogateResult{}, nil
 	}
 
-	return tq.q.queryRowContext(ctx, query, args...)
+	return wq.q.execContext(ctx, query, args...)
 }
 
-func (tq timedQuerier) queryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
-	defer accountTime(tq.dbtime, time.Now())
+func (wq wrapperQuerier) queryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row {
+	defer accountTime(wq.dbtime, time.Now())
 
-	if tq.queryLogger != nil {
-		tq.queryLogger.Log(query, args...)
+	if wq.queryLogger != nil {
+		wq.queryLogger.Log(query)
 	}
 
-	return tq.q.queryContext(ctx, query, args...)
+	return wq.q.queryRowContext(ctx, query, args...)
 }
 
-func (tq timedQuerier) prepareContext(ctx context.Context, query string) (*sql.Stmt, error) {
-	defer accountTime(tq.dbtime, time.Now())
+func (wq wrapperQuerier) queryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
+	defer accountTime(wq.dbtime, time.Now())
 
-	if tq.queryLogger != nil {
-		tq.queryLogger.Log(query)
+	if wq.queryLogger != nil {
+		wq.queryLogger.Log(query, args...)
 	}
 
-	return tq.q.prepareContext(ctx, query)
+	return wq.q.queryContext(ctx, query, args...)
 }
 
-type timedTransaction struct {
-	dbtime     *atomic.Int64 // *time.Duration
-	committime *atomic.Int64 // *time.Duration
-	tx         transaction
+func (wq wrapperQuerier) prepareContext(ctx context.Context, query string) (*sql.Stmt, error) {
+	defer accountTime(wq.dbtime, time.Now())
 
-	queryLogger db.Logger
-}
-
-func (ttx timedTransaction) execContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
-	defer accountTime(ttx.dbtime, time.Now())
-
-	if ttx.queryLogger != nil {
-		ttx.queryLogger.Log(query)
+	if wq.queryLogger != nil {
+		wq.queryLogger.Log(fmt.Sprintf("PREPARE stmt FROM '%s';", query))
 	}
 
-	return ttx.tx.execContext(ctx, query, args...)
+	return wq.q.prepareContext(ctx, query)
 }
 
-func (ttx timedTransaction) queryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row {
-	defer accountTime(ttx.dbtime, time.Now())
+// wrapperTransaction is a wrapper for transaction that implements following functionality:
+// - measuring time of queries
+// - logging of queries
+// - dry-run mode
+type wrapperTransaction struct {
+	tx transaction
 
-	if ttx.queryLogger != nil {
-		ttx.queryLogger.Log(query)
+	dbtime         *atomic.Int64 // *time.Duration
+	committime     *atomic.Int64 // *time.Duration
+	dryRun         bool
+	queryLogger    db.Logger
+	txNotSupported bool
+}
+
+func (wtx wrapperTransaction) execContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
+	defer accountTime(wtx.dbtime, time.Now())
+
+	if wtx.queryLogger != nil {
+		if wtx.dryRun {
+			if !strings.Contains(query, "\n") {
+				wtx.queryLogger.Log(fmt.Sprintf("-- %s -- skip because of 'dry-run' mode", query))
+			} else {
+				wtx.queryLogger.Log("-- skip because of 'dry-run' mode")
+				formattedQuery := fmt.Sprintf("/*\n%s\n*/", query)
+				wtx.queryLogger.Log(formattedQuery)
+			}
+		} else {
+			wtx.queryLogger.Log(query)
+		}
 	}
 
-	return ttx.tx.queryRowContext(ctx, query, args...)
-}
-
-func (ttx timedTransaction) queryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
-	defer accountTime(ttx.dbtime, time.Now())
-
-	if ttx.queryLogger != nil {
-		ttx.queryLogger.Log(query)
+	if wtx.dryRun {
+		return &sqlSurrogateResult{}, nil
 	}
 
-	return ttx.tx.queryContext(ctx, query, args...)
+	return wtx.tx.execContext(ctx, query, args...)
 }
 
-func (ttx timedTransaction) prepareContext(ctx context.Context, query string) (*sql.Stmt, error) {
-	defer accountTime(ttx.dbtime, time.Now())
+func (wtx wrapperTransaction) queryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row {
+	defer accountTime(wtx.dbtime, time.Now())
 
-	if ttx.queryLogger != nil {
-		ttx.queryLogger.Log(query)
+	if wtx.queryLogger != nil {
+		wtx.queryLogger.Log(query)
 	}
 
-	return ttx.tx.prepareContext(ctx, query)
+	return wtx.tx.queryRowContext(ctx, query, args...)
 }
 
-func (ttx timedTransaction) commit() error {
-	defer accountTime(ttx.committime, time.Now())
+func (wtx wrapperTransaction) queryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
+	defer accountTime(wtx.dbtime, time.Now())
 
-	if ttx.queryLogger != nil {
-		ttx.queryLogger.Log("COMMIT")
+	if wtx.queryLogger != nil {
+		wtx.queryLogger.Log(query)
 	}
 
-	return ttx.tx.commit()
+	return wtx.tx.queryContext(ctx, query, args...)
 }
 
-func (ttx timedTransaction) rollback() error {
-	defer accountTime(ttx.committime, time.Now())
+func (wtx wrapperTransaction) prepareContext(ctx context.Context, query string) (*sql.Stmt, error) {
+	defer accountTime(wtx.dbtime, time.Now())
 
-	if ttx.queryLogger != nil {
-		ttx.queryLogger.Log("ROLLBACK")
+	if wtx.queryLogger != nil {
+		wtx.queryLogger.Log(fmt.Sprintf("PREPARE stmt FROM '%s';", query))
 	}
 
-	return ttx.tx.rollback()
+	return wtx.tx.prepareContext(ctx, query)
 }
 
-type timedTransactor struct {
+func (wtx wrapperTransaction) commit() error {
+	defer accountTime(wtx.committime, time.Now())
+
+	if wtx.queryLogger != nil {
+		if wtx.txNotSupported {
+			wtx.queryLogger.Log("-- COMMIT -- skip because dialect does not support transactions")
+		} else {
+			wtx.queryLogger.Log("COMMIT")
+		}
+	}
+
+	return wtx.tx.commit()
+}
+
+func (wtx wrapperTransaction) rollback() error {
+	defer accountTime(wtx.committime, time.Now())
+
+	if wtx.queryLogger != nil {
+		if wtx.txNotSupported {
+			wtx.queryLogger.Log("-- ROLLBACK -- skip because dialect does not support transactions")
+		} else {
+			wtx.queryLogger.Log("ROLLBACK")
+		}
+	}
+
+	return wtx.tx.rollback()
+}
+
+// wrapperTransactor is a wrapper for transactor that implements following functionality:
+// - measuring time of queries
+// - logging of queries
+// - dry-run mode
+type wrapperTransactor struct {
+	t transactor
+
 	dbtime     *atomic.Int64
 	begintime  *atomic.Int64
 	committime *atomic.Int64
-	t          transactor
 
 	queryLogger db.Logger
+	dryRun      bool
+
+	txNotSupported bool
 }
 
-func (tt timedTransactor) begin(ctx context.Context) (transaction, error) {
-	defer accountTime(tt.begintime, time.Now())
+func (wt wrapperTransactor) begin(ctx context.Context) (transaction, error) {
+	defer accountTime(wt.begintime, time.Now())
 
-	if tt.queryLogger != nil {
-		tt.queryLogger.Log("BEGIN")
+	if wt.queryLogger != nil {
+		if wt.txNotSupported {
+			wt.queryLogger.Log("-- BEGIN -- skip because dialect does not support transactions")
+		} else {
+			wt.queryLogger.Log("BEGIN")
+		}
 	}
 
-	var t, err = tt.t.begin(ctx)
+	var t, err = wt.t.begin(ctx)
 
 	if err != nil {
 		return t, err
 	}
 
-	return timedTransaction{
-		tx:          t,
-		dbtime:      atomic.NewInt64(tt.dbtime.Load()),
-		committime:  atomic.NewInt64(tt.committime.Load()),
-		queryLogger: tt.queryLogger,
+	return wrapperTransaction{
+		tx:             t,
+		dbtime:         atomic.NewInt64(wt.dbtime.Load()),
+		committime:     atomic.NewInt64(wt.committime.Load()),
+		dryRun:         wt.dryRun,
+		queryLogger:    wt.queryLogger,
+		txNotSupported: wt.txNotSupported,
 	}, nil
 }
 
@@ -387,19 +459,27 @@ func (d *sqlDatabase) Context(ctx context.Context) *db.Context {
 func (d *sqlDatabase) Session(c *db.Context) db.Session {
 	return &sqlSession{
 		sqlGateway: sqlGateway{
-			ctx:                      c.Ctx,
-			rw:                       timedQuerier{q: d.rw, dbtime: atomic.NewInt64(c.DBtime.Nanoseconds()), queryLogger: d.queryLogger},
+			ctx: c.Ctx,
+			rw: wrapperQuerier{
+				q:           d.rw,
+				dbtime:      atomic.NewInt64(c.DBtime.Nanoseconds()),
+				dryRun:      d.dryRun,
+				queryLogger: d.queryLogger,
+			},
 			dialect:                  d.dialect,
 			InsideTX:                 false,
 			QueryStringInterpolation: d.queryStringInterpolation,
 			queryLogger:              d.queryLogger,
+			dryRun:                   d.dryRun,
 		},
-		t: timedTransactor{
-			t:           d.t,
-			begintime:   atomic.NewInt64(c.BeginTime.Nanoseconds()),
-			dbtime:      atomic.NewInt64(c.DBtime.Nanoseconds()),
-			committime:  atomic.NewInt64(c.CommitTime.Nanoseconds()),
-			queryLogger: d.queryLogger,
+		t: wrapperTransactor{
+			t:              d.t,
+			begintime:      atomic.NewInt64(c.BeginTime.Nanoseconds()),
+			dbtime:         atomic.NewInt64(c.DBtime.Nanoseconds()),
+			committime:     atomic.NewInt64(c.CommitTime.Nanoseconds()),
+			queryLogger:    d.queryLogger,
+			dryRun:         d.dryRun,
+			txNotSupported: !d.dialect.supportTransactions(),
 		},
 	}
 }
@@ -439,6 +519,7 @@ type dialect interface {
 	encodeTime(timestamp time.Time) string
 	getType(dataType db.DataType) string
 	randFunc() string
+	supportTransactions() bool
 	isRetriable(err error) bool
 	canRollback(err error) bool
 	table(table string) string

@@ -178,6 +178,10 @@ func (d *mysqlDialect) randFunc() string {
 	return "RAND()"
 }
 
+func (d *mysqlDialect) supportTransactions() bool {
+	return true
+}
+
 func (d *mysqlDialect) isRetriable(err error) bool {
 	if mysqlErr, ok := err.(*mysql.MySQLError); ok {
 		switch mysqlErr.Number {
@@ -290,6 +294,7 @@ func (c *mysqlConnector) ConnectionPool(cfg db.Config) (db.Database, error) {
 
 	dbo.dialect = &mysqlDialect{}
 	dbo.queryStringInterpolation = cfg.QueryStringInterpolation
+	dbo.dryRun = cfg.DryRun
 	dbo.queryLogger = cfg.QueryLogger
 
 	return dbo, nil

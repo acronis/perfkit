@@ -129,6 +129,10 @@ func (d *cassandraDialect) randFunc() string {
 	return ""
 }
 
+func (d *cassandraDialect) supportTransactions() bool {
+	return false
+}
+
 func (d *cassandraDialect) isRetriable(err error) bool {
 	return false
 }
@@ -213,6 +217,7 @@ func (c *cassandraConnector) ConnectionPool(cfg db.Config) (db.Database, error) 
 
 	dbo.dialect = &cassandraDialect{keySpace: keySpace}
 	dbo.queryStringInterpolation = cfg.QueryStringInterpolation
+	dbo.dryRun = cfg.DryRun
 	dbo.queryLogger = cfg.QueryLogger
 
 	return dbo, nil

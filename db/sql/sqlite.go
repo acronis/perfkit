@@ -131,6 +131,10 @@ func (d *sqliteDialect) randFunc() string {
 	return "RANDOM()"
 }
 
+func (d *sqliteDialect) supportTransactions() bool {
+	return true
+}
+
 func (d *sqliteDialect) isRetriable(err error) bool {
 	return false
 }
@@ -205,6 +209,7 @@ func (c *sqliteConnector) ConnectionPool(cfg db.Config) (db.Database, error) {
 
 	dbo.dialect = &dia
 	dbo.queryStringInterpolation = cfg.QueryStringInterpolation
+	dbo.dryRun = cfg.DryRun
 	dbo.queryLogger = cfg.QueryLogger
 
 	return dbo, nil
