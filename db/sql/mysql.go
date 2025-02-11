@@ -293,6 +293,7 @@ func (c *mysqlConnector) ConnectionPool(cfg db.Config) (db.Database, error) {
 	}
 
 	dbo.dialect = &mysqlDialect{}
+	dbo.useTruncate = cfg.UseTruncate
 	dbo.queryStringInterpolation = cfg.QueryStringInterpolation
 	dbo.explain = cfg.Explain
 	dbo.dryRun = cfg.DryRun
