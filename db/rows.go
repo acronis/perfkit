@@ -10,6 +10,11 @@ type Row interface {
 	Scan(dest ...any) error
 }
 
+// EmptyRow is a struct for storing empty row
+type EmptyRow struct{}
+
+func (r *EmptyRow) Scan(dest ...any) error { return nil }
+
 // Rows is a struct for storing DB rows (as a slice of Row) and current index
 type Rows interface {
 	Next() bool

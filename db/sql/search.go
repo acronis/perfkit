@@ -815,8 +815,20 @@ func (g *sqlGateway) Select(tableName string, sc *db.SelectCtrl) (db.Rows, error
 		return &db.EmptyRows{}, nil
 	}
 
+	if g.explain {
+		if query, err = addExplainPrefix(g.dialect.name(), query); err != nil {
+			return &db.EmptyRows{}, err
+		}
+	}
+
 	var rows *sql.Rows
 	rows, err = g.rw.queryContext(g.ctx, query)
+
+	if g.explain && g.explainLogger != nil {
+		if err = logExplainResults(g.explainLogger, g.dialect.name(), rows, query); err != nil {
+			return &db.EmptyRows{}, err
+		}
+	}
 
 	return &sqlRows{rows: rows, readRowsLogger: g.readRowsLogger}, nil
 }

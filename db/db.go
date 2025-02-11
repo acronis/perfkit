@@ -63,6 +63,7 @@ type Config struct {
 	MaxPacketSize   int
 
 	QueryStringInterpolation bool
+	Explain                  bool
 	DryRun                   bool
 	UseTruncate              bool
 
@@ -72,6 +73,7 @@ type Config struct {
 	QueryLogger     Logger
 	ReadRowsLogger  Logger
 	QueryTimeLogger Logger
+	ExplainLogger   Logger
 }
 
 // Open opens a database connection

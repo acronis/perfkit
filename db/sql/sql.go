@@ -87,10 +87,12 @@ type sqlGateway struct {
 	MaxRetries               int
 	QueryStringInterpolation bool
 
-	dryRun bool
+	explain bool
+	dryRun  bool
 
 	queryLogger    db.Logger
 	readRowsLogger db.Logger
+	explainLogger  db.Logger
 }
 
 type sqlSession struct {
@@ -114,9 +116,11 @@ func (s *sqlSession) Transact(fn func(tx db.DatabaseAccessor) error) error {
 				true,
 				s.MaxRetries,
 				s.QueryStringInterpolation,
+				s.explain,
 				s.dryRun,
 				s.queryLogger,
 				s.readRowsLogger,
+				s.explainLogger,
 			}
 			return fn(&gw) // bad but will work for now?
 		})
@@ -136,11 +140,13 @@ type sqlDatabase struct {
 
 	useTruncate              bool
 	queryStringInterpolation bool
+	explain                  bool
 	dryRun                   bool
 
 	queryLogger     db.Logger
 	readRowsLogger  db.Logger
 	queryTimeLogger db.Logger
+	explainLogger   db.Logger
 
 	lastQuery string
 }
@@ -273,9 +279,11 @@ func (d *sqlDatabase) Session(c *db.Context) db.Session {
 			dialect:                  d.dialect,
 			InsideTX:                 false,
 			QueryStringInterpolation: d.queryStringInterpolation,
+			explain:                  d.explain,
 			dryRun:                   d.dryRun,
 			queryLogger:              d.queryLogger,
 			readRowsLogger:           d.readRowsLogger,
+			explainLogger:            d.explainLogger,
 		},
 		t: wrappedTransactor{
 			t:              d.t,

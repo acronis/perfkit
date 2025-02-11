@@ -217,9 +217,11 @@ func (c *cassandraConnector) ConnectionPool(cfg db.Config) (db.Database, error) 
 
 	dbo.dialect = &cassandraDialect{keySpace: keySpace}
 	dbo.queryStringInterpolation = cfg.QueryStringInterpolation
+	dbo.explain = cfg.Explain
 	dbo.dryRun = cfg.DryRun
 	dbo.queryLogger = cfg.QueryLogger
 	dbo.readRowsLogger = cfg.ReadRowsLogger
+	dbo.explainLogger = cfg.ExplainLogger
 
 	return dbo, nil
 }
