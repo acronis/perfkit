@@ -893,5 +893,5 @@ func (g *sqlGateway) Select(tableName string, sc *db.SelectCtrl) (db.Rows, error
 	var rows *sql.Rows
 	rows, err = g.rw.queryContext(g.ctx, query)
 
-	return &sqlRows{rows: rows}, nil
+	return &sqlRows{rows: rows, readRowsLogger: g.readRowsLogger}, nil
 }

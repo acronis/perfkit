@@ -142,7 +142,3 @@ func (r *esRows) Scan(dest ...interface{}) error {
 func (r *esRows) Close() error {
 	return nil
 }
-
-func (r *esRows) Dump() string {
-	return ""
-}

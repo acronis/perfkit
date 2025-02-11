@@ -190,6 +190,7 @@ func (c *clickhouseConnector) ConnectionPool(cfg db.Config) (db.Database, error)
 	dbo.queryStringInterpolation = cfg.QueryStringInterpolation
 	dbo.dryRun = cfg.DryRun
 	dbo.queryLogger = cfg.QueryLogger
+	dbo.readRowsLogger = cfg.ReadRowsLogger
 
 	return dbo, nil
 }

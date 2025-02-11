@@ -110,6 +110,7 @@ func (suite *TestingSuite) makeTestSession() (db.Database, db.Session, *db.Conte
 		MaxOpenConns:    16,
 		MaxConnLifetime: 100 * time.Millisecond,
 		QueryLogger:     logger,
+		ReadRowsLogger:  logger,
 	})
 
 	require.NoError(suite.T(), err, "making test sqlSession")

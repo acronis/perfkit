@@ -149,6 +149,7 @@ func testSelect(
 	testDesc *TestDesc,
 	fromFunc func(b *benchmark.Benchmark, workerId int) string,
 	what []string,
+	variablesToRead []interface{},
 	whereFunc func(b *benchmark.Benchmark, workerId int) map[string][]string,
 	orderByFunc func(b *benchmark.Benchmark, workerId int) []string,
 	rowsRequired uint64,
@@ -228,6 +229,9 @@ func testSelect(
 		}
 
 		for rows.Next() {
+			if scanErr := rows.Scan(variablesToRead...); scanErr != nil {
+				b.Exit(scanErr)
+			}
 			if err != nil {
 				b.Exit(err)
 			}

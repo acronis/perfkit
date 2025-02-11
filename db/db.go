@@ -67,9 +67,9 @@ type Config struct {
 	TLSEnabled bool
 	TLSCACert  []byte
 
-	QueryLogger      Logger
-	ReadedRowsLogger Logger
-	QueryTimeLogger  Logger
+	QueryLogger     Logger
+	ReadRowsLogger  Logger
+	QueryTimeLogger Logger
 }
 
 // Open opens a database connection

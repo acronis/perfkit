@@ -25,10 +25,10 @@ func (g *sqlGateway) Exec(format string, args ...interface{}) (db.Result, error)
 
 func (g *sqlGateway) QueryRow(format string, args ...interface{}) db.Row {
 	var row = g.rw.queryRowContext(g.ctx, format, args...)
-	return row
+	return &sqlRow{row: row, readRowsLogger: g.readRowsLogger}
 }
 
 func (g *sqlGateway) Query(format string, args ...interface{}) (db.Rows, error) {
 	var rows, err = g.rw.queryContext(g.ctx, format, args...)
-	return &sqlRows{rows: rows}, err
+	return &sqlRows{rows: rows, readRowsLogger: g.readRowsLogger}, err
 }

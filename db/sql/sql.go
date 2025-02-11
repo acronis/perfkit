@@ -88,8 +88,10 @@ type sqlGateway struct {
 	MaxRetries               int
 	QueryStringInterpolation bool
 
-	queryLogger db.Logger
-	dryRun      bool
+	dryRun bool
+
+	queryLogger    db.Logger
+	readRowsLogger db.Logger
 }
 
 type sqlSession struct {
@@ -113,8 +115,10 @@ func (s *sqlSession) Transact(fn func(tx db.DatabaseAccessor) error) error {
 				true,
 				s.MaxRetries,
 				s.QueryStringInterpolation,
+				s.dryRun,
 				s.queryLogger,
-				s.dryRun}
+				s.readRowsLogger,
+			}
 			return fn(&gw) // bad but will work for now?
 		})
 
@@ -135,9 +139,9 @@ type sqlDatabase struct {
 	queryStringInterpolation bool
 	dryRun                   bool
 
-	queryLogger      db.Logger
-	readedRowsLogger db.Logger
-	queryTimeLogger  db.Logger
+	queryLogger     db.Logger
+	readRowsLogger  db.Logger
+	queryTimeLogger db.Logger
 
 	lastQuery string
 }
@@ -419,8 +423,10 @@ type wrapperTransactor struct {
 	begintime  *atomic.Int64
 	committime *atomic.Int64
 
-	queryLogger db.Logger
-	dryRun      bool
+	dryRun bool
+
+	queryLogger    db.Logger
+	readRowsLogger db.Logger
 
 	txNotSupported bool
 }
@@ -469,16 +475,18 @@ func (d *sqlDatabase) Session(c *db.Context) db.Session {
 			dialect:                  d.dialect,
 			InsideTX:                 false,
 			QueryStringInterpolation: d.queryStringInterpolation,
-			queryLogger:              d.queryLogger,
 			dryRun:                   d.dryRun,
+			queryLogger:              d.queryLogger,
+			readRowsLogger:           d.readRowsLogger,
 		},
 		t: wrapperTransactor{
 			t:              d.t,
 			begintime:      atomic.NewInt64(c.BeginTime.Nanoseconds()),
 			dbtime:         atomic.NewInt64(c.DBtime.Nanoseconds()),
 			committime:     atomic.NewInt64(c.CommitTime.Nanoseconds()),
-			queryLogger:    d.queryLogger,
 			dryRun:         d.dryRun,
+			queryLogger:    d.queryLogger,
+			readRowsLogger: d.readRowsLogger,
 			txNotSupported: !d.dialect.supportTransactions(),
 		},
 	}

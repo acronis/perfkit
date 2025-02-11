@@ -94,8 +94,14 @@ func DumpRecursive(i interface{}, indent string) string {
 	case reflect.Ptr:
 		switch typ.Elem().Kind() {
 		case reflect.String:
-			return fmt.Sprintf("%s", i)
-		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32:
+			if casted, ok := i.(*string); ok {
+				return fmt.Sprintf("%s", *casted)
+			} else {
+				return fmt.Sprintf("%v", i)
+			}
+		case reflect.Int:
+			return strconv.Itoa(*i.(*int))
+		case reflect.Int8, reflect.Int16, reflect.Int32:
 			return strconv.Itoa(int(*i.(*int32)))
 		case reflect.Int64:
 			return strconv.FormatInt(*i.(*int64), 10)

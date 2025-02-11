@@ -289,8 +289,9 @@ var TestSelectMediumLast = TestDesc{
 	databases:   ALL,
 	table:       TestTableMedium,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
+		var idToRead int64
 		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { return []string{"desc(id)"} } //nolint:revive
-		testSelect(b, testDesc, nil, []string{"id"}, nil, orderBy, 1)
+		testSelect(b, testDesc, nil, []string{"id"}, []interface{}{&idToRead}, nil, orderBy, 1)
 	},
 }
 
@@ -305,8 +306,9 @@ var TestSelectMediumLastDBR = TestDesc{
 	databases:   RELATIONAL,
 	table:       TestTableMedium,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
+		var idToRead int64
 		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { return []string{"desc(id)"} } //nolint:revive
-		testSelect(b, testDesc, nil, []string{"id"}, nil, orderBy, 1)
+		testSelect(b, testDesc, nil, []string{"id"}, []interface{}{&idToRead}, nil, orderBy, 1)
 	},
 }
 
@@ -321,6 +323,8 @@ var TestSelectMediumRand = TestDesc{
 	databases:   ALL,
 	table:       TestTableMedium,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
+		var idToRead int64
+
 		var where = func(b *benchmark.Benchmark, workerId int) map[string][]string {
 			id := b.Randomizer.GetWorker(workerId).Uintn64(testDesc.table.RowsCount - 1)
 
@@ -331,7 +335,7 @@ var TestSelectMediumRand = TestDesc{
 			return []string{"asc(id)"}
 		}
 
-		testSelect(b, testDesc, nil, []string{"id"}, where, orderBy, 1)
+		testSelect(b, testDesc, nil, []string{"id"}, []interface{}{&idToRead}, where, orderBy, 1)
 	},
 }
 
@@ -346,6 +350,8 @@ var TestSelectMediumRandDBR = TestDesc{
 	databases:   RELATIONAL,
 	table:       TestTableMedium,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
+		var idToRead int64
+
 		var where = func(b *benchmark.Benchmark, workerId int) map[string][]string {
 			var id = b.Randomizer.GetWorker(workerId).Uintn64(testDesc.table.RowsCount - 1)
 
@@ -355,7 +361,7 @@ var TestSelectMediumRandDBR = TestDesc{
 		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { //nolint:revive
 			return []string{"asc(id)"}
 		}
-		testSelect(b, testDesc, nil, []string{"id"}, where, orderBy, 1)
+		testSelect(b, testDesc, nil, []string{"id"}, []interface{}{&idToRead}, where, orderBy, 1)
 	},
 }
 
@@ -370,9 +376,9 @@ var TestSelectHeavyLast = TestDesc{
 	databases:   RELATIONAL,
 	table:       TestTableHeavy,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
+		var idToRead int64
 		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { return []string{"desc(id)"} } //nolint:revive
-
-		testSelect(b, testDesc, nil, []string{"id"}, nil, orderBy, 1)
+		testSelect(b, testDesc, nil, []string{"id"}, []interface{}{&idToRead}, nil, orderBy, 1)
 	},
 }
 
@@ -387,8 +393,9 @@ var TestSelectHeavyLastDBR = TestDesc{
 	databases:   RELATIONAL,
 	table:       TestTableHeavy,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
+		var idToRead int64
 		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { return []string{"desc(id)"} } //nolint:revive
-		testSelect(b, testDesc, nil, []string{"id"}, nil, orderBy, 1)
+		testSelect(b, testDesc, nil, []string{"id"}, []interface{}{&idToRead}, nil, orderBy, 1)
 	},
 }
 
@@ -403,6 +410,8 @@ var TestSelectHeavyRand = TestDesc{
 	databases:   RELATIONAL,
 	table:       TestTableHeavy,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
+		var idToRead int64
+
 		var where = func(b *benchmark.Benchmark, workerId int) map[string][]string {
 			id := b.Randomizer.GetWorker(workerId).Uintn64(testDesc.table.RowsCount - 1)
 
@@ -412,7 +421,7 @@ var TestSelectHeavyRand = TestDesc{
 		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { //nolint:revive
 			return []string{"asc(id)"}
 		}
-		testSelect(b, testDesc, nil, []string{"id"}, where, orderBy, 1)
+		testSelect(b, testDesc, nil, []string{"id"}, []interface{}{&idToRead}, where, orderBy, 1)
 	},
 }
 
@@ -427,6 +436,8 @@ var TestSelectHeavyRandDBR = TestDesc{
 	databases:   RELATIONAL,
 	table:       TestTableHeavy,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
+		var idToRead int64
+
 		var where = func(b *benchmark.Benchmark, workerId int) map[string][]string {
 			id := b.Randomizer.GetWorker(workerId).Uintn64(testDesc.table.RowsCount - 1)
 
@@ -436,7 +447,7 @@ var TestSelectHeavyRandDBR = TestDesc{
 		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { //nolint:revive
 			return []string{"asc(id)"}
 		}
-		testSelect(b, testDesc, nil, []string{"id"}, where, orderBy, 1)
+		testSelect(b, testDesc, nil, []string{"id"}, []interface{}{&idToRead}, where, orderBy, 1)
 	},
 }
 
@@ -453,6 +464,8 @@ var TestSelectHeavyRandTenantLike = TestDesc{
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
 		var colConfs = testDesc.table.GetColumnsConf([]string{"tenant_id"}, false)
 
+		var idToRead int64
+
 		var where = func(b *benchmark.Benchmark, workerId int) map[string][]string {
 			w := b.GenFakeDataAsMap(workerId, colConfs, false)
 
@@ -465,7 +478,7 @@ var TestSelectHeavyRandTenantLike = TestDesc{
 		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { //nolint:revive
 			return []string{"desc(id)"}
 		}
-		testSelect(b, testDesc, nil, []string{"id"}, where, orderBy, 1)
+		testSelect(b, testDesc, nil, []string{"id"}, []interface{}{&idToRead}, where, orderBy, 1)
 	},
 }
 
@@ -482,12 +495,15 @@ var TestSelectHeavyMinMaxTenant = TestDesc{
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
 		var colConfs = testDesc.table.GetColumnsConf([]string{"tenant_id"}, false)
 
+		var minCompletionTime int64
+		var maxCompletionTime int64
+
 		var where = func(b *benchmark.Benchmark, workerId int) map[string][]string {
 			w := b.GenFakeDataAsMap(workerId, colConfs, false)
 
 			return map[string][]string{"tenant_id": {fmt.Sprintf("%s", (*w)["tenant_id"])}}
 		}
-		testSelect(b, testDesc, nil, []string{"min(completion_time)", "max(completion_time)"}, where, nil, 1)
+		testSelect(b, testDesc, nil, []string{"min(completion_time)", "max(completion_time)"}, []interface{}{&minCompletionTime, maxCompletionTime}, where, nil, 1)
 	},
 }
 
@@ -505,6 +521,9 @@ var TestSelectHeavyMinMaxTenantAndState = TestDesc{
 
 		var colConfs = testDesc.table.GetColumnsConf([]string{"tenant_id", "state"}, false)
 
+		var minCompletionTime int64
+		var maxCompletionTime int64
+
 		var where = func(b *benchmark.Benchmark, workerId int) map[string][]string {
 			w := b.GenFakeDataAsMap(workerId, colConfs, false)
 
@@ -514,7 +533,7 @@ var TestSelectHeavyMinMaxTenantAndState = TestDesc{
 			}
 		}
 
-		testSelect(b, testDesc, nil, []string{"min(completion_time)", "max(completion_time)"}, where, nil, 1)
+		testSelect(b, testDesc, nil, []string{"min(completion_time)", "max(completion_time)"}, []interface{}{&minCompletionTime, maxCompletionTime}, where, nil, 1)
 	},
 }
 
@@ -537,6 +556,8 @@ var TestSelectHeavyRandPageByUUID = TestDesc{
 			colConfs = append(colConfs, benchmark.DBFakeColumnConf{ColumnName: "uuid", ColumnType: "uuid"})
 		}
 
+		var idToRead int64
+
 		var where = func(b *benchmark.Benchmark, workerId int) map[string][]string {
 			_, values := b.GenFakeData(workerId, &colConfs, false)
 
@@ -548,7 +569,7 @@ var TestSelectHeavyRandPageByUUID = TestDesc{
 			return map[string][]string{"uuid": valuesToSearch}
 		}
 
-		testSelect(b, testDesc, nil, []string{"id"}, where, nil, 1)
+		testSelect(b, testDesc, nil, []string{"id"}, []interface{}{&idToRead}, where, nil, 1)
 	},
 }
 
@@ -568,6 +589,8 @@ var TestSelectHeavyRandCustomerRecent = TestDesc{
 
 		var colConfs = &[]benchmark.DBFakeColumnConf{{ColumnName: "customer_id", ColumnType: "customer_uuid"}}
 
+		var idToRead int64
+
 		var where = func(b *benchmark.Benchmark, workerId int) map[string][]string {
 			w := b.GenFakeDataAsMap(workerId, colConfs, false)
 
@@ -580,7 +603,7 @@ var TestSelectHeavyRandCustomerRecent = TestDesc{
 			return []string{"desc(enqueue_time)"}
 		}
 
-		testSelect(b, testDesc, nil, []string{"id"}, where, orderBy, 1)
+		testSelect(b, testDesc, nil, []string{"id"}, []interface{}{&idToRead}, where, orderBy, 1)
 	},
 }
 
@@ -600,6 +623,8 @@ var TestSelectHeavyRandCustomerRecentLike = TestDesc{
 
 		var colConfs = &[]benchmark.DBFakeColumnConf{{ColumnName: "customer_id", ColumnType: "customer_uuid"}}
 
+		var idToRead int64
+
 		var where = func(b *benchmark.Benchmark, workerId int) map[string][]string {
 			w := b.GenFakeDataAsMap(workerId, colConfs, false)
 
@@ -613,7 +638,7 @@ var TestSelectHeavyRandCustomerRecentLike = TestDesc{
 			return []string{"desc(enqueue_time)"}
 		}
 
-		testSelect(b, testDesc, nil, []string{"id"}, where, orderBy, 1)
+		testSelect(b, testDesc, nil, []string{"id"}, []interface{}{&idToRead}, where, orderBy, 1)
 	},
 }
 
@@ -631,6 +656,8 @@ var TestSelectHeavyRandCustomerUpdateTimePage = TestDesc{
 
 		var colConfs = []benchmark.DBFakeColumnConf{{ColumnName: "customer_id", ColumnType: "customer_uuid"}}
 		colConfs = append(colConfs, benchmark.DBFakeColumnConf{ColumnName: "update_time", ColumnType: "time", Cardinality: 30})
+
+		var idToRead int64
 
 		var where = func(b *benchmark.Benchmark, workerId int) map[string][]string {
 			w := b.GenFakeDataAsMap(workerId, &colConfs, false)
@@ -651,7 +678,7 @@ var TestSelectHeavyRandCustomerUpdateTimePage = TestDesc{
 			return []string{"asc(update_time)"}
 		}
 
-		testSelect(b, testDesc, nil, []string{"id"}, where, orderBy, 1)
+		testSelect(b, testDesc, nil, []string{"id"}, []interface{}{&idToRead}, where, orderBy, 1)
 	},
 }
 
@@ -668,6 +695,8 @@ var TestSelectHeavyRandCustomerCount = TestDesc{
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
 		var colConfs = &[]benchmark.DBFakeColumnConf{{ColumnName: "customer_id", ColumnType: "customer_uuid"}}
 
+		var countToRead int64
+
 		var where = func(b *benchmark.Benchmark, workerId int) map[string][]string {
 			w := b.GenFakeDataAsMap(workerId, colConfs, false)
 
@@ -676,7 +705,7 @@ var TestSelectHeavyRandCustomerCount = TestDesc{
 			}
 		}
 
-		testSelect(b, testDesc, nil, []string{"COUNT(0)"}, where, nil, 1)
+		testSelect(b, testDesc, nil, []string{"COUNT(0)"}, []interface{}{&countToRead}, where, nil, 1)
 	},
 }
 
@@ -693,6 +722,8 @@ var TestSelectHeavyRandPartnerRecent = TestDesc{
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
 		var colConfs = &[]benchmark.DBFakeColumnConf{{ColumnName: "partner_id", ColumnType: "partner_uuid"}}
 
+		var idToRead int64
+
 		var where = func(b *benchmark.Benchmark, workerId int) map[string][]string {
 			w := b.GenFakeDataAsMap(workerId, colConfs, false)
 
@@ -705,7 +736,7 @@ var TestSelectHeavyRandPartnerRecent = TestDesc{
 			return []string{"desc(enqueue_time)"}
 		}
 
-		testSelect(b, testDesc, nil, []string{"id"}, where, orderBy, 1)
+		testSelect(b, testDesc, nil, []string{"id"}, []interface{}{&idToRead}, where, orderBy, 1)
 	},
 }
 
@@ -722,6 +753,8 @@ var TestSelectHeavyRandPartnerStartUpdateTimePage = TestDesc{
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
 		var colConfs = []benchmark.DBFakeColumnConf{{ColumnName: "partner_id", ColumnType: "partner_uuid"}}
 		colConfs = append(colConfs, benchmark.DBFakeColumnConf{ColumnName: "update_time", ColumnType: "time", Cardinality: 30})
+
+		var idToRead int64
 
 		var where = func(b *benchmark.Benchmark, workerId int) map[string][]string {
 			w := b.GenFakeDataAsMap(workerId, &colConfs, false)
@@ -747,7 +780,7 @@ var TestSelectHeavyRandPartnerStartUpdateTimePage = TestDesc{
 			return []string{"asc(update_time)"}
 		}
 
-		testSelect(b, testDesc, nil, []string{"id"}, where, orderBy, 1)
+		testSelect(b, testDesc, nil, []string{"id"}, []interface{}{&idToRead}, where, orderBy, 1)
 	},
 }
 
@@ -1295,13 +1328,16 @@ var TestSelectVector768NearestL2 = TestDesc{
 			{ColumnName: "embedding", ColumnType: "dataset.emb.list.item"},
 		}
 
+		var idToRead int64
+		var vectorToRead = make([]float64, 768)
+
 		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { //nolint:revive
 			var _, vals = b.GenFakeData(workerId, &colConfs, false)
 			var vec = "[" + strings.Trim(strings.Replace(fmt.Sprint(vals[1]), " ", ", ", -1), "[]") + "]"
 			return []string{fmt.Sprintf("nearest(embedding;L2;%s)", vec)}
 		}
 
-		testSelect(b, testDesc, nil, []string{"id", "embedding"}, nil, orderBy, 1)
+		testSelect(b, testDesc, nil, []string{"id", "embedding"}, []interface{}{&idToRead, &vectorToRead}, nil, orderBy, 1)
 	},
 }
 
@@ -1335,13 +1371,16 @@ var TestSelectEmailByEmbeddingNearestL2 = TestDesc{
 			{ColumnName: "embedding", ColumnType: "dataset.Embedding.list.element"},
 		}
 
+		var bodyToRead string
+		var vectorToRead = make([]float64, 768)
+
 		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { //nolint:revive
 			var _, vals = b.GenFakeData(workerId, &colConfs, false)
 			var vec = "[" + strings.Trim(strings.Replace(fmt.Sprint(vals[1]), " ", ", ", -1), "[]") + "]"
 			return []string{fmt.Sprintf("nearest(embedding;L2;%s)", vec)}
 		}
 
-		testSelect(b, testDesc, nil, []string{"body", "embedding"}, nil, orderBy, 1)
+		testSelect(b, testDesc, nil, []string{"body", "embedding"}, []interface{}{&bodyToRead, &vectorToRead}, nil, orderBy, 1)
 	},
 }
 
@@ -1788,6 +1827,8 @@ var TestSelectAdvmTasksLast = TestDesc{
 	databases:   []db.DialectName{db.POSTGRES, db.MSSQL},
 	table:       TestTableAdvmTasks,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
+		var idToRead int64
+
 		var where = func(b *benchmark.Benchmark, workerId int) map[string][]string { //nolint:revive
 			return map[string][]string{
 				"origin": {"1", "2", "3"},
@@ -1797,7 +1838,7 @@ var TestSelectAdvmTasksLast = TestDesc{
 		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { //nolint:revive
 			return []string{"asc(id)"}
 		}
-		testSelect(b, testDesc, nil, []string{"id"}, where, orderBy, 1)
+		testSelect(b, testDesc, nil, []string{"id"}, []interface{}{&idToRead}, where, orderBy, 1)
 	},
 }
 
