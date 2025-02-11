@@ -88,7 +88,6 @@ type sqlGateway struct {
 	QueryStringInterpolation bool
 
 	explain bool
-	dryRun  bool
 
 	readRowsLogger db.Logger
 	explainLogger  db.Logger
@@ -116,7 +115,6 @@ func (s *sqlSession) Transact(fn func(tx db.DatabaseAccessor) error) error {
 				s.MaxRetries,
 				s.QueryStringInterpolation,
 				s.explain,
-				s.dryRun,
 				s.readRowsLogger,
 				s.explainLogger,
 			}
@@ -278,7 +276,6 @@ func (d *sqlDatabase) Session(c *db.Context) db.Session {
 			InsideTX:                 false,
 			QueryStringInterpolation: d.queryStringInterpolation,
 			explain:                  d.explain,
-			dryRun:                   d.dryRun,
 			readRowsLogger:           d.readRowsLogger,
 			explainLogger:            d.explainLogger,
 		},
