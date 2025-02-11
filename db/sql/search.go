@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"fmt"
 	"math"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -43,18 +42,6 @@ func createSelectQueryBuilder(tableName string, tableRows []db.TableRow) error {
 	tableQueryBuilders[tableName] = queryBuilder
 
 	return nil
-}
-
-// rUpdatePlaceholders is a regexp to replace placeholders
-var rUpdatePlaceholders = regexp.MustCompile(`\$\d+`)
-
-// updatePlaceholders replaces placeholders
-func (g *sqlGateway) updatePlaceholders(query string) string {
-	if g.dialect.name() == db.MYSQL || g.dialect.name() == db.SQLITE || g.dialect.name() == db.CASSANDRA {
-		return rUpdatePlaceholders.ReplaceAllString(query, "?")
-	}
-
-	return query
 }
 
 var minTime = time.Unix(-2208988800, 0) // Jan 1, 1900
