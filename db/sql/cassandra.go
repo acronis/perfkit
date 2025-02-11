@@ -256,8 +256,13 @@ func (d *cassandraQuerier) queryRowContext(ctx context.Context, query string, ar
 func (d *cassandraQuerier) queryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
 	return d.be.QueryContext(ctx, query, args...)
 }
-func (d *cassandraQuerier) prepareContext(ctx context.Context, query string) (*sql.Stmt, error) {
-	return d.be.PrepareContext(ctx, query)
+func (d *cassandraQuerier) prepareContext(ctx context.Context, query string) (sqlStatement, error) {
+	var stmt, err = d.be.PrepareContext(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+
+	return &sqlStmt{stmt}, nil
 }
 func (d *cassandraQuerier) begin(ctx context.Context) (transaction, error) {
 	return &cassandraTransaction{d.be}, nil
@@ -272,8 +277,13 @@ func (t *cassandraTransaction) queryRowContext(ctx context.Context, query string
 func (t *cassandraTransaction) queryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
 	return t.be.QueryContext(ctx, query, args...)
 }
-func (t *cassandraTransaction) prepareContext(ctx context.Context, query string) (*sql.Stmt, error) {
-	return t.be.PrepareContext(ctx, query)
+func (t *cassandraTransaction) prepareContext(ctx context.Context, query string) (sqlStatement, error) {
+	var stmt, err = t.be.PrepareContext(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+
+	return &sqlStmt{stmt}, nil
 }
 func (t *cassandraTransaction) commit() error {
 	return nil

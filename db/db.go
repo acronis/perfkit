@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
+	"go.uber.org/atomic"
 )
 
 type DialectName string
@@ -113,12 +115,6 @@ type Logger interface {
 	Log(format string, args ...interface{})
 }
 
-// databaseQueryRegistrator is an interface for registering database queries
-type databaseQueryRegistrator interface {
-	StatementEnter(query string, args ...interface{}) time.Time
-	StatementExit(statement string, startTime time.Time, err error, showRowsAffected bool, result Result, format string, args []interface{}, rows Rows, dest []interface{})
-}
-
 // Page is a struct for storing pagination information
 type Page struct {
 	Limit  int64
@@ -183,7 +179,6 @@ type databaseQueryPreparer interface {
 
 // DatabaseAccessor is an interface for accessing the database
 type DatabaseAccessor interface {
-	databaseQueryRegistrator
 	databaseSelector
 	databaseInserter
 	databaseQuerier
@@ -271,11 +266,14 @@ type Stats struct {
 
 // Context is a struct for storing database context
 type Context struct {
-	Ctx        context.Context
-	BeginTime  time.Duration
-	DBtime     time.Duration
-	CommitTime time.Duration
-	TxRetries  int
+	Ctx         context.Context
+	BeginTime   *atomic.Int64 // *time.Duration - time of opening the transactions
+	PrepareTime *atomic.Int64 // *time.Duration - time of preparing statements
+	ExecTime    *atomic.Int64 // *time.Duration - time of executing queries (Exec)
+	QueryTime   *atomic.Int64 // *time.Duration - time of executing queries (QueryRow, Query)
+	DeallocTime *atomic.Int64 // *time.Duration - time of deallocating statements
+	CommitTime  *atomic.Int64 // *time.Duration - time of committing transactions
+	TxRetries   int
 }
 
 // Database is an interface for database operations

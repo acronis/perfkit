@@ -866,9 +866,7 @@ func insertByPreparedDataWorker(b *benchmark.Benchmark, c *DBConnector, testDesc
 		sql := fmt.Sprintf("INSERT INTO %s (%s) VALUES(%s)", testDesc.table.TableName, strings.Join(columns, ","), parametersPlaceholder)
 		sql = formatSQL(sql, c.database.DialectName())
 
-		t := tx.StatementEnter(sql, nil)
 		stmt, err := tx.Prepare(sql)
-		tx.StatementExit("Prepare()", t, err, false, nil, sql, nil, nil, nil)
 
 		if err != nil {
 			c.Exit(err.Error())
@@ -876,9 +874,7 @@ func insertByPreparedDataWorker(b *benchmark.Benchmark, c *DBConnector, testDesc
 		for i := 0; i < batch; i++ {
 			_, values := b.GenFakeData(workerID, colConfs, false)
 
-			t := tx.StatementEnter("", nil)
 			_, err = stmt.Exec(values...)
-			tx.StatementExit("Exec()", t, err, false, nil, "<< stdin ", values, nil, nil)
 
 			if err != nil {
 				stmt.Close()
@@ -968,9 +964,7 @@ func copyDataWorker(b *benchmark.Benchmark, c *DBConnector, testDesc *TestDesc, 
 			b.Exit("unsupported driver: '%v', supported drivers are: %s|%s", c.database.DialectName(), db.POSTGRES, db.MSSQL)
 		}
 
-		t := tx.StatementEnter(sql, nil)
 		stmt, err := tx.Prepare(sql)
-		tx.StatementExit("Prepare()", t, err, false, nil, sql, nil, nil, nil)
 
 		if err != nil {
 			c.Exit(err.Error())
@@ -978,9 +972,7 @@ func copyDataWorker(b *benchmark.Benchmark, c *DBConnector, testDesc *TestDesc, 
 		for i := 0; i < batch; i++ {
 			_, values := b.GenFakeData(workerID, colConfs, false)
 
-			t := tx.StatementEnter("", nil)
 			_, err = stmt.Exec(values...)
-			tx.StatementExit("Exec()", t, err, false, nil, "<< stdin ", values, nil, nil)
 
 			if err != nil {
 				stmt.Close()
