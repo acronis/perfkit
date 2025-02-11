@@ -830,5 +830,5 @@ func (g *sqlGateway) Select(tableName string, sc *db.SelectCtrl) (db.Rows, error
 		}
 	}
 
-	return &sqlRows{rows: rows, readRowsLogger: g.readRowsLogger}, nil
+	return &wrappedRows{rows: rows, readRowsLogger: g.readRowsLogger}, nil
 }

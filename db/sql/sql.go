@@ -90,7 +90,6 @@ type sqlGateway struct {
 	explain bool
 	dryRun  bool
 
-	queryLogger    db.Logger
 	readRowsLogger db.Logger
 	explainLogger  db.Logger
 }
@@ -118,7 +117,6 @@ func (s *sqlSession) Transact(fn func(tx db.DatabaseAccessor) error) error {
 				s.QueryStringInterpolation,
 				s.explain,
 				s.dryRun,
-				s.queryLogger,
 				s.readRowsLogger,
 				s.explainLogger,
 			}
@@ -281,7 +279,6 @@ func (d *sqlDatabase) Session(c *db.Context) db.Session {
 			QueryStringInterpolation: d.queryStringInterpolation,
 			explain:                  d.explain,
 			dryRun:                   d.dryRun,
-			queryLogger:              d.queryLogger,
 			readRowsLogger:           d.readRowsLogger,
 			explainLogger:            d.explainLogger,
 		},
@@ -295,7 +292,6 @@ func (d *sqlDatabase) Session(c *db.Context) db.Session {
 			commitTime:     c.CommitTime,
 			dryRun:         d.dryRun,
 			queryLogger:    d.queryLogger,
-			readRowsLogger: d.readRowsLogger,
 			txNotSupported: !d.dialect.supportTransactions(),
 		},
 	}

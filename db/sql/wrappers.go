@@ -11,6 +11,68 @@ import (
 	"github.com/acronis/perfkit/db"
 )
 
+const maxRowsToPrint = 10
+
+// wrappedRow is a struct for storing DB *sql.Row
+type wrappedRow struct {
+	row *sql.Row
+
+	readRowsLogger db.Logger
+}
+
+func (r *wrappedRow) Scan(dest ...any) error {
+	var err = r.row.Scan(dest...)
+
+	if r.readRowsLogger != nil {
+		// Create a single log line with all columns
+		var values = db.DumpRecursive(dest, " ")
+		r.readRowsLogger.Log(fmt.Sprintf("Row: %s", values))
+	}
+
+	return err
+}
+
+// wrappedRows is a struct for storing DB *sql.Rows (as a slice of Row) and current index
+type wrappedRows struct {
+	rows *sql.Rows
+
+	readRowsLogger db.Logger
+	printed        int
+}
+
+func (r *wrappedRows) Next() bool {
+	return r.rows.Next()
+}
+
+func (r *wrappedRows) Err() error {
+	return r.rows.Err()
+}
+
+func (r *wrappedRows) Scan(dest ...interface{}) error {
+	var err = r.rows.Scan(dest...)
+
+	if r.readRowsLogger != nil {
+		if r.printed >= maxRowsToPrint {
+			return err
+		} else if r.printed == maxRowsToPrint {
+			r.readRowsLogger.Log("... truncated ...")
+			r.printed++
+			return err
+		}
+
+		// Create a single log line with all columns
+		var values = db.DumpRecursive(dest, " ")
+		r.readRowsLogger.Log(fmt.Sprintf("Row: %s", values))
+		r.printed++
+	}
+
+	return err
+}
+
+func (r *wrappedRows) Close() error {
+	return r.rows.Close()
+}
+
 func accountTime(t *atomic.Int64, since time.Time) {
 	t.Add(time.Since(since).Nanoseconds())
 }
@@ -265,8 +327,7 @@ type wrappedTransactor struct {
 
 	dryRun bool
 
-	queryLogger    db.Logger
-	readRowsLogger db.Logger
+	queryLogger db.Logger
 
 	txNotSupported bool
 }

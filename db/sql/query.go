@@ -43,7 +43,7 @@ func (g *sqlGateway) QueryRow(format string, args ...interface{}) db.Row {
 	}
 
 	var row = g.rw.queryRowContext(g.ctx, format, args...)
-	return &sqlRow{row: row, readRowsLogger: g.readRowsLogger}
+	return &wrappedRow{row: row, readRowsLogger: g.readRowsLogger}
 }
 
 func (g *sqlGateway) Query(format string, args ...interface{}) (db.Rows, error) {
@@ -65,5 +65,5 @@ func (g *sqlGateway) Query(format string, args ...interface{}) (db.Rows, error) 
 		}
 	}
 
-	return &sqlRows{rows: rows, readRowsLogger: g.readRowsLogger}, err
+	return &wrappedRows{rows: rows, readRowsLogger: g.readRowsLogger}, err
 }
