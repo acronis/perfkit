@@ -317,7 +317,7 @@ func (wq wrappedQuerier) prepareContext(ctx context.Context, query string) (sqlS
 		wq.queryLogger.Log(fmt.Sprintf("PREPARE stmt FROM '%s';", query))
 	}
 
-	var stmt, err = wq.prepareContext(ctx, query)
+	var stmt, err = wq.q.prepareContext(ctx, query)
 	if err != nil {
 		return stmt, err
 	}
