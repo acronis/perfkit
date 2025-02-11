@@ -250,11 +250,11 @@ func accountTime(t *atomic.Int64, since time.Time) {
 	t.Add(time.Since(since).Nanoseconds())
 }
 
-// wrapperQuerier is a wrapper for querier that implements following functionality:
+// wrappedQuerier is a wrapper for querier that implements following functionality:
 // - measuring time of queries
 // - logging of queries
 // - dry-run mode
-type wrapperQuerier struct {
+type wrappedQuerier struct {
 	q querier
 
 	prepareTime *atomic.Int64 // *time.Duration
@@ -266,7 +266,7 @@ type wrapperQuerier struct {
 	queryLogger db.Logger
 }
 
-func (wq wrapperQuerier) execContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
+func (wq wrappedQuerier) execContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
 	defer accountTime(wq.execTime, time.Now())
 
 	if wq.queryLogger != nil {
@@ -290,7 +290,7 @@ func (wq wrapperQuerier) execContext(ctx context.Context, query string, args ...
 	return wq.q.execContext(ctx, query, args...)
 }
 
-func (wq wrapperQuerier) queryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row {
+func (wq wrappedQuerier) queryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row {
 	defer accountTime(wq.queryTime, time.Now())
 
 	if wq.queryLogger != nil {
@@ -300,7 +300,7 @@ func (wq wrapperQuerier) queryRowContext(ctx context.Context, query string, args
 	return wq.q.queryRowContext(ctx, query, args...)
 }
 
-func (wq wrapperQuerier) queryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
+func (wq wrappedQuerier) queryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
 	defer accountTime(wq.queryTime, time.Now())
 
 	if wq.queryLogger != nil {
@@ -310,7 +310,7 @@ func (wq wrapperQuerier) queryContext(ctx context.Context, query string, args ..
 	return wq.q.queryContext(ctx, query, args...)
 }
 
-func (wq wrapperQuerier) prepareContext(ctx context.Context, query string) (sqlStatement, error) {
+func (wq wrappedQuerier) prepareContext(ctx context.Context, query string) (sqlStatement, error) {
 	defer accountTime(wq.prepareTime, time.Now())
 
 	if wq.queryLogger != nil {
@@ -322,7 +322,7 @@ func (wq wrapperQuerier) prepareContext(ctx context.Context, query string) (sqlS
 		return stmt, err
 	}
 
-	return &wrapperStatement{
+	return &wrappedStatement{
 		stmt:        stmt,
 		execTime:    wq.execTime,
 		deallocTime: wq.deallocTime,
@@ -331,11 +331,11 @@ func (wq wrapperQuerier) prepareContext(ctx context.Context, query string) (sqlS
 	}, nil
 }
 
-// wrapperStatement is a wrapper for sqlStmt that adds additional features:
+// wrappedStatement is a wrapper for sqlStmt that adds additional features:
 // - measuring time of queries
 // - logging of queries
 // - dry-run mode
-type wrapperStatement struct {
+type wrappedStatement struct {
 	stmt sqlStatement
 
 	execTime    *atomic.Int64 // *time.Duration
@@ -345,7 +345,7 @@ type wrapperStatement struct {
 	queryLogger db.Logger
 }
 
-func (ws *wrapperStatement) Exec(args ...any) (db.Result, error) {
+func (ws *wrappedStatement) Exec(args ...any) (db.Result, error) {
 	defer accountTime(ws.execTime, time.Now())
 
 	if ws.queryLogger != nil {
@@ -363,7 +363,7 @@ func (ws *wrapperStatement) Exec(args ...any) (db.Result, error) {
 	return ws.stmt.Exec(args...)
 }
 
-func (ws *wrapperStatement) Close() error {
+func (ws *wrappedStatement) Close() error {
 	defer accountTime(ws.deallocTime, time.Now())
 
 	if ws.queryLogger != nil {
@@ -373,11 +373,11 @@ func (ws *wrapperStatement) Close() error {
 	return ws.stmt.Close()
 }
 
-// wrapperTransaction is a wrapper for transaction that implements following functionality:
+// wrappedTransaction is a wrapper for transaction that implements following functionality:
 // - measuring time of queries
 // - logging of queries
 // - dry-run mode
-type wrapperTransaction struct {
+type wrappedTransaction struct {
 	tx transaction
 
 	prepareTime *atomic.Int64 // *time.Duration
@@ -391,7 +391,7 @@ type wrapperTransaction struct {
 	txNotSupported bool
 }
 
-func (wtx wrapperTransaction) execContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
+func (wtx wrappedTransaction) execContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
 	defer accountTime(wtx.execTime, time.Now())
 
 	if wtx.queryLogger != nil {
@@ -415,7 +415,7 @@ func (wtx wrapperTransaction) execContext(ctx context.Context, query string, arg
 	return wtx.tx.execContext(ctx, query, args...)
 }
 
-func (wtx wrapperTransaction) queryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row {
+func (wtx wrappedTransaction) queryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row {
 	defer accountTime(wtx.queryTime, time.Now())
 
 	if wtx.queryLogger != nil {
@@ -425,7 +425,7 @@ func (wtx wrapperTransaction) queryRowContext(ctx context.Context, query string,
 	return wtx.tx.queryRowContext(ctx, query, args...)
 }
 
-func (wtx wrapperTransaction) queryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
+func (wtx wrappedTransaction) queryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
 	defer accountTime(wtx.queryTime, time.Now())
 
 	if wtx.queryLogger != nil {
@@ -435,7 +435,7 @@ func (wtx wrapperTransaction) queryContext(ctx context.Context, query string, ar
 	return wtx.tx.queryContext(ctx, query, args...)
 }
 
-func (wtx wrapperTransaction) prepareContext(ctx context.Context, query string) (sqlStatement, error) {
+func (wtx wrappedTransaction) prepareContext(ctx context.Context, query string) (sqlStatement, error) {
 	defer accountTime(wtx.prepareTime, time.Now())
 
 	if wtx.queryLogger != nil {
@@ -447,7 +447,7 @@ func (wtx wrapperTransaction) prepareContext(ctx context.Context, query string) 
 		return stmt, err
 	}
 
-	return &wrapperStatement{
+	return &wrappedStatement{
 		stmt:        stmt,
 		execTime:    wtx.execTime,
 		deallocTime: wtx.deallocTime,
@@ -456,7 +456,7 @@ func (wtx wrapperTransaction) prepareContext(ctx context.Context, query string) 
 	}, nil
 }
 
-func (wtx wrapperTransaction) commit() error {
+func (wtx wrappedTransaction) commit() error {
 	defer accountTime(wtx.commitTime, time.Now())
 
 	if wtx.queryLogger != nil {
@@ -470,7 +470,7 @@ func (wtx wrapperTransaction) commit() error {
 	return wtx.tx.commit()
 }
 
-func (wtx wrapperTransaction) rollback() error {
+func (wtx wrappedTransaction) rollback() error {
 	defer accountTime(wtx.commitTime, time.Now())
 
 	if wtx.queryLogger != nil {
@@ -484,11 +484,11 @@ func (wtx wrapperTransaction) rollback() error {
 	return wtx.tx.rollback()
 }
 
-// wrapperTransactor is a wrapper for transactor that implements following functionality:
+// wrappedTransactor is a wrapper for transactor that implements following functionality:
 // - measuring time of queries
 // - logging of queries
 // - dry-run mode
-type wrapperTransactor struct {
+type wrappedTransactor struct {
 	t transactor
 
 	beginTime   *atomic.Int64 // *time.Duration
@@ -506,7 +506,7 @@ type wrapperTransactor struct {
 	txNotSupported bool
 }
 
-func (wt wrapperTransactor) begin(ctx context.Context) (transaction, error) {
+func (wt wrappedTransactor) begin(ctx context.Context) (transaction, error) {
 	defer accountTime(wt.beginTime, time.Now())
 
 	if wt.queryLogger != nil {
@@ -523,7 +523,7 @@ func (wt wrapperTransactor) begin(ctx context.Context) (transaction, error) {
 		return t, err
 	}
 
-	return wrapperTransaction{
+	return wrappedTransaction{
 		tx:             t,
 		prepareTime:    wt.prepareTime,
 		execTime:       wt.execTime,
@@ -552,7 +552,7 @@ func (d *sqlDatabase) Session(c *db.Context) db.Session {
 	return &sqlSession{
 		sqlGateway: sqlGateway{
 			ctx: c.Ctx,
-			rw: wrapperQuerier{
+			rw: wrappedQuerier{
 				q:           d.rw,
 				prepareTime: c.PrepareTime,
 				execTime:    c.ExecTime,
@@ -568,7 +568,7 @@ func (d *sqlDatabase) Session(c *db.Context) db.Session {
 			queryLogger:              d.queryLogger,
 			readRowsLogger:           d.readRowsLogger,
 		},
-		t: wrapperTransactor{
+		t: wrappedTransactor{
 			t:              d.t,
 			beginTime:      c.BeginTime,
 			prepareTime:    c.PrepareTime,
