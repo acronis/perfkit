@@ -32,7 +32,7 @@ func (s *sqlSession) GetNextVal(sequenceName string) (uint64, error) {
 
 		// Uses querier.QueryRow to fetch single value from sequence
 		// QueryRow is part of the querier interface for single-row queries
-		if err := s.QueryRow(query).Scan(&nextVal); err != nil {
+		if err := s.rw.queryRowContext(s.ctx, query).Scan(&nextVal); err != nil {
 			return 0, fmt.Errorf("failed get nextVal for sequence '%s': %v", sequenceName, err)
 		}
 
