@@ -95,22 +95,15 @@ func (d *mysqlDialect) encodeTime(timestamp time.Time) string {
 // GetType returns MySQL-specific types
 func (d *mysqlDialect) getType(id db.DataType) string {
 	switch id {
+	// Primary Keys and IDs
+	case db.DataTypeId:
+		return "BIGINT AUTO_INCREMENT PRIMARY KEY"
+	case db.DataTypeTenantUUIDBoundID:
+		return "VARCHAR(64)"
+
+	// Integer Types
 	case db.DataTypeInt:
 		return "INT"
-	case db.DataTypeVarChar:
-		return "VARCHAR"
-	case db.DataTypeVarChar32:
-		return "VARCHAR(32)"
-	case db.DataTypeVarChar64:
-		return "VARCHAR(64)"
-	case db.DataTypeVarChar128:
-		return "VARCHAR(128)"
-	case db.DataTypeVarChar256:
-		return "VARCHAR(256)"
-	case db.DataTypeText:
-		return "TEXT"
-	case db.DataTypeJSON:
-		return "JSON"
 	case db.DataTypeBigInt:
 		return "BIGINT"
 	case db.DataTypeBigIntAutoIncPK:
@@ -119,18 +112,46 @@ func (d *mysqlDialect) getType(id db.DataType) string {
 		return "BIGINT AUTO_INCREMENT"
 	case db.DataTypeSmallInt:
 		return "SMALLINT"
+	case db.DataTypeTinyInt:
+		return "TINYINT"
+
+	// String Types
+	case db.DataTypeVarChar:
+		return "VARCHAR"
+	case db.DataTypeVarChar32:
+		return "VARCHAR(32)"
+	case db.DataTypeVarChar36:
+		return "VARCHAR(36)"
+	case db.DataTypeVarChar64:
+		return "VARCHAR(64)"
+	case db.DataTypeVarChar128:
+		return "VARCHAR(128)"
+	case db.DataTypeVarChar256:
+		return "VARCHAR(256)"
+	case db.DataTypeText:
+		return "TEXT"
+	case db.DataTypeLongText:
+		return "LONGTEXT"
 	case db.DataTypeAscii:
 		return "CHARACTER SET ascii"
+
+	// UUID Types
 	case db.DataTypeUUID:
 		return "VARCHAR(36)"
 	case db.DataTypeVarCharUUID:
 		return "VARCHAR(36)"
-	case db.DataTypeTenantUUIDBoundID:
-		return "VARCHAR(64)"
+
+	// Binary Types
 	case db.DataTypeLongBlob:
 		return "LONGBLOB"
 	case db.DataTypeHugeBlob:
 		return "LONGBLOB"
+	case db.DataTypeBinary20:
+		return "BINARY(20)"
+	case db.DataTypeBinaryBlobType:
+		return "MEDIUMBLOB"
+
+	// Date and Time Types
 	case db.DataTypeDateTime:
 		return "DATETIME"
 	case db.DataTypeDateTime6:
@@ -141,20 +162,20 @@ func (d *mysqlDialect) getType(id db.DataType) string {
 		return "TIMESTAMP(6)"
 	case db.DataTypeCurrentTimeStamp6:
 		return "CURRENT_TIMESTAMP(6)"
-	case db.DataTypeBinary20:
-		return "BINARY(20)"
-	case db.DataTypeBinaryBlobType:
-		return "MEDIUMBLOB"
+
+	// Boolean Types
 	case db.DataTypeBoolean:
 		return "BOOLEAN"
 	case db.DataTypeBooleanFalse:
 		return "0"
 	case db.DataTypeBooleanTrue:
 		return "1"
-	case db.DataTypeTinyInt:
-		return "TINYINT"
-	case db.DataTypeLongText:
-		return "LONGTEXT"
+
+	// Special Types
+	case db.DataTypeJSON:
+		return "JSON"
+
+	// Constraints and Modifiers
 	case db.DataTypeUnique:
 		return "unique"
 	case db.DataTypeEngine:

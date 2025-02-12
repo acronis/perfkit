@@ -1647,6 +1647,7 @@ const (
 	// String Types
 	DataTypeVarChar    DataType = "{$varchar}"    // Variable-length string
 	DataTypeVarChar32  DataType = "{$varchar32}"  // VARCHAR(32)
+	DataTypeVarChar36  DataType = "{$varchar36}"  // VARCHAR(36)
 	DataTypeVarChar64  DataType = "{$varchar64}"  // VARCHAR(64)
 	DataTypeVarChar128 DataType = "{$varchar128}" // VARCHAR(128)
 	DataTypeVarChar256 DataType = "{$varchar256}" // VARCHAR(256)

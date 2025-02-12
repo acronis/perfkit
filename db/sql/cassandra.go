@@ -64,52 +64,83 @@ func (d *cassandraDialect) encodeTime(timestamp time.Time) string {
 // GetType returns Cassandra-specific types
 func (d *cassandraDialect) getType(dataType db.DataType) string {
 	switch dataType {
+	// Primary Keys and IDs
+	case db.DataTypeId:
+		return "int"
+	case db.DataTypeTenantUUIDBoundID:
+		return "varchar" // Composite key with tenant UUID
+
+	// Integer Types
 	case db.DataTypeInt:
-		return "INT"
-	case db.DataTypeVarChar:
-		return "VARCHAR"
-	case db.DataTypeVarChar256:
-		return "VARCHAR(256)"
-	case db.DataTypeText:
-		return "VARCHAR"
+		return "int" // Standard integer
 	case db.DataTypeBigInt:
-		return "bigint"
+		return "bigint" // Large integer
 	case db.DataTypeBigIntAutoIncPK:
-		return "bigint PRIMARY KEY" // Cassandra does not support auto-increment, bigint is closest
+		return "bigint primary key" // Auto-incrementing big integer primary key
 	case db.DataTypeBigIntAutoInc:
-		return "bigint" // Use bigint for large integers
+		return "bigint" // Auto-incrementing big integer
+	case db.DataTypeSmallInt:
+		return "{$smallint}" // Small integer
+	case db.DataTypeTinyInt:
+		return "tinyint" // Tiny integer
+
+	// String Types
+	case db.DataTypeVarChar:
+		return "varchar" // Variable-length string
+	case db.DataTypeVarChar32:
+		return "varchar" // VARCHAR(32)
+	case db.DataTypeVarChar36:
+		return "varchar" // VARCHAR(36)
+	case db.DataTypeVarChar64:
+		return "varchar" // VARCHAR(64)
+	case db.DataTypeVarChar128:
+		return "varchar" // VARCHAR(128)
+	case db.DataTypeVarChar256:
+		return "varchar" // VARCHAR(256)
+	case db.DataTypeText:
+		return "varchar" // Unlimited length text
+	case db.DataTypeLongText:
+		return "varchar" // Long text
 	case db.DataTypeAscii:
 		return "" // Charset specification is not needed in Cassandra
+
+	// UUID Types
 	case db.DataTypeUUID:
-		return "UUID" // Cassandra supports UUID type
+		return "uuid" // Cassandra supports UUID type
 	case db.DataTypeVarCharUUID:
 		return "varchar" // Cassandra supports UUID type
+
+	// Binary Types
 	case db.DataTypeLongBlob:
 		return "blob" // Use blob for binary data
 	case db.DataTypeHugeBlob:
 		return "blob" // Use blob for binary data
-	case db.DataTypeDateTime:
-		return "timestamp" // DateTime type for date and time
-	case db.DataTypeDateTime6:
-		return "timestamp with time zone" // Timestamp with time zone
-	case db.DataTypeTimestamp6:
-		return "timestamp with time zone" // Timestamp with time zone
-	case db.DataTypeCurrentTimeStamp6:
-		return "now()" // Function for current timestamp
 	case db.DataTypeBinary20:
 		return "blob" // varchar for fixed-length binary data
 	case db.DataTypeBinaryBlobType:
 		return "blob" // Use blob for binary data
+
+	// Date and Time Types
+	case db.DataTypeDateTime:
+		return "timestamp" // DateTime type for date and time
+	case db.DataTypeDateTime6:
+		return "timestamp with time zone" // Timestamp with time zone
+	case db.DataTypeTimestamp:
+		return "timestamp" // Timestamp
+	case db.DataTypeTimestamp6:
+		return "timestamp with time zone" // Timestamp with time zone
+	case db.DataTypeCurrentTimeStamp6:
+		return "{$current_timestamp6}" // Current timestamp with microseconds
+
+	// Boolean Types
 	case db.DataTypeBoolean:
 		return "boolean"
 	case db.DataTypeBooleanFalse:
 		return "false"
 	case db.DataTypeBooleanTrue:
 		return "true"
-	case db.DataTypeTinyInt:
-		return "tinyint"
-	case db.DataTypeLongText:
-		return "text" // Use text for long text
+
+	// Constraints and Modifiers
 	case db.DataTypeUnique:
 		return "" // Unique values are not supported
 	case db.DataTypeEngine:
@@ -118,8 +149,6 @@ func (d *cassandraDialect) getType(dataType db.DataType) string {
 		return ""
 	case db.DataTypeNull:
 		return ""
-	case db.DataTypeTenantUUIDBoundID:
-		return "varchar"
 	default:
 		return ""
 	}
