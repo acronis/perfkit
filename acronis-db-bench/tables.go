@@ -228,8 +228,8 @@ var TestTableMedium = TestTable{
 		return &db.TableDefinition{
 			TableRows: []db.TableRow{
 				{Name: "id", Type: db.DataTypeBigIntAutoIncPK},
-				{Name: "uuid", Type: db.DataTypeUUID, NotNull: true, Indexed: true},
-				{Name: "tenant_id", Type: db.DataTypeUUID, NotNull: true, Indexed: true},
+				{Name: "uuid", Type: db.DataTypeVarCharUUID, NotNull: true, Indexed: true},
+				{Name: "tenant_id", Type: db.DataTypeVarCharUUID, NotNull: true, Indexed: true},
 				{Name: "euc_id", Type: db.DataTypeInt, NotNull: true, Indexed: true},
 				{Name: "progress", Type: db.DataTypeInt},
 			},
@@ -374,7 +374,7 @@ var TestTableHeavy = TestTable{
 			db.TableRow{Name: "id", Type: db.DataTypeBigIntAutoIncPK, Indexed: true},
 			db.TableRow{Name: "uuid", Type: db.DataTypeUUID, NotNull: true, Indexed: true},
 			db.TableRow{Name: "checksum", Type: db.DataTypeVarChar64, NotNull: true},
-			db.TableRow{Name: "cti_entity_uuid", Type: db.DataTypeUUID, Indexed: true},
+			db.TableRow{Name: "cti_entity_uuid", Type: db.DataTypeVarChar36, Indexed: true},
 		)
 
 		if dialect == db.CLICKHOUSE {
@@ -391,7 +391,7 @@ var TestTableHeavy = TestTable{
 			)
 		} else {
 			tableRows = append(tableRows,
-				db.TableRow{Name: "tenant_id", Type: db.DataTypeUUID, NotNull: true, Indexed: true},
+				db.TableRow{Name: "tenant_id", Type: db.DataTypeVarChar36, NotNull: true, Indexed: true},
 				db.TableRow{Name: "euc_id", Type: db.DataTypeVarChar64, NotNull: true, Indexed: true},
 			)
 		}
@@ -419,13 +419,28 @@ var TestTableHeavy = TestTable{
 			db.TableRow{Name: "blocker_count", Type: db.DataTypeInt, NotNull: true},
 
 			db.TableRow{Name: "started_by_user", Type: db.DataTypeVarChar256, Indexed: true},
+		)
 
-			db.TableRow{Name: "policy_id", Type: db.DataTypeVarChar64, Indexed: true},
+		if dialect == db.CASSANDRA {
+			tableRows = append(tableRows, db.TableRow{Name: "policy_id", Type: db.DataTypeInt, Indexed: true})
+		} else {
+			tableRows = append(tableRows, db.TableRow{Name: "policy_id", Type: db.DataTypeVarChar64, Indexed: true})
+		}
+
+		tableRows = append(tableRows,
 			db.TableRow{Name: "policy_type", Type: db.DataTypeVarChar64, Indexed: true},
 			db.TableRow{Name: "policy_name", Type: db.DataTypeVarChar256, Indexed: true},
 
 			db.TableRow{Name: "resource_id", Type: db.DataTypeVarChar64, Indexed: true},
-			db.TableRow{Name: "resource_type", Type: db.DataTypeVarChar64, Indexed: true},
+		)
+
+		if dialect == db.CASSANDRA {
+			tableRows = append(tableRows, db.TableRow{Name: "resource_type", Type: db.DataTypeInt, Indexed: true})
+		} else {
+			tableRows = append(tableRows, db.TableRow{Name: "resource_type", Type: db.DataTypeVarChar64, Indexed: true})
+		}
+
+		tableRows = append(tableRows,
 			db.TableRow{Name: "resource_name", Type: db.DataTypeVarChar256, Indexed: true},
 
 			db.TableRow{Name: "tags", Type: db.DataTypeText, Indexed: true},
@@ -684,9 +699,9 @@ var TestTableTimeSeriesSQL = TestTable{
 		return &db.TableDefinition{
 			TableRows: []db.TableRow{
 				{Name: "id", Type: db.DataTypeBigIntAutoIncPK},
-				{Name: "tenant_id", Type: db.DataTypeUUID, NotNull: true, Indexed: true},
-				{Name: "device_id", Type: db.DataTypeVarChar64, NotNull: true, Indexed: true},
-				{Name: "metric_id", Type: db.DataTypeUUID, NotNull: true, Indexed: true},
+				{Name: "tenant_id", Type: db.DataTypeVarCharUUID, NotNull: true, Indexed: true},
+				{Name: "device_id", Type: db.DataTypeVarCharUUID, NotNull: true, Indexed: true},
+				{Name: "metric_id", Type: db.DataTypeVarCharUUID, NotNull: true, Indexed: true},
 				{Name: "ts", Type: db.DataTypeTimestamp, NotNull: true, Indexed: true},
 				{Name: "value", Type: db.DataTypeInt, NotNull: true},
 			},

@@ -478,6 +478,11 @@ func (tc *TenantsCache) PopulateUuidsFromDB(database db.Database) {
 			tc.logger.Log(benchmark.LogTrace, 0, fmt.Sprintf("error scanning row: %v", err))
 			return
 		}
+
+		if t.UUID == "" {
+			continue
+		}
+
 		tc.uuids = append(tc.uuids, t.UUID)
 
 		if t.Kind == "c" {
@@ -559,9 +564,8 @@ func (tc *TenantsCache) CreateTenant(rw *benchmark.RandomizerWorker, tx db.Datab
 		return "", err
 	}
 
-	var tenantUuid, _ = guuid.ParseBytes([]byte(t.UUID))
 	if err = tx.BulkInsert(TableNameTenants, [][]interface{}{
-		{t.ID, tenantUuid, t.Name, t.Kind, t.ParentID, t.NestingLevel, t.IsDeleted, t.ParentHasAccess},
+		{t.ID, t.UUID, t.Name, t.Kind, t.ParentID, t.NestingLevel, t.IsDeleted, t.ParentHasAccess},
 	}, []string{"id", "uuid", "name", "kind", "parent_id", "nesting_level", "is_deleted", "parent_has_access"}); err != nil {
 		tc.logger.Log(benchmark.LogTrace, 0, fmt.Sprintf("error inserting into table %s: %v", TableNameTenants, err))
 		return "", err
@@ -625,9 +629,8 @@ func (tc *TenantsCache) CreateCTIEntity(rw *benchmark.RandomizerWorker, tx db.Da
 
 	cti.GlobalState = 1
 
-	var ctiUUID, _ = guuid.ParseBytes([]byte(cti.UUID))
 	if err = tx.BulkInsert(TableNameCtiEntities, [][]interface{}{
-		{ctiUUID, cti.CTI, cti.Final, cti.GlobalState, cti.EntitySchema, cti.Annotations, cti.Traits, cti.TraitsSchema, cti.TraitsAnnotations},
+		{cti.UUID, cti.CTI, cti.Final, cti.GlobalState, cti.EntitySchema, cti.Annotations, cti.Traits, cti.TraitsSchema, cti.TraitsAnnotations},
 	}, []string{"uuid", "cti", "final", "global_state", "entity_schema", "annotations", "traits", "traits_schema", "traits_annotations"}); err != nil {
 		return fmt.Errorf("error inserting into table %s: %v", TableNameCtiEntities, err)
 	}
@@ -656,7 +659,7 @@ func (tc *TenantsCache) genRandCtiStr(rw *benchmark.RandomizerWorker) string {
 // createRandomCtiEntity creates a new CTI entity and inserts it into DB
 func (tc *TenantsCache) createRandomCtiEntity(rw *benchmark.RandomizerWorker) (*CtiEntityObj, error) { //nolint:unparam
 	cti := CtiEntityObj{
-		UUID: CTIUUID(rw.UUID().String()),
+		UUID: CTIUUID(rw.UUID()),
 		CTI:  tc.genRandCtiStr(rw),
 	}
 
@@ -897,7 +900,7 @@ func convertIntToKind(kind int) (string, error) {
 }
 
 // GetRandomTenantUUID returns random tenant uuid from cache
-func (tc *TenantsCache) GetRandomTenantUUID(rw *benchmark.RandomizerWorker, testCardinality int, kind string) (guuid.UUID, error) {
+func (tc *TenantsCache) GetRandomTenantUUID(rw *benchmark.RandomizerWorker, testCardinality int, kind string) (TenantUUID, error) {
 	var cardinality int
 	if testCardinality == 0 {
 		cardinality = tc.tenantsWorkingSetLimit
@@ -928,8 +931,13 @@ func (tc *TenantsCache) GetRandomTenantUUID(rw *benchmark.RandomizerWorker, test
 		tc.Exit(msg)
 	}
 
-	var value, _ = guuid.ParseBytes([]byte(tenantList[rw.IntnExp(cardinality)]))
-	return value, nil
+	var index = rw.IntnExp(cardinality)
+	var tenant = tenantList[index]
+	if tenant == "" {
+		return "", fmt.Errorf("tenant uuid is empty")
+	}
+
+	return tenant, nil
 }
 
 // GetTenantUuidBoundId returns tenant uuid bound id
@@ -937,22 +945,17 @@ func (tc *TenantsCache) GetRandomTenantUUID(rw *benchmark.RandomizerWorker, test
  * Generate a new UUID based on the UUID prefix coming from the TenantUUID
  * This logic is required to simulate a low cardinality objects associated with a tenant
  */
-func (tc *TenantsCache) GetTenantUuidBoundId(rw *benchmark.RandomizerWorker, tenantUuid guuid.UUID, cardinality int) guuid.UUID { //nolint:revive
-	var s = tenantUuid.String()
-
-	var res string
+func (tc *TenantsCache) GetTenantUuidBoundId(rw *benchmark.RandomizerWorker, tenantUuid TenantUUID, cardinality int) TenantUUID { //nolint:revive
+	s := string(tenantUuid)
 	if len(s) > 0 {
-		res = s[:len(s)-12] + fmt.Sprintf("%012d", rw.Intn(cardinality))
-	} else {
-		res = fmt.Sprintf("00000000-0000-0000-0000-%012d", rw.Intn(cardinality))
+		return TenantUUID(s[:len(s)-12] + fmt.Sprintf("%012d", rw.Intn(cardinality)))
 	}
 
-	var value, _ = guuid.ParseBytes([]byte(res))
-	return value
+	return TenantUUID(fmt.Sprintf("00000000-0000-0000-0000-%012d", rw.Intn(cardinality)))
 }
 
 // GetRandomCTIUUID returns random CTI uuid from cache
-func (tc *TenantsCache) GetRandomCTIUUID(rw *benchmark.RandomizerWorker, testCardinality int) (guuid.UUID, error) {
+func (tc *TenantsCache) GetRandomCTIUUID(rw *benchmark.RandomizerWorker, testCardinality int) (CTIUUID, error) {
 	var cardinality int
 	if testCardinality == 0 {
 		cardinality = tc.ctisWorkingSetLimit
@@ -973,8 +976,7 @@ func (tc *TenantsCache) GetRandomCTIUUID(rw *benchmark.RandomizerWorker, testCar
 		tc.Exit(msg)
 	}
 
-	var value, _ = guuid.ParseBytes([]byte(tc.ctiUuids[rw.IntnExp(cardinality)]))
-	return value, nil
+	return tc.ctiUuids[rw.IntnExp(cardinality)], nil
 }
 
 func (tc *TenantsCache) GenCommonFakeValue(columnType string, rw *benchmark.RandomizerWorker, cardinality int) (bool, interface{}) {
@@ -999,14 +1001,14 @@ func (tc *TenantsCache) GenCommonFakeValue(columnType string, rw *benchmark.Rand
 }
 
 func (tc *TenantsCache) GenFakeValue(columnType string, rw *benchmark.RandomizerWorker, cardinality int, preGenerated map[string]interface{}) (bool, interface{}) {
-	var tenantUUID guuid.UUID
+	var tenantUUID TenantUUID
 	if preGenerated != nil {
 		if rawTenantUUID, ok := preGenerated["tenant_uuid"]; ok {
-			tenantUUID = rawTenantUUID.(guuid.UUID)
+			tenantUUID = rawTenantUUID.(TenantUUID)
 		} else if rawTenantUUID, ok = preGenerated["customer_uuid"]; ok {
-			tenantUUID = rawTenantUUID.(guuid.UUID)
+			tenantUUID = rawTenantUUID.(TenantUUID)
 		} else if rawTenantUUID, ok = preGenerated["partner_uuid"]; ok {
-			tenantUUID = rawTenantUUID.(guuid.UUID)
+			tenantUUID = rawTenantUUID.(TenantUUID)
 		}
 	}
 
@@ -1014,7 +1016,7 @@ func (tc *TenantsCache) GenFakeValue(columnType string, rw *benchmark.Randomizer
 	case "tenant_uuid", "customer_uuid", "partner_uuid":
 		return true, tenantUUID
 	case "tenant_uuid_parents":
-		return true, tc.parentUUIDs[tenantUUID.String()]
+		return true, tc.parentUUIDs[string(tenantUUID)]
 	case "tenant_uuid_bound_id":
 		return true, tc.GetTenantUuidBoundId(rw, tenantUUID, cardinality)
 	case "cti_uuid":

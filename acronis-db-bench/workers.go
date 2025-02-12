@@ -462,7 +462,7 @@ func testInsertGeneric(b *benchmark.Benchmark, testDesc *TestDesc) {
 
 					if b.TestOpts.(*TestOpts).BenchOpts.Events {
 						rw := b.Randomizer.GetWorker(workerId)
-						if err := b.Vault.(*DBTestData).EventBus.InsertEvent(rw, tx, rw.UUID().String()); err != nil {
+						if err := b.Vault.(*DBTestData).EventBus.InsertEvent(rw, tx, rw.UUID()); err != nil {
 							return err
 						}
 					}
@@ -588,7 +588,7 @@ func testUpdateGeneric(b *benchmark.Benchmark, testDesc *TestDesc, updateRows ui
 
 					if b.TestOpts.(*TestOpts).BenchOpts.Events {
 						rw := b.Randomizer.GetWorker(workerId)
-						if err = b.Vault.(*DBTestData).EventBus.InsertEvent(rw, tx, rw.UUID().String()); err != nil {
+						if err = b.Vault.(*DBTestData).EventBus.InsertEvent(rw, tx, rw.UUID()); err != nil {
 							return err
 						}
 					}
@@ -693,7 +693,7 @@ func testDeleteGeneric(b *benchmark.Benchmark, testDesc *TestDesc, deleteRows ui
 
 					if b.TestOpts.(*TestOpts).BenchOpts.Events {
 						rw := b.Randomizer.GetWorker(workerId)
-						if err := b.Vault.(*DBTestData).EventBus.InsertEvent(rw, tx, rw.UUID().String()); err != nil {
+						if err := b.Vault.(*DBTestData).EventBus.InsertEvent(rw, tx, rw.UUID()); err != nil {
 							return err
 						}
 					}

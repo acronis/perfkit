@@ -167,7 +167,7 @@ var TestRawQuery = TestDesc{
 					if err != nil {
 						b.Exit(err)
 					}
-					q = strings.Replace(q, "{CTI}", "'"+ctiUUID.String()+"'", -1)
+					q = strings.Replace(q, "{CTI}", "'"+string(ctiUUID)+"'", -1)
 				}
 				if strings.Contains(query, "{TENANT}") {
 					rw := b.Randomizer.GetWorker(c.WorkerID)
@@ -175,7 +175,7 @@ var TestRawQuery = TestDesc{
 					if err != nil {
 						b.Exit(err)
 					}
-					q = strings.Replace(q, "{TENANT}", "'"+tenantUUID.String()+"'", -1)
+					q = strings.Replace(q, "{TENANT}", "'"+string(tenantUUID)+"'", -1)
 				}
 				fmt.Printf("query %s\n", q)
 
@@ -219,6 +219,10 @@ var TestSelectOne = TestDesc{
 				}
 			case *sql.DB:
 				if err := rawSession.QueryRow("SELECT 1").Scan(&ret); err != nil {
+					if c.database.DialectName() == db.CASSANDRA {
+						// Cassandra driver returns error on SELECT 1
+						return 1
+					}
 					b.Exit("can't do 'SELECT 1': %v", err)
 				}
 			case *es8.Client:
@@ -468,6 +472,11 @@ var TestSelectHeavyRandTenantLike = TestDesc{
 
 		var where = func(b *benchmark.Benchmark, workerId int) map[string][]string {
 			w := b.GenFakeDataAsMap(workerId, colConfs, false)
+
+			var tenant = fmt.Sprintf("%s", (*w)["tenant_id"])
+			if tenant == "" {
+				b.Log(1, workerId, "tenant_id is empty")
+			}
 
 			return map[string][]string{
 				"tenant_id":     {fmt.Sprintf("%s", (*w)["tenant_id"])},
@@ -2035,64 +2044,35 @@ func tenantAwareCTIAwareWorker(b *benchmark.Benchmark, c *DBConnector, testDesc 
 	c.Log(benchmark.LogTrace, "tenant-aware and CTI-aware SELECT test iteration")
 
 	tableName := testDesc.table.TableName
-	query := buildTenantAwareQuery(c.database.DialectName(), tableName)
+	query := buildTenantAwareQuery(tableName)
 	ctiUUID, err := b.Vault.(*DBTestData).TenantsCache.GetRandomCTIUUID(b.Randomizer.GetWorker(c.WorkerID), 0)
 	if err != nil {
 		b.Exit(err)
 	}
-
-	// TODO: Unify the query building for all dialects
-	var ctiAwareQuery string
-	switch c.database.DialectName() {
-	case db.POSTGRES:
-		ctiAwareQuery = query + fmt.Sprintf(
-			" JOIN `%[1]s` AS `cti_ent` "+
-				"ON `cti_ent`.`uuid`::uuid = `%[2]s`.`cti_entity_uuid` AND `%[2]s`.`cti_entity_uuid` IN ('%[4]s') "+
-				"LEFT JOIN `%[3]s` as `cti_prov` "+
-				"ON `cti_prov`.`tenant_id` = `tenants_child`.`id` AND `cti_prov`.`cti_entity_uuid`::uuid = `%[2]s`.`cti_entity_uuid` "+
-				"WHERE `cti_prov`.`state` = 1 OR `cti_ent`.`global_state` = 1",
-			tenants.TableNameCtiEntities, tableName, tenants.TableNameCtiProvisioning, ctiUUID.String())
-	default:
-		ctiAwareQuery = query + fmt.Sprintf(
-			" JOIN `%[1]s` AS `cti_ent` "+
-				"ON `cti_ent`.`uuid` = `%[2]s`.`cti_entity_uuid` AND `%[2]s`.`cti_entity_uuid` IN ('%[4]s') "+
-				"LEFT JOIN `%[3]s` as `cti_prov` "+
-				"ON `cti_prov`.`tenant_id` = `tenants_child`.`id` AND `cti_prov`.`cti_entity_uuid` = `%[2]s`.`cti_entity_uuid` "+
-				"WHERE `cti_prov`.`state` = 1 OR `cti_ent`.`global_state` = 1",
-			tenants.TableNameCtiEntities, tableName, tenants.TableNameCtiProvisioning, ctiUUID.String())
-	}
+	ctiAwareQuery := query + fmt.Sprintf(
+		" JOIN `%[1]s` AS `cti_ent` "+
+			"ON `cti_ent`.`uuid` = `%[2]s`.`cti_entity_uuid` AND `%[2]s`.`cti_entity_uuid` IN ('%[4]s') "+
+			"LEFT JOIN `%[3]s` as `cti_prov` "+
+			"ON `cti_prov`.`tenant_id` = `tenants_child`.`id` AND `cti_prov`.`cti_entity_uuid` = `%[2]s`.`cti_entity_uuid` "+
+			"WHERE `cti_prov`.`state` = 1 OR `cti_ent`.`global_state` = 1",
+		tenants.TableNameCtiEntities, tableName, tenants.TableNameCtiProvisioning, string(ctiUUID))
 
 	return tenantAwareGenericWorker(b, c, ctiAwareQuery, orderBy)
 }
 
 func tenantAwareWorker(b *benchmark.Benchmark, c *DBConnector, testDesc *TestDesc, orderBy string, batch int) (loops int) { //nolint:revive
-	query := buildTenantAwareQuery(c.database.DialectName(), testDesc.table.TableName)
+	query := buildTenantAwareQuery(testDesc.table.TableName)
 
 	return tenantAwareGenericWorker(b, c, query, orderBy)
 }
 
-func buildTenantAwareQuery(dialectName db.DialectName, tableName string) string {
-	var tenantAwareQuery string
-
-	// TODO: Unify the query building for all dialects
-	switch dialectName {
-	case db.POSTGRES:
-		tenantAwareQuery = fmt.Sprintf("SELECT `%[1]s`.`id` id, `%[1]s`.`tenant_id` FROM `%[1]s` "+
-			"JOIN `%[2]s` AS `tenants_child` ON ((`tenants_child`.`uuid`::uuid = `%[1]s`.`tenant_id`) AND (`tenants_child`.`is_deleted` != {true})) "+
-			"JOIN `%[3]s` AS `tenants_closure` ON ((`tenants_closure`.`child_id` = `tenants_child`.`id`) AND (`tenants_closure`.`barrier` <= 0)) "+
-			"JOIN `%[2]s` AS `tenants_parent` ON ((`tenants_parent`.`id` = `tenants_closure`.`parent_id`) "+
-			"AND (`tenants_parent`.`uuid` IN ('{tenant_uuid}')) AND (`tenants_parent`.`is_deleted` != {true}))",
-			tableName, tenants.TableNameTenants, tenants.TableNameTenantClosure)
-	default:
-		tenantAwareQuery = fmt.Sprintf("SELECT `%[1]s`.`id` id, `%[1]s`.`tenant_id` FROM `%[1]s` "+
-			"JOIN `%[2]s` AS `tenants_child` ON ((`tenants_child`.`uuid` = `%[1]s`.`tenant_id`) AND (`tenants_child`.`is_deleted` != {true})) "+
-			"JOIN `%[3]s` AS `tenants_closure` ON ((`tenants_closure`.`child_id` = `tenants_child`.`id`) AND (`tenants_closure`.`barrier` <= 0)) "+
-			"JOIN `%[2]s` AS `tenants_parent` ON ((`tenants_parent`.`id` = `tenants_closure`.`parent_id`) "+
-			"AND (`tenants_parent`.`uuid` IN ('{tenant_uuid}')) AND (`tenants_parent`.`is_deleted` != {true}))",
-			tableName, tenants.TableNameTenants, tenants.TableNameTenantClosure)
-	}
-
-	return tenantAwareQuery
+func buildTenantAwareQuery(tableName string) string {
+	return fmt.Sprintf("SELECT `%[1]s`.`id` id, `%[1]s`.`tenant_id` FROM `%[1]s` "+
+		"JOIN `%[2]s` AS `tenants_child` ON ((`tenants_child`.`uuid` = `%[1]s`.`tenant_id`) AND (`tenants_child`.`is_deleted` != {true})) "+
+		"JOIN `%[3]s` AS `tenants_closure` ON ((`tenants_closure`.`child_id` = `tenants_child`.`id`) AND (`tenants_closure`.`barrier` <= 0)) "+
+		"JOIN `%[2]s` AS `tenants_parent` ON ((`tenants_parent`.`id` = `tenants_closure`.`parent_id`) "+
+		"AND (`tenants_parent`.`uuid` IN ('{tenant_uuid}')) AND (`tenants_parent`.`is_deleted` != {true}))",
+		tableName, tenants.TableNameTenants, tenants.TableNameTenantClosure)
 }
 
 func tenantAwareGenericWorker(b *benchmark.Benchmark, c *DBConnector, query string, orderBy string) (loops int) {
@@ -2111,7 +2091,7 @@ func tenantAwareGenericWorker(b *benchmark.Benchmark, c *DBConnector, query stri
 		valTrue = "1"
 	}
 	query = strings.ReplaceAll(query, "{true}", valTrue)
-	query = strings.ReplaceAll(query, "{tenant_uuid}", uuid.String())
+	query = strings.ReplaceAll(query, "{tenant_uuid}", string(uuid))
 	if orderBy != "" {
 		query += " " + orderBy
 	}
