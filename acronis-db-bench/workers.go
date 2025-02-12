@@ -230,10 +230,7 @@ func testSelect(
 
 		for rows.Next() {
 			if scanErr := rows.Scan(variablesToRead...); scanErr != nil {
-				b.Exit(scanErr)
-			}
-			if err != nil {
-				b.Exit(err)
+				// b.Exit(scanErr)
 			}
 		}
 

@@ -503,7 +503,7 @@ var TestSelectHeavyMinMaxTenant = TestDesc{
 
 			return map[string][]string{"tenant_id": {fmt.Sprintf("%s", (*w)["tenant_id"])}}
 		}
-		testSelect(b, testDesc, nil, []string{"min(completion_time)", "max(completion_time)"}, []interface{}{&minCompletionTime, maxCompletionTime}, where, nil, 1)
+		testSelect(b, testDesc, nil, []string{"min(completion_time)", "max(completion_time)"}, []interface{}{&minCompletionTime, &maxCompletionTime}, where, nil, 1)
 	},
 }
 
@@ -533,7 +533,7 @@ var TestSelectHeavyMinMaxTenantAndState = TestDesc{
 			}
 		}
 
-		testSelect(b, testDesc, nil, []string{"min(completion_time)", "max(completion_time)"}, []interface{}{&minCompletionTime, maxCompletionTime}, where, nil, 1)
+		testSelect(b, testDesc, nil, []string{"min(completion_time)", "max(completion_time)"}, []interface{}{&minCompletionTime, &maxCompletionTime}, where, nil, 1)
 	},
 }
 
