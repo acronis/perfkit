@@ -479,10 +479,6 @@ func (tc *TenantsCache) PopulateUuidsFromDB(database db.Database) {
 			return
 		}
 
-		if t.UUID == "" {
-			continue
-		}
-
 		tc.uuids = append(tc.uuids, t.UUID)
 
 		if t.Kind == "c" {
