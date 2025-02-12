@@ -200,10 +200,9 @@ var TestTableLight = TestTable{
 	TableDefinition: func(dialect db.DialectName) *db.TableDefinition {
 		return &db.TableDefinition{
 			TableRows: []db.TableRow{
-				{Name: "id", Type: db.DataTypeBigIntAutoInc},
+				{Name: "id", Type: db.DataTypeBigIntAutoIncPK},
 				{Name: "uuid", Type: db.DataTypeUUID, NotNull: true, Indexed: true},
 			},
-			PrimaryKey: []string{"id"},
 		}
 	},
 	CreateQuery: `create table {table} (
@@ -228,13 +227,12 @@ var TestTableMedium = TestTable{
 	TableDefinition: func(dialect db.DialectName) *db.TableDefinition {
 		return &db.TableDefinition{
 			TableRows: []db.TableRow{
-				{Name: "id", Type: db.DataTypeBigIntAutoInc},
+				{Name: "id", Type: db.DataTypeBigIntAutoIncPK},
 				{Name: "uuid", Type: db.DataTypeUUID, NotNull: true, Indexed: true},
 				{Name: "tenant_id", Type: db.DataTypeUUID, NotNull: true, Indexed: true},
 				{Name: "euc_id", Type: db.DataTypeInt, NotNull: true, Indexed: true},
 				{Name: "progress", Type: db.DataTypeInt},
 			},
-			PrimaryKey: []string{"id"},
 		}
 	},
 	CreateQuery: `create table {table} (
@@ -373,7 +371,7 @@ var TestTableHeavy = TestTable{
 		var tableRows []db.TableRow
 
 		tableRows = append(tableRows,
-			db.TableRow{Name: "id", Type: db.DataTypeBigIntAutoInc, Indexed: true},
+			db.TableRow{Name: "id", Type: db.DataTypeBigIntAutoIncPK, Indexed: true},
 			db.TableRow{Name: "uuid", Type: db.DataTypeUUID, NotNull: true, Indexed: true},
 			db.TableRow{Name: "checksum", Type: db.DataTypeVarChar64, NotNull: true},
 			db.TableRow{Name: "cti_entity_uuid", Type: db.DataTypeUUID, Indexed: true},
@@ -463,8 +461,6 @@ var TestTableHeavy = TestTable{
 		}
 		if dialect == db.CLICKHOUSE {
 			tableDef.PrimaryKey = []string{"partner_id", "customer_id", "toDate(update_time)"}
-		} else {
-			tableDef.PrimaryKey = []string{"id"}
 		}
 
 		if dialect == db.ELASTICSEARCH {
@@ -579,13 +575,12 @@ var TestTableBlob = TestTable{
 	TableDefinition: func(dialect db.DialectName) *db.TableDefinition {
 		return &db.TableDefinition{
 			TableRows: []db.TableRow{
-				{Name: "id", Type: db.DataTypeBigIntAutoInc},
+				{Name: "id", Type: db.DataTypeBigIntAutoIncPK},
 				{Name: "uuid", Type: db.DataTypeUUID, NotNull: true, Indexed: true},
 				{Name: "tenant_id", Type: db.DataTypeUUID, NotNull: true, Indexed: true},
 				{Name: "timestamp", Type: db.DataTypeBigInt, NotNull: true, Indexed: true},
 				{Name: "data", Type: db.DataTypeHugeBlob, NotNull: true},
 			},
-			PrimaryKey: []string{"id"},
 		}
 	},
 	CreateQuery: `create table {table} (
@@ -688,14 +683,13 @@ var TestTableTimeSeriesSQL = TestTable{
 	TableDefinition: func(dialect db.DialectName) *db.TableDefinition {
 		return &db.TableDefinition{
 			TableRows: []db.TableRow{
-				{Name: "id", Type: db.DataTypeBigIntAutoInc},
+				{Name: "id", Type: db.DataTypeBigIntAutoIncPK},
 				{Name: "tenant_id", Type: db.DataTypeUUID, NotNull: true, Indexed: true},
 				{Name: "device_id", Type: db.DataTypeVarChar64, NotNull: true, Indexed: true},
 				{Name: "metric_id", Type: db.DataTypeUUID, NotNull: true, Indexed: true},
 				{Name: "ts", Type: db.DataTypeTimestamp, NotNull: true, Indexed: true},
 				{Name: "value", Type: db.DataTypeInt, NotNull: true},
 			},
-			PrimaryKey: []string{"id"},
 		}
 	},
 	CreateQuery: `create table acronis_db_bench_ts_sql(

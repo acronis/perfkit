@@ -2377,6 +2377,23 @@ func executeAllTests(b *benchmark.Benchmark, testOpts *TestOpts) {
 }
 
 func executeOneTest(b *benchmark.Benchmark, testDesc *TestDesc) {
+	// Get current dialect
+	var dialectName = getDBDriver(b)
+
+	// Skip if current dialect is not supported by this test
+	dialectSupported := false
+	for _, supportedDialect := range testDesc.databases {
+		if dialectName == supportedDialect {
+			dialectSupported = true
+			break
+		}
+	}
+
+	if !dialectSupported {
+		// b.Log(benchmark.LogInfo, "Skipping test '%s' - not supported for dialect '%s'", testDesc.name, dialectName)
+		return
+	}
+
 	testDesc.launcherFunc(b, testDesc)
 }
 
