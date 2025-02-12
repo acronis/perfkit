@@ -464,8 +464,6 @@ type Config struct {
 	// ```
 	ReadRowsLogger Logger
 
-	QueryTimeLogger Logger
-
 	// ExplainLogger receives query execution plan output when Explain is true.
 	// The output format varies by dialect:
 	//

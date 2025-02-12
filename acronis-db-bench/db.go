@@ -132,7 +132,7 @@ func NewDBConnector(dbOpts *DatabaseOpts, workerID int, logger *benchmark.Logger
 		return c, nil
 	}
 
-	var queryLogger, readRowsLogger, queryTimeLogger db.Logger
+	var queryLogger, readRowsLogger db.Logger
 	if dbOpts.LogQueries {
 		logger.LogLevel = benchmark.LogInfo
 		queryLogger = &dbLogger{level: benchmark.LogInfo, worker: workerID, logger: logger}
@@ -143,11 +143,6 @@ func NewDBConnector(dbOpts *DatabaseOpts, workerID int, logger *benchmark.Logger
 		readRowsLogger = &dbLogger{level: benchmark.LogInfo, worker: workerID, logger: logger}
 	}
 
-	if dbOpts.LogQueryTime {
-		logger.LogLevel = benchmark.LogInfo
-		queryTimeLogger = &dbLogger{level: benchmark.LogInfo, worker: workerID, logger: logger}
-	}
-
 	var dbConn, err = db.Open(db.Config{
 		ConnString:               dbOpts.ConnString,
 		MaxOpenConns:             dbOpts.MaxOpenConns,
@@ -155,9 +150,8 @@ func NewDBConnector(dbOpts *DatabaseOpts, workerID int, logger *benchmark.Logger
 		DryRun:                   dbOpts.DryRun,
 		UseTruncate:              dbOpts.UseTruncate,
 
-		QueryLogger:     queryLogger,
-		ReadRowsLogger:  readRowsLogger,
-		QueryTimeLogger: queryTimeLogger,
+		QueryLogger:    queryLogger,
+		ReadRowsLogger: readRowsLogger,
 	})
 	if err != nil {
 		return nil, err

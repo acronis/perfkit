@@ -157,12 +157,9 @@ type sqlDatabase struct {
 	explain                  bool
 	dryRun                   bool
 
-	queryLogger     db.Logger
-	readRowsLogger  db.Logger
-	queryTimeLogger db.Logger
-	explainLogger   db.Logger
-
-	lastQuery string
+	queryLogger    db.Logger
+	readRowsLogger db.Logger
+	explainLogger  db.Logger
 }
 
 // Ping pings the DB
@@ -316,7 +313,7 @@ func (d *sqlDatabase) RawSession() interface{} {
 	if d.queryLogger != nil && d.rw != nil {
 		stats := d.rw.stats()
 		if stats.OpenConnections > 1 {
-			d.queryLogger.Log("Potential connections leak detected, ensure the previous DB query closed the connection: %s", d.lastQuery)
+			d.queryLogger.Log("potential connections leak detected, ensure the previous DB query closed the connection")
 		}
 	}
 
