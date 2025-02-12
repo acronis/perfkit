@@ -14,46 +14,72 @@ import (
 	"github.com/acronis/perfkit/db/optimize"
 )
 
+// tableQueryBuilders maps table names to their corresponding query builders
+// Used to cache query builders for better performance
 var tableQueryBuilders = make(map[string]selectBuilder)
 
+// createSelectQueryBuilder creates a new query builder for a table
+// Parameters:
+// - tableName: name of the table to create builder for
+// - tableRows: schema definition of the table columns
+// Returns error if builder creation fails
 func createSelectQueryBuilder(tableName string, tableRows []db.TableRow) error {
+	// Skip if builder already exists for this table
 	if _, ok := tableQueryBuilders[tableName]; ok {
 		return nil
 	}
 
+	// Create new builder with table name and empty queryable map
 	var queryBuilder = selectBuilder{
 		tableName: tableName,
 		queryable: make(map[string]filterFunction),
 	}
 
+	// Add filter functions for each column based on its data type
+	// These filter functions implement the query building logic for WHERE clauses
 	for _, row := range tableRows {
 		switch row.Type {
 		case db.DataTypeInt, db.DataTypeBigIntAutoInc:
-			queryBuilder.queryable[row.Name] = idCond()
+			queryBuilder.queryable[row.Name] = idCond() // Numeric ID conditions
 		case db.DataTypeUUID:
-			queryBuilder.queryable[row.Name] = uuidCond()
+			queryBuilder.queryable[row.Name] = uuidCond() // UUID conditions
 		case db.DataTypeVarChar, db.DataTypeVarChar256, db.DataTypeLongText:
-			queryBuilder.queryable[row.Name] = stringCond(256, true)
+			queryBuilder.queryable[row.Name] = stringCond(256, true) // String conditions with LIKE support
 		case db.DataTypeDateTime:
-			queryBuilder.queryable[row.Name] = timeCond()
+			queryBuilder.queryable[row.Name] = timeCond() // Timestamp conditions
 		}
 	}
 
+	// Cache the builder for future use
 	tableQueryBuilders[tableName] = queryBuilder
 
 	return nil
 }
 
+// minTime and maxTime define the supported timestamp range
 var minTime = time.Unix(-2208988800, 0) // Jan 1, 1900
 var maxTime = time.Unix(1<<63-62135596801, 999999999)
 
+// filterFunction is a function type that generates SQL conditions
+// Parameters:
+// - d: SQL dialect being used
+// - optimizeConditions: whether to use optimized condition building
+// - field: database field name
+// - values: condition values to filter on
+// Returns generated SQL fragments and arguments
 type filterFunction func(d dialect, optimizeConditions bool, field string, values []string) ([]string, []interface{}, error)
 
+// selectBuilder handles SQL SELECT query construction
 type selectBuilder struct {
-	tableName string
-	queryable map[string]filterFunction
+	tableName string                    // Name of the table being queried
+	queryable map[string]filterFunction // Maps column names to their filter functions
 }
 
+// sqlOrder generates the ORDER BY clause
+// Parameters:
+// - fields: columns to select
+// - values: order specifications (e.g. "asc(field)", "desc(field)")
+// Returns the ORDER BY clause or error
 func (b selectBuilder) sqlOrder(fields []string, values []string) (string, error) {
 	var result = ""
 	if len(fields) == 0 { // select count
@@ -119,6 +145,11 @@ func (b selectBuilder) sqlOrder(fields []string, values []string) (string, error
 	return result, nil
 }
 
+// sqlSelectionAlias generates the SELECT clause with optional table alias
+// Parameters:
+// - fields: columns to select
+// - alias: optional table alias
+// Returns the SELECT clause or error
 func (b selectBuilder) sqlSelectionAlias(fields []string, alias string) (string, error) {
 	if len(fields) == 1 && fields[0] == "COUNT(0)" { // select count
 		return "SELECT COUNT(0)", nil
@@ -149,6 +180,12 @@ func (b selectBuilder) sqlSelectionAlias(fields []string, alias string) (string,
 	return "SELECT " + strings.Join(columns, ", "), nil
 }
 
+// sqlConditions generates the WHERE clause
+// Parameters:
+// - d: SQL dialect
+// - optimizeConditions: whether to use optimized condition building
+// - fields: map of column names to filter values
+// Returns WHERE clause, arguments, and error
 func (b selectBuilder) sqlConditions(d dialect, optimizeConditions bool, fields map[string][]string) (string, []interface{}, bool, error) {
 	var fmtString = ""
 	var fmtArgs []interface{}
@@ -212,6 +249,13 @@ func (b selectBuilder) sqlConditions(d dialect, optimizeConditions bool, fields 
 	return fmtString, fmtArgs, false, nil
 }
 
+// sqlf formats SQL query with dialect-specific value encoding
+// Implements the query string interpolation specified in db.Config.QueryStringInterpolation
+// Parameters:
+// - d: SQL dialect for value encoding
+// - fmts: format string
+// - args: values to format
+// Returns formatted SQL string
 func sqlf(d dialect, fmts string, args ...interface{}) string {
 	if len(args) == 0 && !strings.Contains(fmts, "%") {
 		return fmts // Avoid fmt.Sprintf overhead and memory allocation.
@@ -285,6 +329,11 @@ func sqlf(d dialect, fmts string, args ...interface{}) string {
 	return fmt.Sprintf(fmts, args...)
 }
 
+// sql generates the complete SQL query
+// Parameters:
+// - d: SQL dialect
+// - c: selection control parameters
+// Returns complete SQL query string and error
 func (b selectBuilder) sql(d dialect, c *db.SelectCtrl) (string, bool, error) {
 	var selectWhat, where, order, limit string
 	var err error
@@ -325,10 +374,23 @@ func (b selectBuilder) sql(d dialect, c *db.SelectCtrl) (string, bool, error) {
 	return sqlf(d, qry, args...), false, nil
 }
 
+// build combines SQL query components into final query
+// Parameters:
+// - do: SELECT clause
+// - from: FROM clause
+// - where: WHERE clause
+// - orderBy: ORDER BY clause
+// - limit: LIMIT clause
+// Returns complete SQL query
 func (b selectBuilder) build(do, from, where, orderBy, limit string) string {
 	return fmt.Sprintf("%s %s %s %s %s", do, from, where, orderBy, limit)
 }
 
+// convFnc converts function names to SQL operators
+// Parameters:
+// - fnc: function name (e.g. "lt", "gt", "le", "ge")
+// - field: field name
+// Returns SQL condition fragment
 func convFnc(fnc string, field string) (string, error) {
 	cond := ""
 	switch fnc {
@@ -348,7 +410,14 @@ func convFnc(fnc string, field string) (string, error) {
 	return cond, nil
 }
 
+// optimizedIdCond implements optimized ID condition building using the optimize package
+// Parameters:
+// - d: SQL dialect for value encoding
+// - field: database field name
+// - values: array of ID conditions (can include functions like "lt(5)", "gt(10)")
+// Returns SQL fragments and arguments for the WHERE clause
 func optimizedIdCond(d dialect, field string, values []string) ([]string, []interface{}, error) {
+	// Uses optimize.IDCond to process ID ranges and equality conditions efficiently
 	var minVal, maxVal, equalityRange, empty, err = optimize.IDCond(field, values)
 	if err != nil {
 		return nil, nil, err
@@ -364,6 +433,7 @@ func optimizedIdCond(d dialect, field string, values []string) ([]string, []inte
 	var vals []interface{}
 	var conds []string
 
+	// Handle equality conditions (IN clause optimization)
 	if len(equalityRange) != 0 {
 		if len(equalityRange) == 1 {
 			conds = append(conds, field+" = %v")
@@ -373,6 +443,7 @@ func optimizedIdCond(d dialect, field string, values []string) ([]string, []inte
 			vals = append(vals, equalityRange)
 		}
 	} else {
+		// Handle range conditions
 		if minVal != minInt {
 			conds = append(conds, field+" > %v")
 			vals = append(vals, minVal)
@@ -387,11 +458,20 @@ func optimizedIdCond(d dialect, field string, values []string) ([]string, []inte
 	return conds, vals, nil
 }
 
+// str2id converts a string to int64
+// Used by ID condition builders to parse numeric values
 func str2id(s string) (int64, error) {
 	return strconv.ParseInt(s, 10, 64)
 }
 
+// nonOptimizedIdCond implements standard ID condition building without optimizations
+// Parameters:
+// - d: SQL dialect for value encoding
+// - field: database field name
+// - values: array of ID conditions
+// Returns SQL fragments and arguments for the WHERE clause
 func nonOptimizedIdCond(d dialect, field string, values []string) ([]string, []interface{}, error) {
+	// Helper function to process individual values and extract function and ID
 	var procVal = func(v string) (string, int64, error) {
 		var id int64
 		fnc, val, parseErr := db.ParseFunc(v)
@@ -410,6 +490,8 @@ func nonOptimizedIdCond(d dialect, field string, values []string) ([]string, []i
 	var vals []interface{}
 	var equality []int64
 	var conds []string
+
+	// Process each value and build appropriate conditions
 	for _, v := range values {
 		fnc, id, err := procVal(v)
 		if err != nil {
@@ -428,6 +510,7 @@ func nonOptimizedIdCond(d dialect, field string, values []string) ([]string, []i
 		}
 	}
 
+	// Handle equality conditions
 	if len(equality) == 1 {
 		conds = append(conds, field+" = %v")
 		vals = append(vals, equality[0])
@@ -439,6 +522,8 @@ func nonOptimizedIdCond(d dialect, field string, values []string) ([]string, []i
 	return conds, vals, nil
 }
 
+// idCond returns a filterFunction for handling ID fields
+// Supports both optimized and non-optimized condition building based on configuration
 func idCond() filterFunction {
 	var fn = func(d dialect, optimizeConditions bool, field string, values []string) ([]string, []interface{}, error) {
 		if optimizeConditions {
@@ -451,8 +536,11 @@ func idCond() filterFunction {
 	return fn
 }
 
+// uuidCond returns a filterFunction for handling UUID fields
+// Implements UUID-specific condition building with proper type conversion
 func uuidCond() filterFunction {
 	var fn = func(d dialect, optimizeConditions bool, field string, values []string) ([]string, []interface{}, error) {
+		// Helper function to process UUID values and extract function
 		var procVal = func(v string) (string, string, error) {
 			var id uuid.UUID
 			fnc, val, err := db.ParseFunc(v)
@@ -471,6 +559,8 @@ func uuidCond() filterFunction {
 		var vals []interface{}
 		var equality []string
 		var conds []string
+
+		// Process each UUID value
 		for _, v := range values {
 			fnc, id, err := procVal(v)
 			if err != nil {
@@ -489,6 +579,7 @@ func uuidCond() filterFunction {
 			}
 		}
 
+		// Handle equality conditions for UUIDs
 		if len(equality) == 1 {
 			conds = append(conds, field+" = %v")
 			vals = append(vals, equality[0])
@@ -503,9 +594,14 @@ func uuidCond() filterFunction {
 	return fn
 }
 
-// not allowed for multiple conditions
+// stringCond returns a filterFunction for handling string fields
+// Parameters:
+// - maxValueLen: maximum allowed length for string values
+// - allowLikes: whether LIKE operations are permitted
+// Returns a filterFunction for string operations
 func stringCond(maxValueLen int, allowLikes bool) filterFunction {
 	var fn = func(d dialect, optimizeConditions bool, field string, values []string) ([]string, []interface{}, error) {
+		// Helper function to process and validate string values
 		procValue := func(field, value string) (string, string, error) {
 			fnc, val, err := db.ParseFunc(value)
 			if err != nil {
@@ -534,53 +630,51 @@ func stringCond(maxValueLen int, allowLikes bool) filterFunction {
 		var valuesPositive []string
 		var valuesNegative []string
 
+		// Process each value and build appropriate conditions
 		for _, v := range values {
 			fnc, val, err := procValue(field, v)
 			if err != nil {
 				return nil, nil, err
 			}
 
+			// Handle different string comparison functions
 			switch fnc {
-			case "":
+			case "": // Exact match
 				positiveFilter = true
 				valuesPositive = append(valuesPositive, val)
-			case "ne":
+			case "ne": // Not equal
 				valuesNegative = append(valuesNegative, val)
-			case "hlike":
+			case "hlike": // LIKE with suffix wildcard
 				if !allowLikes {
 					return nil, nil, fmt.Errorf("like functions are unsupported on field '%v'", field)
 				}
 				conds = append(conds, field+" LIKE %v")
 				vals = append(vals, val+"%%")
-			case "tlike":
+			case "tlike": // LIKE with prefix wildcard
 				if !allowLikes {
 					return nil, nil, fmt.Errorf("like functions are unsupported on field '%v'", field)
 				}
 				conds = append(conds, field+" LIKE %v")
 				vals = append(vals, "%%"+val)
-			case "like":
+			case "like": // LIKE with both wildcards
 				if !allowLikes {
 					return nil, nil, fmt.Errorf("like functions are unsupported on field '%v'", field)
 				}
 				conds = append(conds, field+" LIKE %v")
 				vals = append(vals, "%%"+val+"%%")
-			case "lt":
-				conds = append(conds, field+" < %v")
-				vals = append(vals, val)
-			case "le":
-				conds = append(conds, field+" <= %v")
-				vals = append(vals, val)
-			case "gt":
-				conds = append(conds, field+" > %v")
-				vals = append(vals, val)
-			case "ge":
-				conds = append(conds, field+" >= %v")
+			case "lt", "le", "gt", "ge": // Comparison operators
+				var cond string
+				if cond, err = convFnc(fnc, field); err != nil {
+					return nil, nil, fmt.Errorf("unsupported function '%v' on field '%v'", fnc, field)
+				}
+				conds = append(conds, cond)
 				vals = append(vals, val)
 			default:
 				return nil, nil, fmt.Errorf("unsupported function '%v' on field '%v'", fnc, field)
 			}
 		}
 
+		// Check for conflicting conditions
 		var valuesNegativeSet = map[string]struct{}{}
 		for _, v := range valuesNegative {
 			valuesNegativeSet[v] = struct{}{}
@@ -592,6 +686,7 @@ func stringCond(maxValueLen int, allowLikes bool) filterFunction {
 			}
 		}
 
+		// Build final conditions for equality/inequality
 		if len(valuesPositive) > 0 || len(valuesNegative) > 0 {
 			if positiveFilter {
 				if len(valuesPositive) == 1 {
@@ -619,6 +714,7 @@ func stringCond(maxValueLen int, allowLikes bool) filterFunction {
 }
 
 func optimizedEnumStringCond(d dialect, conv func(string) (int64, error), enumSize int, enumValues []int64, field string, values []string) ([]string, []interface{}, error) {
+	// Use optimize package to process enum conditions efficiently
 	var equalityRange, empty, err = optimize.EnumStringCond(field, values, conv, enumSize, enumValues)
 	if err != nil {
 		return nil, nil, err
@@ -631,13 +727,16 @@ func optimizedEnumStringCond(d dialect, conv func(string) (int64, error), enumSi
 	var conds []string
 	var vals []interface{}
 
+	// Build conditions based on number of matches
 	switch len(equalityRange) {
 	case 0:
+		// No matches, return empty conditions
 	case 1:
+		// Single match, use equality
 		conds = append(conds, field+" = %v")
 		vals = append(vals, equalityRange[0])
-
 	default:
+		// Multiple matches, use IN clause
 		conds = append(conds, field+" IN (%v)")
 		vals = append(vals, equalityRange)
 	}
@@ -646,6 +745,7 @@ func optimizedEnumStringCond(d dialect, conv func(string) (int64, error), enumSi
 }
 
 func nonOptimizedEnumStringCond(d dialect, conv func(string) (int64, error), enumSize int, enumValues []int64, field string, values []string) ([]string, []interface{}, error) {
+	// Helper function to process enum values
 	var procVal = func(v string) (string, int64, error) {
 		var id int64
 		fnc, val, parseErr := db.ParseFunc(v)
@@ -661,6 +761,7 @@ func nonOptimizedEnumStringCond(d dialect, conv func(string) (int64, error), enu
 		return fnc, id, nil
 	}
 
+	// Remove duplicates from input values
 	dvalues := db.DedupStrings(values)
 	if len(dvalues) == 0 {
 		return nil, nil, nil
@@ -669,6 +770,8 @@ func nonOptimizedEnumStringCond(d dialect, conv func(string) (int64, error), enu
 	var vals []interface{}
 	var equality []int64
 	var conds []string
+
+	// Process each enum value
 	for _, v := range dvalues {
 		fnc, id, err := procVal(v)
 		if err != nil {
@@ -686,6 +789,7 @@ func nonOptimizedEnumStringCond(d dialect, conv func(string) (int64, error), enu
 		}
 	}
 
+	// Build final conditions
 	if len(equality) == 1 {
 		conds = append(conds, field+" = %v")
 		vals = append(vals, equality[0])
@@ -721,6 +825,8 @@ func optimizedTimeCond(field string, values []string) ([]string, []interface{}, 
 
 	var conds []string
 	var vals []interface{}
+
+	// Handle equality conditions (IN clause optimization)
 	if len(equalityRange) != 0 {
 		var equalInRange []int64
 		for _, val := range equalityRange {
@@ -735,6 +841,7 @@ func optimizedTimeCond(field string, values []string) ([]string, []interface{}, 
 			vals = append(vals, equalInRange)
 		}
 	} else {
+		// Handle range conditions
 		if minVal != minTime {
 			conds = append(conds, field+" > %v")
 			vals = append(vals, minVal.UnixNano())
@@ -751,18 +858,23 @@ func optimizedTimeCond(field string, values []string) ([]string, []interface{}, 
 func nonOptimizedTimeCond(field string, values []string) ([]string, []interface{}, error) {
 	var vals []interface{}
 	var conds []string
+
+	// Process each timestamp value and build conditions
 	for _, v := range values {
+		// Parse function and timestamp value
 		fnc, val, err := db.ParseFunc(v)
 		if err != nil {
 			return nil, nil, fmt.Errorf("%v on field '%v'", err, field)
 		}
 
+		// Parse timestamp in UTC
 		var t time.Time
 		t, err = db.ParseTimeUTC(val)
 		if err != nil {
 			return nil, nil, fmt.Errorf("%v on field '%v'", err, field)
 		}
 
+		// Convert function to SQL operator
 		var cond string
 		if cond, err = convFnc(fnc, field); err != nil {
 			return nil, nil, fmt.Errorf("unsupported function '%v' on field '%v'", fnc, field)

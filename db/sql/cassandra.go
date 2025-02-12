@@ -231,66 +231,104 @@ func (c *cassandraConnector) DialectName(scheme string) (db.DialectName, error) 
 	return db.CASSANDRA, nil
 }
 
+// cassandraQuerier implements the querier and accessor interfaces for Cassandra
+// This structure is created to maintain compatibility with the sql package interfaces
+// even though Cassandra doesn't support transactions. It wraps the standard sql.DB
+// to provide query functionality while maintaining the expected interface structure.
 type cassandraQuerier struct {
 	be *sql.DB
 }
+
+// cassandraTransaction implements the transaction interface for Cassandra
+// Since Cassandra doesn't support true transactions, this is a no-op implementation
+// that allows the code to maintain compatibility with the sql package interfaces
+// while actually executing queries directly against the database.
 type cassandraTransaction struct {
 	be *sql.DB
 }
 
+// ping verifies the database connection is still alive
 func (d *cassandraQuerier) ping(ctx context.Context) error {
 	return d.be.PingContext(ctx)
 }
+
+// stats returns database statistics
 func (d *cassandraQuerier) stats() sql.DBStats {
 	return d.be.Stats()
 }
+
+// rawSession returns the underlying database session
 func (d *cassandraQuerier) rawSession() interface{} {
 	return d.be
 }
+
+// close closes the database connection
 func (d *cassandraQuerier) close() error {
 	return d.be.Close()
 }
+
+// execContext executes a query without returning any rows
 func (d *cassandraQuerier) execContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
 	return d.be.ExecContext(ctx, query, args...)
 }
+
+// queryRowContext executes a query that returns a single row
 func (d *cassandraQuerier) queryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row {
 	return d.be.QueryRowContext(ctx, query, args...)
 }
+
+// queryContext executes a query that returns rows
 func (d *cassandraQuerier) queryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
 	return d.be.QueryContext(ctx, query, args...)
 }
+
+// prepareContext creates a prepared statement for later queries or executions
 func (d *cassandraQuerier) prepareContext(ctx context.Context, query string) (sqlStatement, error) {
 	var stmt, err = d.be.PrepareContext(ctx, query)
 	if err != nil {
 		return nil, err
 	}
-
 	return &sqlStmt{stmt}, nil
 }
+
+// begin starts a new "transaction" (no-op for Cassandra)
 func (d *cassandraQuerier) begin(ctx context.Context) (transaction, error) {
 	return &cassandraTransaction{d.be}, nil
 }
 
+// Transaction interface implementation methods below
+// Note: These methods execute directly since Cassandra doesn't support transactions
+
+// execContext executes a query without returning any rows
 func (t *cassandraTransaction) execContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
 	return t.be.ExecContext(ctx, query, args...)
 }
+
+// queryRowContext executes a query that returns a single row
 func (t *cassandraTransaction) queryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row {
 	return t.be.QueryRowContext(ctx, query, args...)
 }
+
+// queryContext executes a query that returns rows
 func (t *cassandraTransaction) queryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
 	return t.be.QueryContext(ctx, query, args...)
 }
+
+// prepareContext creates a prepared statement for later queries or executions
 func (t *cassandraTransaction) prepareContext(ctx context.Context, query string) (sqlStatement, error) {
 	var stmt, err = t.be.PrepareContext(ctx, query)
 	if err != nil {
 		return nil, err
 	}
-
 	return &sqlStmt{stmt}, nil
 }
+
+// commit is a no-op since Cassandra doesn't support transactions
 func (t *cassandraTransaction) commit() error {
 	return nil
 }
+
+// rollback is a no-op since Cassandra doesn't support transactions
 func (t *cassandraTransaction) rollback() error {
 	return nil
 }

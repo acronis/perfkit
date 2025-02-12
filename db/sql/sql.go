@@ -19,33 +19,49 @@ import (
  * DB connection management
  */
 
+// querier defines the interface for database query operations
 type querier interface {
+	// execContext executes a query without returning any rows
 	execContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
+	// queryRowContext executes a query that returns a single row
 	queryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row
+	// queryContext executes a query that returns rows
 	queryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
+	// prepareContext creates a prepared statement for later queries or executions
 	prepareContext(ctx context.Context, query string) (sqlStatement, error)
 }
 
+// accessor extends querier with database connection management operations
 type accessor interface {
 	querier
 
+	// ping verifies the database connection is still alive
 	ping(ctx context.Context) error
+	// stats returns database statistics
 	stats() sql.DBStats
+	// rawSession returns the underlying database session
 	rawSession() interface{}
+	// close closes the database connection
 	close() error
 }
 
+// transaction represents a database transaction
 type transaction interface {
 	querier
 
+	// commit commits the transaction
 	commit() error
+	// rollback aborts the transaction
 	rollback() error
 }
 
+// transactor provides the ability to begin new transactions
 type transactor interface {
+	// begin starts a new transaction
 	begin(ctx context.Context) (transaction, error)
 }
 
+// inTx executes a function within a transaction
 func inTx(ctx context.Context, t transactor, d dialect, fn func(q querier, d dialect) error) error {
 	tx, err := t.begin(ctx)
 	if err != nil {
@@ -78,24 +94,26 @@ func inTx(ctx context.Context, t transactor, d dialect, fn func(q querier, d dia
 	return err
 }
 
+// sqlGateway provides core database functionality
 type sqlGateway struct {
-	ctx     context.Context
-	rw      querier
-	dialect dialect
+	ctx     context.Context // Current context
+	rw      querier         // Query executor
+	dialect dialect         // SQL dialect being used
 
-	InsideTX                 bool
-	MaxRetries               int
-	QueryStringInterpolation bool
+	InsideTX                 bool // Indicates if running within transaction
+	MaxRetries               int  // Maximum number of retry attempts
+	QueryStringInterpolation bool // Whether to interpolate query strings
 
-	explain bool
+	explain bool // Whether to explain queries
 
-	readRowsLogger db.Logger
-	explainLogger  db.Logger
+	readRowsLogger db.Logger // Logger for read operations
+	explainLogger  db.Logger // Logger for query explanations
 }
 
+// sqlSession represents a database session
 type sqlSession struct {
 	sqlGateway
-	t transactor
+	t transactor // Transaction manager
 }
 
 func (s *sqlSession) Transact(fn func(tx db.DatabaseAccessor) error) error {
@@ -319,25 +337,43 @@ func (d *sqlDatabase) Close() error {
 	return d.dialect.close()
 }
 
+// dialect defines the interface for SQL dialect-specific operations
 type dialect interface {
+	// name returns the dialect name
 	name() db.DialectName
+	// encodeString converts a string to dialect-specific format
 	encodeString(s string) string
+	// encodeUUID converts a UUID to dialect-specific format
 	encodeUUID(s uuid.UUID) string
+	// encodeVector converts a float32 slice to dialect-specific format
 	encodeVector(vs []float32) string
+	// encodeBool converts a boolean to dialect-specific format
 	encodeBool(b bool) string
+	// encodeBytes converts a byte slice to dialect-specific format
 	encodeBytes(bs []byte) string
+	// encodeTime converts a timestamp to dialect-specific format
 	encodeTime(timestamp time.Time) string
+	// getType returns the dialect-specific type for a given data type
 	getType(dataType db.DataType) string
+	// randFunc returns the dialect-specific random function
 	randFunc() string
+	// supportTransactions indicates if dialect supports transactions
 	supportTransactions() bool
+	// isRetriable determines if an error can be retried
 	isRetriable(err error) bool
+	// canRollback determines if transaction can be rolled back
 	canRollback(err error) bool
+	// table returns the dialect-specific table name
 	table(table string) string
+	// schema returns the dialect-specific schema
 	schema() string
+	// recommendations returns dialect-specific recommendations
 	recommendations() []db.Recommendation
+	// close cleans up any dialect-specific resources
 	close() error
 }
 
+// sanitizeConn removes sensitive information from connection string
 func sanitizeConn(cs string) string {
 	sanitized := cs
 	u, _ := url.Parse(cs)

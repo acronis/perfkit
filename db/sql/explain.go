@@ -8,6 +8,13 @@ import (
 )
 
 // addExplainPrefix adds an 'explain' prefix to the query
+// Parameters:
+//   - dialectName: type of database (MySQL, Postgres, SQLite, Cassandra)
+//   - query: the SQL query to be explained
+//
+// Returns:
+//   - string: modified query with appropriate EXPLAIN syntax
+//   - error: if dialect is not supported
 func addExplainPrefix(dialectName db.DialectName, query string) (string, error) {
 	switch dialectName {
 	case db.MYSQL:
@@ -24,19 +31,30 @@ func addExplainPrefix(dialectName db.DialectName, query string) (string, error) 
 }
 
 // logExplainResults logs the results of the 'explain' query
+// Parameters:
+//   - logger: interface for logging output
+//   - dialectName: type of database
+//   - rows: result set from the executed query
+//   - query: the original SQL query
+//   - args: optional query parameters
+//
+// Returns:
+//   - error: if any operation fails
 func logExplainResults(logger db.Logger, dialectName db.DialectName, rows *sql.Rows, query string, args ...interface{}) error {
-	// Iterate over the result set
+	// Get column names from the result set
 	cols, err := rows.Columns()
 	if err != nil {
 		return fmt.Errorf("DB query failed: %s\nError: %s", query, err)
 	}
 
+	// Prepare slices for scanning row data (used for MySQL)
 	values := make([]sql.RawBytes, len(cols))
 	scanArgs := make([]interface{}, len(values))
 	for i := range values {
 		scanArgs[i] = &values[i]
 	}
 
+	// Log the original query and its parameters
 	logger.Log("\n%s", query)
 	if args != nil {
 		logger.Log(" %v\n", args)
@@ -44,9 +62,11 @@ func logExplainResults(logger db.Logger, dialectName db.DialectName, rows *sql.R
 		logger.Log("\n")
 	}
 
+	// Iterate through result rows
 	for rows.Next() {
 		switch dialectName {
 		case db.SQLITE:
+			// SQLite specific scanning with fixed columns
 			var id, parent, notUsed int
 			var detail string
 			if err = rows.Scan(&id, &parent, &notUsed, &detail); err != nil {
@@ -54,21 +74,17 @@ func logExplainResults(logger db.Logger, dialectName db.DialectName, rows *sql.R
 			}
 			logger.Log("ID: %d, Parent: %d, Not Used: %d, Detail: %s\n", id, parent, notUsed, detail)
 		case db.MYSQL:
+			// MySQL scanning into dynamic column array
 			if err = rows.Scan(scanArgs...); err != nil {
 				return fmt.Errorf("DB query result scan failed: %s\nError: %s", query, err)
 			}
-			// Print each column as a string.
+			// Print each column with its name
 			for i, col := range values {
 				logger.Log("  %-15s: %s\n", cols[i], string(col))
 			}
 			logger.Log("\n")
-		case db.POSTGRES:
-			var explainOutput string
-			if err = rows.Scan(&explainOutput); err != nil {
-				return fmt.Errorf("DB query result scan failed: %s\nError: %s", query, err)
-			}
-			logger.Log("  ", explainOutput)
-		case db.CASSANDRA:
+		case db.POSTGRES, db.CASSANDRA:
+			// Postgres and Cassandra return explain output as a single text column
 			var explainOutput string
 			if err = rows.Scan(&explainOutput); err != nil {
 				return fmt.Errorf("DB query result scan failed: %s\nError: %s", query, err)

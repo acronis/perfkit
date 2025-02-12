@@ -4,22 +4,38 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"go.uber.org/atomic"
 	"strings"
 	"time"
+
+	"go.uber.org/atomic"
 
 	"github.com/acronis/perfkit/db"
 )
 
+/*
+Package sql provides SQL database adapters with comprehensive logging and dry-run capabilities.
+
+This file contains all wrapper implementations that handle:
+- Dry-run mode: simulates SQL operations without actually executing them
+- Query logging: logs all SQL queries, preparations, and executions
+- Row result logging: logs the content of returned rows (limited to maxRowsToPrint rows)
+- Performance measurements: tracks time spent in various database operations
+
+The wrappers in this file decorate the core SQL functionality with these features
+while maintaining the original interfaces.
+*/
+
 const maxRowsToPrint = 10
 
-// wrappedRow is a struct for storing DB *sql.Row
+// wrappedRow is a struct for storing and logging DB *sql.Row results
 type wrappedRow struct {
 	row *sql.Row
 
 	readRowsLogger db.Logger
 }
 
+// Scan copies the columns in the current row into the values pointed at by dest.
+// Logs the scanned values if readRowsLogger is configured.
 func (r *wrappedRow) Scan(dest ...any) error {
 	var err = r.row.Scan(dest...)
 
@@ -32,7 +48,7 @@ func (r *wrappedRow) Scan(dest ...any) error {
 	return err
 }
 
-// wrappedRows is a struct for storing DB *sql.Rows (as a slice of Row) and current index
+// wrappedRows is a struct for storing and logging DB *sql.Rows results
 type wrappedRows struct {
 	rows *sql.Rows
 
@@ -40,14 +56,18 @@ type wrappedRows struct {
 	printed        int
 }
 
+// Next advances the cursor to the next row, returning false if no more rows
 func (r *wrappedRows) Next() bool {
 	return r.rows.Next()
 }
 
+// Err returns any error that was encountered during iteration
 func (r *wrappedRows) Err() error {
 	return r.rows.Err()
 }
 
+// Scan copies the columns in the current row into the values pointed at by dest.
+// Logs the scanned values if readRowsLogger is configured, up to maxRowsToPrint rows.
 func (r *wrappedRows) Scan(dest ...interface{}) error {
 	var err = r.rows.Scan(dest...)
 
@@ -69,30 +89,33 @@ func (r *wrappedRows) Scan(dest ...interface{}) error {
 	return err
 }
 
+// Close closes the rows iterator
 func (r *wrappedRows) Close() error {
 	return r.rows.Close()
 }
 
+// accountTime adds elapsed time since the given time to the atomic counter
 func accountTime(t *atomic.Int64, since time.Time) {
 	t.Add(time.Since(since).Nanoseconds())
 }
 
-// wrappedQuerier is a wrapper for querier that implements following functionality:
+// wrappedQuerier implements the querier interface with additional functionality:
 // - measuring time of queries
 // - logging of queries
-// - dry-run mode
+// - dry-run mode support
 type wrappedQuerier struct {
 	q querier
 
-	prepareTime *atomic.Int64 // *time.Duration
-	execTime    *atomic.Int64 // *time.Duration
-	queryTime   *atomic.Int64 // *time.Duration
-	deallocTime *atomic.Int64 // *time.Duration
+	prepareTime *atomic.Int64 // Preparation time counter
+	execTime    *atomic.Int64 // Execution time counter
+	queryTime   *atomic.Int64 // Query time counter
+	deallocTime *atomic.Int64 // Deallocation time counter
 
 	dryRun      bool
 	queryLogger db.Logger
 }
 
+// execContext implements querier.execContext with timing, logging and dry-run support
 func (wq wrappedQuerier) execContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
 	defer accountTime(wq.execTime, time.Now())
 
@@ -117,6 +140,7 @@ func (wq wrappedQuerier) execContext(ctx context.Context, query string, args ...
 	return wq.q.execContext(ctx, query, args...)
 }
 
+// queryRowContext implements querier.queryRowContext with timing and logging
 func (wq wrappedQuerier) queryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row {
 	defer accountTime(wq.queryTime, time.Now())
 
@@ -127,6 +151,7 @@ func (wq wrappedQuerier) queryRowContext(ctx context.Context, query string, args
 	return wq.q.queryRowContext(ctx, query, args...)
 }
 
+// queryContext implements querier.queryContext with timing and logging
 func (wq wrappedQuerier) queryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
 	defer accountTime(wq.queryTime, time.Now())
 
@@ -137,6 +162,7 @@ func (wq wrappedQuerier) queryContext(ctx context.Context, query string, args ..
 	return wq.q.queryContext(ctx, query, args...)
 }
 
+// prepareContext implements querier.prepareContext with timing and logging
 func (wq wrappedQuerier) prepareContext(ctx context.Context, query string) (sqlStatement, error) {
 	defer accountTime(wq.prepareTime, time.Now())
 
@@ -158,20 +184,21 @@ func (wq wrappedQuerier) prepareContext(ctx context.Context, query string) (sqlS
 	}, nil
 }
 
-// wrappedStatement is a wrapper for sqlStmt that adds additional features:
+// wrappedStatement implements sqlStatement interface with additional functionality:
 // - measuring time of queries
 // - logging of queries
-// - dry-run mode
+// - dry-run mode support
 type wrappedStatement struct {
 	stmt sqlStatement
 
-	execTime    *atomic.Int64 // *time.Duration
-	deallocTime *atomic.Int64 // *time.Duration
+	execTime    *atomic.Int64 // Execution time counter
+	deallocTime *atomic.Int64 // Deallocation time counter
 
 	dryRun      bool
 	queryLogger db.Logger
 }
 
+// Exec executes a prepared statement with timing, logging and dry-run support
 func (ws *wrappedStatement) Exec(args ...any) (db.Result, error) {
 	defer accountTime(ws.execTime, time.Now())
 
@@ -190,6 +217,7 @@ func (ws *wrappedStatement) Exec(args ...any) (db.Result, error) {
 	return ws.stmt.Exec(args...)
 }
 
+// Close closes the prepared statement with timing and logging
 func (ws *wrappedStatement) Close() error {
 	defer accountTime(ws.deallocTime, time.Now())
 
@@ -200,24 +228,25 @@ func (ws *wrappedStatement) Close() error {
 	return ws.stmt.Close()
 }
 
-// wrappedTransaction is a wrapper for transaction that implements following functionality:
+// wrappedTransaction implements the transaction interface with additional functionality:
 // - measuring time of queries
 // - logging of queries
-// - dry-run mode
+// - dry-run mode support
 type wrappedTransaction struct {
 	tx transaction
 
-	prepareTime *atomic.Int64 // *time.Duration
-	execTime    *atomic.Int64 // *time.Duration
-	queryTime   *atomic.Int64 // *time.Duration
-	deallocTime *atomic.Int64 // *time.Duration
-	commitTime  *atomic.Int64 // *time.Duration
+	prepareTime *atomic.Int64 // Preparation time counter
+	execTime    *atomic.Int64 // Execution time counter
+	queryTime   *atomic.Int64 // Query time counter
+	deallocTime *atomic.Int64 // Deallocation time counter
+	commitTime  *atomic.Int64 // Commit time counter
 
 	dryRun         bool
 	queryLogger    db.Logger
 	txNotSupported bool
 }
 
+// execContext implements querier.execContext within a transaction
 func (wtx wrappedTransaction) execContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
 	defer accountTime(wtx.execTime, time.Now())
 
@@ -242,6 +271,7 @@ func (wtx wrappedTransaction) execContext(ctx context.Context, query string, arg
 	return wtx.tx.execContext(ctx, query, args...)
 }
 
+// queryRowContext implements querier.queryRowContext within a transaction
 func (wtx wrappedTransaction) queryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row {
 	defer accountTime(wtx.queryTime, time.Now())
 
@@ -252,6 +282,7 @@ func (wtx wrappedTransaction) queryRowContext(ctx context.Context, query string,
 	return wtx.tx.queryRowContext(ctx, query, args...)
 }
 
+// queryContext implements querier.queryContext within a transaction
 func (wtx wrappedTransaction) queryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
 	defer accountTime(wtx.queryTime, time.Now())
 
@@ -262,6 +293,7 @@ func (wtx wrappedTransaction) queryContext(ctx context.Context, query string, ar
 	return wtx.tx.queryContext(ctx, query, args...)
 }
 
+// prepareContext implements querier.prepareContext within a transaction
 func (wtx wrappedTransaction) prepareContext(ctx context.Context, query string) (sqlStatement, error) {
 	defer accountTime(wtx.prepareTime, time.Now())
 
@@ -283,6 +315,7 @@ func (wtx wrappedTransaction) prepareContext(ctx context.Context, query string) 
 	}, nil
 }
 
+// commit implements transaction.commit with timing and logging
 func (wtx wrappedTransaction) commit() error {
 	defer accountTime(wtx.commitTime, time.Now())
 
@@ -297,6 +330,7 @@ func (wtx wrappedTransaction) commit() error {
 	return wtx.tx.commit()
 }
 
+// rollback implements transaction.rollback with timing and logging
 func (wtx wrappedTransaction) rollback() error {
 	defer accountTime(wtx.commitTime, time.Now())
 
@@ -311,19 +345,19 @@ func (wtx wrappedTransaction) rollback() error {
 	return wtx.tx.rollback()
 }
 
-// wrappedTransactor is a wrapper for transactor that implements following functionality:
+// wrappedTransactor implements the transactor interface with additional functionality:
 // - measuring time of queries
 // - logging of queries
-// - dry-run mode
+// - dry-run mode support
 type wrappedTransactor struct {
 	t transactor
 
-	beginTime   *atomic.Int64 // *time.Duration
-	prepareTime *atomic.Int64 // *time.Duration
-	execTime    *atomic.Int64 // *time.Duration
-	queryTime   *atomic.Int64 // *time.Duration
-	deallocTime *atomic.Int64 // *time.Duration
-	commitTime  *atomic.Int64 // *time.Duration
+	beginTime   *atomic.Int64 // Transaction begin time counter
+	prepareTime *atomic.Int64 // Preparation time counter
+	execTime    *atomic.Int64 // Execution time counter
+	queryTime   *atomic.Int64 // Query time counter
+	deallocTime *atomic.Int64 // Deallocation time counter
+	commitTime  *atomic.Int64 // Commit time counter
 
 	dryRun bool
 
@@ -332,6 +366,7 @@ type wrappedTransactor struct {
 	txNotSupported bool
 }
 
+// begin implements transactor.begin with timing and logging
 func (wt wrappedTransactor) begin(ctx context.Context) (transaction, error) {
 	defer accountTime(wt.beginTime, time.Now())
 
