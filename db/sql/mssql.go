@@ -225,7 +225,6 @@ func (c *msConnector) ConnectionPool(cfg db.Config) (db.Database, error) {
 	dbo.dialect = &msDialect{}
 	dbo.useTruncate = cfg.UseTruncate
 	dbo.queryStringInterpolation = cfg.QueryStringInterpolation
-	dbo.explain = cfg.Explain
 	dbo.dryRun = cfg.DryRun
 	dbo.queryLogger = cfg.QueryLogger
 	dbo.readRowsLogger = cfg.ReadRowsLogger

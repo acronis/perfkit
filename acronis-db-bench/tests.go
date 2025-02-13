@@ -156,7 +156,7 @@ var TestRawQuery = TestDesc{
 		query := b.TestOpts.(*TestOpts).BenchOpts.Query
 
 		var worker testWorkerFunc
-		var _ = b.TestOpts.(*TestOpts).BenchOpts.Explain
+		var explain = b.TestOpts.(*TestOpts).DBOpts.Explain
 
 		if strings.Contains(query, "{") {
 			worker = func(b *benchmark.Benchmark, c *DBConnector, testDesc *TestDesc, batch int) (loops int) { //nolint:revive
@@ -179,7 +179,7 @@ var TestRawQuery = TestDesc{
 				}
 				fmt.Printf("query %s\n", q)
 
-				var session = c.database.Session(c.database.Context(context.Background()))
+				var session = c.database.Session(c.database.Context(context.Background(), explain))
 				if _, err := session.Query(q); err != nil {
 					b.Exit(err)
 				}
@@ -188,7 +188,7 @@ var TestRawQuery = TestDesc{
 			}
 		} else {
 			worker = func(b *benchmark.Benchmark, c *DBConnector, testDesc *TestDesc, batch int) (loops int) {
-				var session = c.database.Session(c.database.Context(context.Background()))
+				var session = c.database.Session(c.database.Context(context.Background(), explain))
 				if _, err := session.Query(query); err != nil {
 					b.Exit(err)
 				}
@@ -270,7 +270,8 @@ var TestSelectNextVal = TestDesc{
 		c.database.CreateSequence(SequenceName)
 
 		worker := func(b *benchmark.Benchmark, c *DBConnector, testDesc *TestDesc, batch int) (loops int) { //nolint:revive
-			var session = c.database.Session(c.database.Context(context.Background()))
+			var explain = b.TestOpts.(*TestOpts).DBOpts.Explain
+			var session = c.database.Session(c.database.Context(context.Background(), explain))
 			if _, err := session.GetNextVal(SequenceName); err != nil {
 				b.Exit(err)
 			}
@@ -822,8 +823,8 @@ var TestSelectHeavyForUpdateSkipLocked = TestDesc{
 		}
 
 		worker := func(b *benchmark.Benchmark, c *DBConnector, testDesc *TestDesc, batch int) (loops int) { //nolint:revive
-
-			var session = c.database.Session(c.database.Context(context.Background()))
+			var explain = b.TestOpts.(*TestOpts).DBOpts.Explain
+			var session = c.database.Session(c.database.Context(context.Background(), explain))
 			if txErr := session.Transact(func(tx db.DatabaseAccessor) error {
 				var id int64
 				var progress int
@@ -866,7 +867,7 @@ var TestInsertLight = TestDesc{
 func insertByPreparedDataWorker(b *benchmark.Benchmark, c *DBConnector, testDesc *TestDesc, batch int) (loops int) {
 	colConfs := testDesc.table.GetColumnsForInsert(db.WithAutoInc(c.database.DialectName()))
 	workerID := c.WorkerID
-	sess := c.database.Session(c.database.Context(context.Background()))
+	sess := c.database.Session(c.database.Context(context.Background(), false))
 
 	if txErr := sess.Transact(func(tx db.DatabaseAccessor) error {
 		columns, _ := b.GenFakeData(workerID, colConfs, false)
@@ -929,7 +930,7 @@ func insertMultiValueDataWorker(b *benchmark.Benchmark, c *DBConnector, testDesc
 		}
 	}
 
-	var session = c.database.Session(c.database.Context(context.Background()))
+	var session = c.database.Session(c.database.Context(context.Background(), false))
 	if txErr := session.Transact(func(tx db.DatabaseAccessor) error {
 		return tx.BulkInsert(testDesc.table.TableName, values, columns)
 	}); txErr != nil {
@@ -959,7 +960,7 @@ func copyDataWorker(b *benchmark.Benchmark, c *DBConnector, testDesc *TestDesc, 
 	var sql string
 	colConfs := testDesc.table.GetColumnsForInsert(db.WithAutoInc(c.database.DialectName()))
 	workerID := c.WorkerID
-	sess := c.database.Session(c.database.Context(context.Background()))
+	sess := c.database.Session(c.database.Context(context.Background(), false))
 
 	if txErr := sess.Transact(func(tx db.DatabaseAccessor) error {
 		columns, _ := b.GenFakeData(workerID, colConfs, false)
@@ -1158,7 +1159,7 @@ func createLargeObjectWorker(b *benchmark.Benchmark, c *DBConnector, testDesc *T
 	parametersPlaceholder := db.GenDBParameterPlaceholders(0, len(*colConfs))
 	workerID := c.WorkerID
 
-	var session = c.database.Session(c.database.Context(context.Background()))
+	var session = c.database.Session(c.database.Context(context.Background(), false))
 
 	if txErr := session.Transact(func(tx db.DatabaseAccessor) error {
 		var sql string
@@ -2000,7 +2001,7 @@ var TestInsertAdvmDevices = TestDesc{
 
 // CreateTenantWorker creates a tenant and optionally inserts an event into the event bus
 func CreateTenantWorker(b *benchmark.Benchmark, c *DBConnector, testDesc *TestDesc, batch int) (loops int) { //nolint:revive
-	var session = c.database.Session(c.database.Context(context.Background()))
+	var session = c.database.Session(c.database.Context(context.Background(), false))
 	if txErr := session.Transact(func(tx db.DatabaseAccessor) error {
 		for i := 0; i < batch; i++ {
 			var tenantUUID, err = b.Vault.(*DBTestData).TenantsCache.CreateTenant(b.Randomizer.GetWorker(c.WorkerID), tx)
@@ -2024,7 +2025,7 @@ func CreateTenantWorker(b *benchmark.Benchmark, c *DBConnector, testDesc *TestDe
 }
 
 func CreateCTIEntityWorker(b *benchmark.Benchmark, c *DBConnector, testDesc *TestDesc, batch int) (loops int) { //nolint:revive
-	var session = c.database.Session(c.database.Context(context.Background()))
+	var session = c.database.Session(c.database.Context(context.Background(), false))
 	if txErr := session.Transact(func(tx db.DatabaseAccessor) error {
 		for i := 0; i < batch; i++ {
 			if err := b.Vault.(*DBTestData).TenantsCache.CreateCTIEntity(b.Randomizer.GetWorker(c.WorkerID), tx); err != nil {
@@ -2105,7 +2106,7 @@ func tenantAwareGenericWorker(b *benchmark.Benchmark, c *DBConnector, query stri
 
 	c.Log(benchmark.LogTrace, "executing query: %s", query)
 
-	var session = c.database.Session(c.database.Context(context.Background()))
+	var session = c.database.Session(c.database.Context(context.Background(), false))
 	if err = session.QueryRow(query).Scan(&id, &tenantID); err != nil {
 		if !errors.Is(sql.ErrNoRows, err) {
 			c.Exit(err.Error())

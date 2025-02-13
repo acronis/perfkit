@@ -61,7 +61,6 @@ type BenchOpts struct {
 	ProfilerPort      int    `long:"profiler-port" description:"open profiler on given port (e.g. 6060)" required:"false" default:"0"`
 	Describe          bool   `long:"describe" description:"describe what test is going to do" required:"false"`
 	DescribeAll       bool   `long:"describe-all" description:"describe all the tests" required:"false"`
-	Explain           bool   `long:"explain" description:"prepend the test queries by EXPLAIN ANALYZE" required:"false"`
 	Query             string `short:"q" long:"query" description:"execute given query, one can use:\n{CTI} - for random CTI UUID\n{TENANT} - randon tenant UUID"`
 }
 
@@ -116,7 +115,7 @@ func Main() {
 		testData := b.Vault.(*DBTestData)
 		var format string
 
-		if b.TestOpts.(*TestOpts).BenchOpts.Explain {
+		if b.TestOpts.(*TestOpts).DBOpts.Explain {
 			return
 		}
 

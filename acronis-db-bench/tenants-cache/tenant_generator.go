@@ -346,9 +346,9 @@ func (tc *TenantsCache) CreateTables(database db.Database) {
 			return
 		}
 
-		var session = database.Session(database.Context(context.Background()))
+		var session = database.Session(database.Context(context.Background(), false))
 		if txErr := session.Transact(func(tx db.DatabaseAccessor) error {
-			_, err := tx.Exec(fmt.Sprintf("INSERT INTO %s (id, uuid, name, kind, parent_id, nesting_level) VALUES (1, '', '/', 'r', 1, 0)", TableNameTenants))
+			_, err := tx.Exec(fmt.Sprintf("INSERT INTO %s (id, uuid, name, kind, parent_id, nesting_level) VALUES (1, '00000000-0000-0000-0000-000000000000', '/', 'r', 1, 0)", TableNameTenants))
 			return err
 		}); txErr != nil {
 			tc.logger.Log(benchmark.LogTrace, 0, fmt.Sprintf("error inserting into table %s: %v", TableNameTenants, txErr))
@@ -375,7 +375,7 @@ func (tc *TenantsCache) CreateTables(database db.Database) {
 			return
 		}
 
-		var session = database.Session(database.Context(context.Background()))
+		var session = database.Session(database.Context(context.Background(), false))
 		if txErr := session.Transact(func(tx db.DatabaseAccessor) error {
 			_, err := tx.Exec(fmt.Sprintf("INSERT INTO %s (parent_id, child_id, parent_kind, barrier) VALUES (1, 1, 'r', 0)", TableNameTenantClosure))
 			return err
@@ -430,9 +430,9 @@ func (tc *TenantsCache) CreateTables(database db.Database) {
 func (tc *TenantsCache) InitTables(database db.Database) {
 	tc.logger.Log(benchmark.LogTrace, 0, "init tenant tables")
 
-	var session = database.Session(database.Context(context.Background()))
+	var session = database.Session(database.Context(context.Background(), false))
 	if txErr := session.Transact(func(tx db.DatabaseAccessor) error {
-		if _, err := tx.Exec(fmt.Sprintf("INSERT INTO %s (id, uuid, name, kind, parent_id, nesting_level) VALUES (1, '', '/', 'r', 1, 0)", TableNameTenants)); err != nil {
+		if _, err := tx.Exec(fmt.Sprintf("INSERT INTO %s (id, uuid, name, kind, parent_id, nesting_level) VALUES (1, '00000000-0000-0000-0000-000000000000', '/', 'r', 1, 0)", TableNameTenants)); err != nil {
 			return err
 		}
 
@@ -464,7 +464,7 @@ func (tc *TenantsCache) DropTables(database db.Database) {
 func (tc *TenantsCache) PopulateUuidsFromDB(database db.Database) {
 	tc.logger.Log(benchmark.LogTrace, 0, "populating tenant uuids from DB")
 
-	var session = database.Session(database.Context(context.Background()))
+	var session = database.Session(database.Context(context.Background(), false))
 
 	var rows, err = session.Query(fmt.Sprintf("SELECT uuid, id, kind, nesting_level FROM %s", TableNameTenants))
 	if err != nil {
@@ -664,7 +664,7 @@ func (tc *TenantsCache) createRandomCtiEntity(rw *benchmark.RandomizerWorker) (*
 
 // getMax returns max value of given field from DB table acronis_db_bench_cybercache_tenants
 func getMax(database db.Database, field string) int {
-	var session = database.Session(database.Context(context.Background()))
+	var session = database.Session(database.Context(context.Background(), false))
 
 	var maxRows, err = session.Query(fmt.Sprintf("SELECT COALESCE(MAX(%s),0) FROM %s;", field, TableNameTenants))
 	if err != nil {

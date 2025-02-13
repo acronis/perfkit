@@ -73,7 +73,7 @@ func (suite *TestingSuite) makeTestSession() (db.Database, db.Session, *db.Conte
 		require.NoError(suite.T(), err, "init scheme")
 	}
 
-	var c = dbo.Context(context.Background())
+	var c = dbo.Context(context.Background(), false)
 
 	s := dbo.Session(c)
 

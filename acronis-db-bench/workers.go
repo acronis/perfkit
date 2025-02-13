@@ -72,7 +72,7 @@ func initWorker(b *benchmark.Benchmark, workerID int, testDesc *TestDesc, rowsRe
 				t.Create(conn, b)
 			}
 
-			var session = conn.database.Session(conn.database.Context(context.Background()))
+			var session = conn.database.Session(conn.database.Context(context.Background(), false))
 			var rowNum int64
 			if rows, err := session.Select(tableName, &db.SelectCtrl{Fields: []string{"COUNT(0)"}}); err != nil {
 				b.Exit(fmt.Sprintf("db: cannot get rows count in table '%s': %v", tableName, err))
@@ -160,7 +160,7 @@ func testSelect(
 		b.Exit("TestOpts type conversion error")
 	}
 
-	explain := testOpts.BenchOpts.Explain
+	explain := testOpts.DBOpts.Explain
 
 	batch := b.Vault.(*DBTestData).EffectiveBatch
 
@@ -214,7 +214,7 @@ func testSelect(
 			}
 		}
 
-		var session = c.database.Session(c.database.Context(context.Background()))
+		var session = c.database.Session(c.database.Context(context.Background(), explain))
 		var rows, err = session.Select(from, &db.SelectCtrl{
 			Fields: what,
 			Where:  whereCond,
@@ -309,7 +309,8 @@ func testSelectRawSQLQuery(
 			query = regexp.MustCompile(`\$\d+`).ReplaceAllString(query, "?")
 		}
 
-		var session = c.database.Session(c.database.Context(context.Background()))
+		var explain = b.TestOpts.(*TestOpts).DBOpts.Explain
+		var session = c.database.Session(c.database.Context(context.Background(), explain))
 		var rows, err = session.Query(query)
 		if err != nil {
 			b.Exit("db: cannot select rows: %v", err)
@@ -369,7 +370,7 @@ func testInsertGeneric(b *benchmark.Benchmark, testDesc *TestDesc) {
 			rows := table.RowsCount
 
 			var c = workerData.workingConn
-			var sess = c.database.Session(c.database.Context(context.Background()))
+			var sess = c.database.Session(c.database.Context(context.Background(), false))
 
 			if txErr := sess.Transact(func(tx db.DatabaseAccessor) error {
 				var txBatch, prepareErr = tx.Prepare(sql)
@@ -450,7 +451,7 @@ func testInsertGeneric(b *benchmark.Benchmark, testDesc *TestDesc) {
 			workerData := b.WorkerData[workerId].(*DBWorkerData)
 
 			var c = workerData.workingConn
-			var sess = c.database.Session(c.database.Context(context.Background()))
+			var sess = c.database.Session(c.database.Context(context.Background(), false))
 
 			if txErr := sess.Transact(func(tx db.DatabaseAccessor) error {
 				for i := 0; i < batch; i++ {
@@ -571,7 +572,7 @@ func testUpdateGeneric(b *benchmark.Benchmark, testDesc *TestDesc, updateRows ui
 
 		b.Worker = func(workerId int) (loops int) {
 			var c = b.WorkerData[workerId].(*DBWorkerData).workingConn
-			var session = c.database.Session(c.database.Context(context.Background()))
+			var session = c.database.Session(c.database.Context(context.Background(), false))
 			if txErr := session.Transact(func(tx db.DatabaseAccessor) error {
 				for i := 0; i < batch; i++ {
 					id := int64(b.Randomizer.GetWorker(workerId).Uintn64(table.RowsCount-updateRows) + updateRows)
@@ -676,7 +677,7 @@ func testDeleteGeneric(b *benchmark.Benchmark, testDesc *TestDesc, deleteRows ui
 
 		b.Worker = func(workerId int) (loops int) {
 			var c = b.WorkerData[workerId].(*DBWorkerData).workingConn
-			var session = c.database.Session(c.database.Context(context.Background()))
+			var session = c.database.Session(c.database.Context(context.Background(), false))
 			if txErr := session.Transact(func(tx db.DatabaseAccessor) error {
 				for i := 0; i < batch; i++ {
 					id := int64(b.Randomizer.GetWorker(workerId).Uintn64(table.RowsCount-deleteRows) + deleteRows)

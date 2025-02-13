@@ -154,7 +154,6 @@ type sqlDatabase struct {
 
 	useTruncate              bool
 	queryStringInterpolation bool
-	explain                  bool
 	dryRun                   bool
 
 	queryLogger    db.Logger
@@ -262,9 +261,10 @@ func (d *sqlDatabase) GetTablesVolumeInfo(tableNames []string) ([]string, error)
 	return getTablesVolumeInfo(d.rw, d.dialect, tableNames)
 }
 
-func (d *sqlDatabase) Context(ctx context.Context) *db.Context {
+func (d *sqlDatabase) Context(ctx context.Context, explain bool) *db.Context {
 	return &db.Context{
 		Ctx:         ctx,
+		Explain:     explain,
 		BeginTime:   atomic.NewInt64(0),
 		PrepareTime: atomic.NewInt64(0),
 		ExecTime:    atomic.NewInt64(0),
@@ -290,7 +290,7 @@ func (d *sqlDatabase) Session(c *db.Context) db.Session {
 			dialect:                  d.dialect,
 			InsideTX:                 false,
 			QueryStringInterpolation: d.queryStringInterpolation,
-			explain:                  d.explain,
+			explain:                  c.Explain,
 			readRowsLogger:           d.readRowsLogger,
 			explainLogger:            d.explainLogger,
 		},

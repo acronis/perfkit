@@ -24,7 +24,8 @@ type DatabaseOpts struct {
 
 	EnableQueryStringInterpolation bool `long:"enable-query-string-interpolation" description:"enable query string interpolation during insert queries construction" required:"false"`
 
-	DryRun bool `long:"dry-run" description:"do not execute any INSERT/UPDATE/DELETE queries on DB-side" required:"false"`
+	DryRun  bool `long:"dry-run" description:"do not execute any INSERT/UPDATE/DELETE queries on DB-side" required:"false"`
+	Explain bool `long:"explain" description:"prepend the test queries by EXPLAIN ANALYZE" required:"false"`
 
 	LogQueries   bool `long:"log-queries" description:"log queries" required:"false"`
 	LogReadRows  bool `long:"log-read-rows" description:"log read rows" required:"false"`
@@ -132,7 +133,7 @@ func NewDBConnector(dbOpts *DatabaseOpts, workerID int, logger *benchmark.Logger
 		return c, nil
 	}
 
-	var queryLogger, readRowsLogger db.Logger
+	var queryLogger, readRowsLogger, explainLogger db.Logger
 	if dbOpts.LogQueries {
 		logger.LogLevel = benchmark.LogInfo
 		queryLogger = &dbLogger{level: benchmark.LogInfo, worker: workerID, logger: logger}
@@ -141,6 +142,11 @@ func NewDBConnector(dbOpts *DatabaseOpts, workerID int, logger *benchmark.Logger
 	if dbOpts.LogReadRows {
 		logger.LogLevel = benchmark.LogInfo
 		readRowsLogger = &dbLogger{level: benchmark.LogInfo, worker: workerID, logger: logger}
+	}
+
+	if dbOpts.Explain {
+		logger.LogLevel = benchmark.LogInfo
+		explainLogger = &dbLogger{level: benchmark.LogInfo, worker: workerID, logger: logger}
 	}
 
 	var dbConn, err = db.Open(db.Config{
@@ -152,6 +158,7 @@ func NewDBConnector(dbOpts *DatabaseOpts, workerID int, logger *benchmark.Logger
 
 		QueryLogger:    queryLogger,
 		ReadRowsLogger: readRowsLogger,
+		ExplainLogger:  explainLogger,
 	})
 	if err != nil {
 		return nil, err

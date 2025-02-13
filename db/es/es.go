@@ -124,9 +124,10 @@ func (d *esDatabase) GetTablesVolumeInfo(tableNames []string) ([]string, error) 
 	return getTablesVolumeInfo(d.rw, tableNames)
 }
 
-func (d *esDatabase) Context(ctx context.Context) *db.Context {
+func (d *esDatabase) Context(ctx context.Context, explain bool) *db.Context {
 	return &db.Context{
 		Ctx:         ctx,
+		Explain:     explain,
 		BeginTime:   atomic.NewInt64(0),
 		PrepareTime: atomic.NewInt64(0),
 		ExecTime:    atomic.NewInt64(0),

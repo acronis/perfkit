@@ -218,69 +218,6 @@ type Config struct {
 	// - Values are still escaped according to dialect rules when using interpolation
 	QueryStringInterpolation bool
 
-	// Explain enables query execution plan analysis:
-	//
-	// When true:
-	// - Adds EXPLAIN prefix to queries based on dialect:
-	//   - MySQL: "EXPLAIN query"
-	//   - PostgreSQL: "EXPLAIN ANALYZE query"
-	//   - SQLite: "EXPLAIN QUERY PLAN query"
-	//   - Cassandra: "TRACING ON; query"
-	//
-	// Example outputs per dialect:
-	//
-	// 1. PostgreSQL:
-	//    ```sql
-	//    EXPLAIN ANALYZE SELECT * FROM users WHERE id > 100;
-	//    ```
-	//    Output:
-	//    ```
-	//    Seq Scan on users (cost=0.00..35.50 rows=500 width=244) (actual time=0.016..0.146 rows=500 loops=1)
-	//      Filter: (id > 100)
-	//    Planning Time: 0.083 ms
-	//    Execution Time: 0.184 ms
-	//    ```
-	//
-	// 2. MySQL:
-	//    ```sql
-	//    EXPLAIN SELECT * FROM users WHERE id > 100;
-	//    ```
-	//    Output:
-	//    ```
-	//    id: 1
-	//    select_type: SIMPLE
-	//    table: users
-	//    type: range
-	//    possible_keys: PRIMARY
-	//    key: PRIMARY
-	//    rows: 500
-	//    Extra: Using where
-	//    ```
-	//
-	// 3. SQLite:
-	//    ```sql
-	//    EXPLAIN QUERY PLAN SELECT * FROM users WHERE id > 100;
-	//    ```
-	//    Output:
-	//    ```
-	//    ID: 1, Parent: 0, NotUsed: 0, Detail: SCAN TABLE users
-	//    ```
-	//
-	// 4. Cassandra:
-	//    ```sql
-	//    TRACING ON; SELECT * FROM users WHERE id > 100;
-	//    ```
-	//    Output shows query tracing information
-	//
-	// Usage:
-	// - Set ExplainLogger to capture the execution plan
-	// - Works with Select, QueryRow, and Query operations
-	// - Can be combined with other query options like OptimizeConditions
-	// - Returns error if explain not supported by dialect
-	//
-	// Note: Explain output format varies significantly by database type
-	Explain bool
-
 	// DryRun controls whether SQL operations are actually executed:
 	//
 	// When true:
@@ -1407,6 +1344,22 @@ type Context struct {
 	// Ctx is the context.Context for this database operation
 	Ctx context.Context
 
+	// Explain enables query execution plan analysis.
+	// When true, adds EXPLAIN prefix to queries based on dialect:
+	//  - MySQL: "EXPLAIN query"
+	//  - PostgreSQL: "EXPLAIN ANALYZE query"
+	//  - SQLite: "EXPLAIN QUERY PLAN query"
+	//  - Cassandra: "TRACING ON; query"
+	//
+	// Example outputs:
+	//  - PostgreSQL: Shows cost estimates and actual timings
+	//  - MySQL: Shows execution plan with index usage
+	//  - SQLite: Shows the query execution strategy
+	//  - Cassandra: Shows detailed query tracing
+	//
+	// Note: Requires ExplainLogger to be configured to capture output
+	Explain bool
+
 	// Timing metrics for different database operations.
 	// All times are stored as nanoseconds in atomic Int64s.
 	//
@@ -1568,7 +1521,7 @@ type Database interface {
 	databaseDescriber
 
 	// Context creates a new database context with timing metrics
-	Context(ctx context.Context) *Context
+	Context(ctx context.Context, explain bool) *Context
 
 	// Session creates a new database session with the given context
 	Session(ctx *Context) Session

@@ -72,7 +72,7 @@ func logExplainResults(logger db.Logger, dialectName db.DialectName, rows *sql.R
 			if err = rows.Scan(&id, &parent, &notUsed, &detail); err != nil {
 				return fmt.Errorf("DB query result scan failed: %s\nError: %s", query, err)
 			}
-			logger.Log("ID: %d, Parent: %d, Not Used: %d, Detail: %s\n", id, parent, notUsed, detail)
+			logger.Log(fmt.Sprintf("ID: %d, Parent: %d, Not Used: %d, Detail: %s\n", id, parent, notUsed, detail))
 		case db.MYSQL:
 			// MySQL scanning into dynamic column array
 			if err = rows.Scan(scanArgs...); err != nil {
@@ -80,7 +80,7 @@ func logExplainResults(logger db.Logger, dialectName db.DialectName, rows *sql.R
 			}
 			// Print each column with its name
 			for i, col := range values {
-				logger.Log("  %-15s: %s\n", cols[i], string(col))
+				logger.Log(fmt.Sprintf("  %-15s: %s", cols[i], string(col)))
 			}
 			logger.Log("\n")
 		case db.POSTGRES, db.CASSANDRA:

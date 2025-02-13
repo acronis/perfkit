@@ -28,7 +28,7 @@ func (suite *TestingSuite) makeVectorTestSession() (db.Database, db.Session, *db
 		require.NoError(suite.T(), err, "init scheme")
 	}
 
-	var c = dbo.Context(context.Background())
+	var c = dbo.Context(context.Background(), false)
 
 	s := dbo.Session(c)
 
