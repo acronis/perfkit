@@ -12,6 +12,7 @@ import (
 )
 
 // GetVersion returns DB version and driver name
+// Implements part of databaseDescriber interface
 func getVersion(q querier, d dialect) (db.DialectName, string, error) {
 	var version string
 	var query string
@@ -31,6 +32,11 @@ func getVersion(q querier, d dialect) (db.DialectName, string, error) {
 		return "", "", fmt.Errorf("unsupported driver: %s", d.name())
 	}
 
+	// Uses queryRowContext from databaseQuerier interface to execute version query
+	// Returns:
+	// - DialectName: database type (postgres, mysql, etc.)
+	// - string: version information
+	// - error: any execution errors
 	if err := q.queryRowContext(context.Background(), query).Scan(&version); err != nil {
 		return "", "", err
 	}
@@ -50,13 +56,19 @@ func getVersion(q querier, d dialect) (db.DialectName, string, error) {
 }
 
 // GetInfo returns DB info
+// Implements GetInfo method of databaseDescriber interface
+// Returns:
+// - []string: Formatted table of database settings
+// - *db.Info: Structured settings data with recommendations
+// - error: Any execution errors
 func getInfo(q querier, d dialect, version string) ([]string, *db.Info, error) {
 	var ret []string
+	// Initialize Info struct with recommendations source and version
 	var dbInfo = db.NewDBInfo(newSQLRecommendationsSource(q, d), version)
 
 	switch d.name() {
 	case db.POSTGRES:
-		// Execute SHOW ALL command
+		// Execute SHOW ALL command using databaseQuerier interface
 		var rows, err = q.queryContext(context.Background(), "SHOW ALL")
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to execute query: %s, error: %s", "SHOW ALL", err)
@@ -87,6 +99,7 @@ func getInfo(q querier, d dialect, version string) ([]string, *db.Info, error) {
 			return nil, nil, fmt.Errorf("error during row iteration: %s", err)
 		}
 	case db.MYSQL:
+		// Uses databaseQuerier interface to get MySQL variables
 		query := "SHOW VARIABLES;"
 		rows, err := q.queryContext(context.Background(), query)
 		if err != nil {
@@ -115,6 +128,7 @@ func getInfo(q querier, d dialect, version string) ([]string, *db.Info, error) {
 			return nil, nil, fmt.Errorf("error during row iteration: %s", err)
 		}
 	case db.MSSQL:
+		// Uses databaseQuerier to get MSSQL configurations
 		query := "SELECT * FROM sys.configurations"
 		rows, err := q.queryContext(context.Background(), query)
 		if err != nil {
@@ -172,7 +186,7 @@ func getInfo(q querier, d dialect, version string) ([]string, *db.Info, error) {
 			return nil, nil, fmt.Errorf("error during row iteration: %s", err)
 		}
 	case db.CASSANDRA:
-		// Execute a CQL query
+		// Uses databaseQuerier to get Cassandra system info
 		rows, err := q.queryContext(context.Background(), "SELECT * FROM system.local") // Replace with your actual query
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to execute query: %s, error: %s", "SELECT * FROM system.local", err)
@@ -208,7 +222,7 @@ func getInfo(q querier, d dialect, version string) ([]string, *db.Info, error) {
 			return nil, nil, fmt.Errorf("error during row iteration: %s", err)
 		}
 	case db.SQLITE, db.CLICKHOUSE:
-		//
+		// No specific info queries for these databases
 	default:
 		return nil, nil, fmt.Errorf("unsupported driver: %s", d.name())
 	}
@@ -217,6 +231,11 @@ func getInfo(q querier, d dialect, version string) ([]string, *db.Info, error) {
 }
 
 // GetTablesSchemaInfo returns the schema info for a given set of tables
+// Implements GetTablesSchemaInfo method of databaseDescriber interface
+// Returns formatted strings containing table schema information including:
+// - Column definitions
+// - Index definitions
+// - Primary keys
 func getTablesSchemaInfo(q querier, d dialect, tableNames []string) ([]string, error) {
 	var ret []string
 
@@ -382,6 +401,8 @@ func getTablesSchemaInfo(q querier, d dialect, tableNames []string) ([]string, e
 }
 
 // GetTableSizeMB returns the size of a table in MB
+// Helper function for GetTablesVolumeInfo
+// Uses databaseQuerier interface to execute size queries
 func getTableSizeMB(q querier, d dialect, tableName string) (int64, error) {
 	var query string
 	var args = []interface{}{tableName}
@@ -405,6 +426,8 @@ func getTableSizeMB(q querier, d dialect, tableName string) (int64, error) {
 }
 
 // GetIndexesSizeMB returns the size of indexes of a table in MB
+// Helper function for GetTablesVolumeInfo
+// Uses databaseQuerier interface to execute index size queries
 func getIndexesSizeMB(q querier, d dialect, tableName string) (int64, error) {
 	var query string
 	var args = []interface{}{tableName}
@@ -428,6 +451,12 @@ func getIndexesSizeMB(q querier, d dialect, tableName string) (int64, error) {
 }
 
 // GetTablesVolumeInfo returns the volume info for a given set of tables
+// Implements GetTablesVolumeInfo method of databaseDescriber interface
+// Returns formatted strings containing:
+// - Table names
+// - Row counts
+// - Data sizes in MB
+// - Index sizes in MB
 func getTablesVolumeInfo(q querier, d dialect, tableNames []string) ([]string, error) {
 	var ret []string
 

@@ -24,11 +24,12 @@ type DatabaseOpts struct {
 
 	EnableQueryStringInterpolation bool `long:"enable-query-string-interpolation" description:"enable query string interpolation during insert queries construction" required:"false"`
 
-	DryRun bool `long:"dry-run" description:"do not execute any INSERT/UPDATE/DELETE queries on DB-side" required:"false"`
+	DryRun  bool `long:"dry-run" description:"do not execute any INSERT/UPDATE/DELETE queries on DB-side" required:"false"`
+	Explain bool `long:"explain" description:"prepend the test queries by EXPLAIN ANALYZE" required:"false"`
 
-	LogQueries    bool `long:"log-queries" description:"log queries" required:"false"`
-	LogReadedRows bool `long:"log-readed-rows" description:"log readed rows" required:"false"`
-	LogQueryTime  bool `long:"log-query-time" description:"log query time" required:"false"`
+	LogQueries   bool `long:"log-queries" description:"log queries" required:"false"`
+	LogReadRows  bool `long:"log-read-rows" description:"log read rows" required:"false"`
+	LogQueryTime bool `long:"log-query-time" description:"log query time" required:"false"`
 
 	DontCleanup bool `long:"dont-cleanup" description:"do not cleanup DB content before/after the test in '-t all' mode" required:"false"`
 	UseTruncate bool `long:"use-truncate" description:"use TRUNCATE instead of DROP TABLE in cleanup procedure" required:"false"`
@@ -132,20 +133,20 @@ func NewDBConnector(dbOpts *DatabaseOpts, workerID int, logger *benchmark.Logger
 		return c, nil
 	}
 
-	var queryLogger, readedRowsLogger, queryTimeLogger db.Logger
+	var queryLogger, readRowsLogger, explainLogger db.Logger
 	if dbOpts.LogQueries {
 		logger.LogLevel = benchmark.LogInfo
 		queryLogger = &dbLogger{level: benchmark.LogInfo, worker: workerID, logger: logger}
 	}
 
-	if dbOpts.LogReadedRows {
+	if dbOpts.LogReadRows {
 		logger.LogLevel = benchmark.LogInfo
-		readedRowsLogger = &dbLogger{level: benchmark.LogInfo, worker: workerID, logger: logger}
+		readRowsLogger = &dbLogger{level: benchmark.LogInfo, worker: workerID, logger: logger}
 	}
 
-	if dbOpts.LogQueryTime {
+	if dbOpts.Explain {
 		logger.LogLevel = benchmark.LogInfo
-		queryTimeLogger = &dbLogger{level: benchmark.LogInfo, worker: workerID, logger: logger}
+		explainLogger = &dbLogger{level: benchmark.LogInfo, worker: workerID, logger: logger}
 	}
 
 	var dbConn, err = db.Open(db.Config{
@@ -155,9 +156,9 @@ func NewDBConnector(dbOpts *DatabaseOpts, workerID int, logger *benchmark.Logger
 		DryRun:                   dbOpts.DryRun,
 		UseTruncate:              dbOpts.UseTruncate,
 
-		QueryLogger:      queryLogger,
-		ReadedRowsLogger: readedRowsLogger,
-		QueryTimeLogger:  queryTimeLogger,
+		QueryLogger:    queryLogger,
+		ReadRowsLogger: readRowsLogger,
+		ExplainLogger:  explainLogger,
 	})
 	if err != nil {
 		return nil, err

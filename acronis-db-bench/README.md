@@ -60,8 +60,9 @@ Replace <connection_string> with the data source for your database.
   --reconnect                         reconnect to DB before every test iteration
   --enable-query-string-interpolation enable query string interpolation
   --dry-run                           do not execute any INSERT/UPDATE/DELETE queries on DB-side
+  --explain                           prepend the test queries by EXPLAIN ANALYZE
   --log-queries                       log all queries
-  --log-readed-rows                   log all readed rows
+  --log-read-rows                     log all read rows
   --log-query-time                    log query time
   --dont-cleanup                      do not cleanup DB content before/after the test in '-t all' mode
   --use-truncate                      use TRUNCATE instead of DROP TABLE in cleanup procedure
@@ -99,7 +100,6 @@ Replace <connection_string> with the data source for your database.
       --profiler-port=                     open profiler on given port (e.g. 6060) (default: 0)
       --describe                           describe what test is going to do
       --describe-all                       describe all the tests
-      --explain                            prepend the test queries by EXPLAIN ANALYZE
   -q, --query=                             execute given query, one can use:
                                            {CTI} - for random CTI UUID
                                            {TENANT} - randon tenant UUID

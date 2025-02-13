@@ -78,22 +78,15 @@ func (d *pgDialect) encodeTime(timestamp time.Time) string {
 // GetType returns PostgreSQL-specific types
 func (d *pgDialect) getType(id db.DataType) string {
 	switch id {
+	// Primary Keys and IDs
+	case db.DataTypeId:
+		return "BIGSERIAL PRIMARY KEY"
+	case db.DataTypeTenantUUIDBoundID:
+		return "VARCHAR(64)"
+
+	// Integer Types
 	case db.DataTypeInt:
 		return "INT"
-	case db.DataTypeVarChar:
-		return "VARCHAR"
-	case db.DataTypeVarChar32:
-		return "VARCHAR(32)"
-	case db.DataTypeVarChar64:
-		return "VARCHAR(64)"
-	case db.DataTypeVarChar128:
-		return "VARCHAR(128)"
-	case db.DataTypeVarChar256:
-		return "VARCHAR(256)"
-	case db.DataTypeText:
-		return "VARCHAR"
-	case db.DataTypeJSON:
-		return "JSONB"
 	case db.DataTypeBigInt:
 		return "BIGINT"
 	case db.DataTypeBigIntAutoIncPK:
@@ -102,16 +95,46 @@ func (d *pgDialect) getType(id db.DataType) string {
 		return "BIGSERIAL"
 	case db.DataTypeSmallInt:
 		return "SMALLINT"
+	case db.DataTypeTinyInt:
+		return "SMALLINT"
+
+	// String Types
+	case db.DataTypeVarChar:
+		return "VARCHAR"
+	case db.DataTypeVarChar32:
+		return "VARCHAR(32)"
+	case db.DataTypeVarChar36:
+		return "VARCHAR(36)"
+	case db.DataTypeVarChar64:
+		return "VARCHAR(64)"
+	case db.DataTypeVarChar128:
+		return "VARCHAR(128)"
+	case db.DataTypeVarChar256:
+		return "VARCHAR(256)"
+	case db.DataTypeText:
+		return "VARCHAR"
+	case db.DataTypeLongText:
+		return "TEXT"
 	case db.DataTypeAscii:
 		return ""
+
+	// UUID Types
 	case db.DataTypeUUID:
 		return "UUID"
 	case db.DataTypeVarCharUUID:
 		return "VARCHAR(36)"
+
+	// Binary Types
 	case db.DataTypeLongBlob:
 		return "BYTEA"
 	case db.DataTypeHugeBlob:
 		return "BYTEA"
+	case db.DataTypeBinary20:
+		return "BYTEA"
+	case db.DataTypeBinaryBlobType:
+		return "BYTEA"
+
+	// Date and Time Types
 	case db.DataTypeDateTime:
 		return "TIMESTAMP"
 	case db.DataTypeDateTime6:
@@ -122,20 +145,24 @@ func (d *pgDialect) getType(id db.DataType) string {
 		return "TIMESTAMP(6)"
 	case db.DataTypeCurrentTimeStamp6:
 		return "CURRENT_TIMESTAMP(6)"
-	case db.DataTypeBinary20:
-		return "BYTEA"
-	case db.DataTypeBinaryBlobType:
-		return "BYTEA"
+
+	// Boolean Types
 	case db.DataTypeBoolean:
 		return "BOOLEAN"
 	case db.DataTypeBooleanFalse:
 		return "false"
 	case db.DataTypeBooleanTrue:
 		return "true"
-	case db.DataTypeTinyInt:
-		return "SMALLINT"
-	case db.DataTypeLongText:
-		return "TEXT"
+
+	// Special Types
+	case db.DataTypeJSON:
+		return "JSONB"
+	case db.DataTypeVector3Float32:
+		return "vector(3)"
+	case db.DataTypeVector768Float32:
+		return "vector(768)"
+
+	// Constraints and Modifiers
 	case db.DataTypeUnique:
 		return "unique"
 	case db.DataTypeEngine:
@@ -144,12 +171,7 @@ func (d *pgDialect) getType(id db.DataType) string {
 		return "not null"
 	case db.DataTypeNull:
 		return "null"
-	case db.DataTypeTenantUUIDBoundID:
-		return "VARCHAR(64)"
-	case db.DataTypeVector3Float32: // For pgvector
-		return "vector(3)"
-	case db.DataTypeVector768Float32: // For pgvector
-		return "vector(768)"
+
 	default:
 		return ""
 	}
@@ -157,6 +179,10 @@ func (d *pgDialect) getType(id db.DataType) string {
 
 func (d *pgDialect) randFunc() string {
 	return "RANDOM()"
+}
+
+func (d *pgDialect) supportTransactions() bool {
+	return true
 }
 
 func (d *pgDialect) isRetriable(err error) bool {
@@ -292,8 +318,12 @@ func (c *pgConnector) ConnectionPool(cfg db.Config) (db.Database, error) {
 	rwc.SetConnMaxLifetime(cfg.MaxConnLifetime)
 
 	dbo.dialect = dia
+	dbo.useTruncate = cfg.UseTruncate
 	dbo.queryStringInterpolation = cfg.QueryStringInterpolation
+	dbo.dryRun = cfg.DryRun
 	dbo.queryLogger = cfg.QueryLogger
+	dbo.readRowsLogger = cfg.ReadRowsLogger
+	dbo.explainLogger = cfg.ExplainLogger
 
 	return dbo, nil
 }

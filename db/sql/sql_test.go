@@ -110,6 +110,7 @@ func (suite *TestingSuite) makeTestSession() (db.Database, db.Session, *db.Conte
 		MaxOpenConns:    16,
 		MaxConnLifetime: 100 * time.Millisecond,
 		QueryLogger:     logger,
+		ReadRowsLogger:  logger,
 	})
 
 	require.NoError(suite.T(), err, "making test sqlSession")
@@ -124,7 +125,7 @@ func (suite *TestingSuite) makeTestSession() (db.Database, db.Session, *db.Conte
 		require.NoError(suite.T(), err, "create_index")
 	}
 
-	var c = dbo.Context(context.Background())
+	var c = dbo.Context(context.Background(), false)
 
 	s := dbo.Session(c)
 
@@ -134,7 +135,12 @@ func (suite *TestingSuite) makeTestSession() (db.Database, db.Session, *db.Conte
 func logDbTime(t *testing.T, c *db.Context) {
 	t.Helper()
 
-	t.Log("dbtime", c.DBtime)
+	t.Log("beginTime", time.Duration(c.BeginTime.Load()))
+	t.Log("prepareTime", time.Duration(c.PrepareTime.Load()))
+	t.Log("execTime", time.Duration(c.ExecTime.Load()))
+	t.Log("queryTime", time.Duration(c.QueryTime.Load()))
+	t.Log("deallocTime", time.Duration(c.DeallocTime.Load()))
+	t.Log("commitTime", time.Duration(c.CommitTime.Load()))
 }
 
 func cleanup(t *testing.T, dbo db.Database) {

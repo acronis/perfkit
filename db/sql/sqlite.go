@@ -66,52 +66,91 @@ func (d *sqliteDialect) encodeTime(timestamp time.Time) string {
 // GetType returns SQLite-specific types
 func (d *sqliteDialect) getType(id db.DataType) string {
 	switch id {
+	// Primary Keys and IDs
+	case db.DataTypeId:
+		return "INTEGER PRIMARY KEY AUTOINCREMENT"
+	case db.DataTypeTenantUUIDBoundID:
+		return "TEXT"
+
+	// Integer Types
 	case db.DataTypeInt:
 		return "INT"
-	case db.DataTypeVarChar:
-		return "VARCHAR"
-	case db.DataTypeVarChar256:
-		return "VARCHAR(256)"
-	case db.DataTypeText:
-		return "VARCHAR"
 	case db.DataTypeBigInt:
 		return "INTEGER"
 	case db.DataTypeBigIntAutoIncPK:
 		return "INTEGER PRIMARY KEY AUTOINCREMENT"
 	case db.DataTypeBigIntAutoInc:
 		return "INTEGER AUTOINCREMENT"
+	case db.DataTypeSmallInt:
+		return "SMALLINT"
+	case db.DataTypeTinyInt:
+		return "SMALLINT"
+
+	// String Types
+	case db.DataTypeVarChar:
+		return "VARCHAR"
+	case db.DataTypeVarChar32:
+		return "VARCHAR(32)"
+	case db.DataTypeVarChar36:
+		return "VARCHAR(36)"
+	case db.DataTypeVarChar64:
+		return "VARCHAR(64)"
+	case db.DataTypeVarChar128:
+		return "VARCHAR(128)"
+	case db.DataTypeVarChar256:
+		return "VARCHAR(256)"
+	case db.DataTypeText:
+		return "VARCHAR"
+	case db.DataTypeLongText:
+		return "TEXT"
 	case db.DataTypeAscii:
 		return ""
+
+	// UUID Types
 	case db.DataTypeUUID:
 		return "TEXT"
 	case db.DataTypeVarCharUUID:
 		return "TEXT"
+
+	// Binary Types
 	case db.DataTypeLongBlob:
 		return "BLOB"
 	case db.DataTypeHugeBlob:
 		return "BLOB"
+	case db.DataTypeBinary20:
+		return "BLOB"
+	case db.DataTypeBinaryBlobType:
+		return "MEDIUMBLOB"
+
+	// Date and Time Types
 	case db.DataTypeDateTime:
 		return "TEXT"
 	case db.DataTypeDateTime6:
+		return "TEXT"
+	case db.DataTypeTimestamp:
 		return "TEXT"
 	case db.DataTypeTimestamp6:
 		return "TEXT"
 	case db.DataTypeCurrentTimeStamp6:
 		return "CURRENT_TIMESTAMP"
-	case db.DataTypeBinary20:
-		return "BLOB"
-	case db.DataTypeBinaryBlobType:
-		return "MEDIUMBLOB"
+
+	// Boolean Types
 	case db.DataTypeBoolean:
 		return "BOOLEAN"
 	case db.DataTypeBooleanFalse:
 		return "0"
 	case db.DataTypeBooleanTrue:
 		return "1"
-	case db.DataTypeTinyInt:
-		return "SMALLINT"
-	case db.DataTypeLongText:
+
+	// Special Types
+	case db.DataTypeJSON:
 		return "TEXT"
+	case db.DataTypeVector3Float32:
+		return "TEXT"
+	case db.DataTypeVector768Float32:
+		return "TEXT"
+
+	// Constraints and Modifiers
 	case db.DataTypeUnique:
 		return "unique"
 	case db.DataTypeEngine:
@@ -120,8 +159,7 @@ func (d *sqliteDialect) getType(id db.DataType) string {
 		return "not null"
 	case db.DataTypeNull:
 		return "null"
-	case db.DataTypeTenantUUIDBoundID:
-		return "TEXT"
+
 	default:
 		return ""
 	}
@@ -129,6 +167,10 @@ func (d *sqliteDialect) getType(id db.DataType) string {
 
 func (d *sqliteDialect) randFunc() string {
 	return "RANDOM()"
+}
+
+func (d *sqliteDialect) supportTransactions() bool {
+	return true
 }
 
 func (d *sqliteDialect) isRetriable(err error) bool {
@@ -204,8 +246,12 @@ func (c *sqliteConnector) ConnectionPool(cfg db.Config) (db.Database, error) {
 	rwc.SetMaxIdleConns(cfg.MaxOpenConns)
 
 	dbo.dialect = &dia
+	dbo.useTruncate = cfg.UseTruncate
 	dbo.queryStringInterpolation = cfg.QueryStringInterpolation
+	dbo.dryRun = cfg.DryRun
 	dbo.queryLogger = cfg.QueryLogger
+	dbo.readRowsLogger = cfg.ReadRowsLogger
+	dbo.explainLogger = cfg.ExplainLogger
 
 	return dbo, nil
 }

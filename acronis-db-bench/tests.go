@@ -156,7 +156,7 @@ var TestRawQuery = TestDesc{
 		query := b.TestOpts.(*TestOpts).BenchOpts.Query
 
 		var worker testWorkerFunc
-		var _ = b.TestOpts.(*TestOpts).BenchOpts.Explain
+		var explain = b.TestOpts.(*TestOpts).DBOpts.Explain
 
 		if strings.Contains(query, "{") {
 			worker = func(b *benchmark.Benchmark, c *DBConnector, testDesc *TestDesc, batch int) (loops int) { //nolint:revive
@@ -167,7 +167,7 @@ var TestRawQuery = TestDesc{
 					if err != nil {
 						b.Exit(err)
 					}
-					q = strings.Replace(q, "{CTI}", "'"+ctiUUID.String()+"'", -1)
+					q = strings.Replace(q, "{CTI}", "'"+string(ctiUUID)+"'", -1)
 				}
 				if strings.Contains(query, "{TENANT}") {
 					rw := b.Randomizer.GetWorker(c.WorkerID)
@@ -175,11 +175,11 @@ var TestRawQuery = TestDesc{
 					if err != nil {
 						b.Exit(err)
 					}
-					q = strings.Replace(q, "{TENANT}", "'"+tenantUUID.String()+"'", -1)
+					q = strings.Replace(q, "{TENANT}", "'"+string(tenantUUID)+"'", -1)
 				}
 				fmt.Printf("query %s\n", q)
 
-				var session = c.database.Session(c.database.Context(context.Background()))
+				var session = c.database.Session(c.database.Context(context.Background(), explain))
 				if _, err := session.Query(q); err != nil {
 					b.Exit(err)
 				}
@@ -188,7 +188,7 @@ var TestRawQuery = TestDesc{
 			}
 		} else {
 			worker = func(b *benchmark.Benchmark, c *DBConnector, testDesc *TestDesc, batch int) (loops int) {
-				var session = c.database.Session(c.database.Context(context.Background()))
+				var session = c.database.Session(c.database.Context(context.Background(), explain))
 				if _, err := session.Query(query); err != nil {
 					b.Exit(err)
 				}
@@ -219,6 +219,10 @@ var TestSelectOne = TestDesc{
 				}
 			case *sql.DB:
 				if err := rawSession.QueryRow("SELECT 1").Scan(&ret); err != nil {
+					if c.database.DialectName() == db.CASSANDRA {
+						// Cassandra driver returns error on SELECT 1
+						return 1
+					}
 					b.Exit("can't do 'SELECT 1': %v", err)
 				}
 			case *es8.Client:
@@ -266,7 +270,8 @@ var TestSelectNextVal = TestDesc{
 		c.database.CreateSequence(SequenceName)
 
 		worker := func(b *benchmark.Benchmark, c *DBConnector, testDesc *TestDesc, batch int) (loops int) { //nolint:revive
-			var session = c.database.Session(c.database.Context(context.Background()))
+			var explain = b.TestOpts.(*TestOpts).DBOpts.Explain
+			var session = c.database.Session(c.database.Context(context.Background(), explain))
 			if _, err := session.GetNextVal(SequenceName); err != nil {
 				b.Exit(err)
 			}
@@ -289,8 +294,9 @@ var TestSelectMediumLast = TestDesc{
 	databases:   ALL,
 	table:       TestTableMedium,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
+		var idToRead int64
 		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { return []string{"desc(id)"} } //nolint:revive
-		testSelect(b, testDesc, nil, []string{"id"}, nil, orderBy, 1)
+		testSelect(b, testDesc, nil, []string{"id"}, []interface{}{&idToRead}, nil, orderBy, 1)
 	},
 }
 
@@ -305,8 +311,9 @@ var TestSelectMediumLastDBR = TestDesc{
 	databases:   RELATIONAL,
 	table:       TestTableMedium,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
+		var idToRead int64
 		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { return []string{"desc(id)"} } //nolint:revive
-		testSelect(b, testDesc, nil, []string{"id"}, nil, orderBy, 1)
+		testSelect(b, testDesc, nil, []string{"id"}, []interface{}{&idToRead}, nil, orderBy, 1)
 	},
 }
 
@@ -321,6 +328,8 @@ var TestSelectMediumRand = TestDesc{
 	databases:   ALL,
 	table:       TestTableMedium,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
+		var idToRead int64
+
 		var where = func(b *benchmark.Benchmark, workerId int) map[string][]string {
 			id := b.Randomizer.GetWorker(workerId).Uintn64(testDesc.table.RowsCount - 1)
 
@@ -331,7 +340,7 @@ var TestSelectMediumRand = TestDesc{
 			return []string{"asc(id)"}
 		}
 
-		testSelect(b, testDesc, nil, []string{"id"}, where, orderBy, 1)
+		testSelect(b, testDesc, nil, []string{"id"}, []interface{}{&idToRead}, where, orderBy, 1)
 	},
 }
 
@@ -346,6 +355,8 @@ var TestSelectMediumRandDBR = TestDesc{
 	databases:   RELATIONAL,
 	table:       TestTableMedium,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
+		var idToRead int64
+
 		var where = func(b *benchmark.Benchmark, workerId int) map[string][]string {
 			var id = b.Randomizer.GetWorker(workerId).Uintn64(testDesc.table.RowsCount - 1)
 
@@ -355,7 +366,7 @@ var TestSelectMediumRandDBR = TestDesc{
 		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { //nolint:revive
 			return []string{"asc(id)"}
 		}
-		testSelect(b, testDesc, nil, []string{"id"}, where, orderBy, 1)
+		testSelect(b, testDesc, nil, []string{"id"}, []interface{}{&idToRead}, where, orderBy, 1)
 	},
 }
 
@@ -370,9 +381,9 @@ var TestSelectHeavyLast = TestDesc{
 	databases:   RELATIONAL,
 	table:       TestTableHeavy,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
+		var idToRead int64
 		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { return []string{"desc(id)"} } //nolint:revive
-
-		testSelect(b, testDesc, nil, []string{"id"}, nil, orderBy, 1)
+		testSelect(b, testDesc, nil, []string{"id"}, []interface{}{&idToRead}, nil, orderBy, 1)
 	},
 }
 
@@ -387,8 +398,9 @@ var TestSelectHeavyLastDBR = TestDesc{
 	databases:   RELATIONAL,
 	table:       TestTableHeavy,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
+		var idToRead int64
 		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { return []string{"desc(id)"} } //nolint:revive
-		testSelect(b, testDesc, nil, []string{"id"}, nil, orderBy, 1)
+		testSelect(b, testDesc, nil, []string{"id"}, []interface{}{&idToRead}, nil, orderBy, 1)
 	},
 }
 
@@ -403,6 +415,8 @@ var TestSelectHeavyRand = TestDesc{
 	databases:   RELATIONAL,
 	table:       TestTableHeavy,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
+		var idToRead int64
+
 		var where = func(b *benchmark.Benchmark, workerId int) map[string][]string {
 			id := b.Randomizer.GetWorker(workerId).Uintn64(testDesc.table.RowsCount - 1)
 
@@ -412,7 +426,7 @@ var TestSelectHeavyRand = TestDesc{
 		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { //nolint:revive
 			return []string{"asc(id)"}
 		}
-		testSelect(b, testDesc, nil, []string{"id"}, where, orderBy, 1)
+		testSelect(b, testDesc, nil, []string{"id"}, []interface{}{&idToRead}, where, orderBy, 1)
 	},
 }
 
@@ -427,6 +441,8 @@ var TestSelectHeavyRandDBR = TestDesc{
 	databases:   RELATIONAL,
 	table:       TestTableHeavy,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
+		var idToRead int64
+
 		var where = func(b *benchmark.Benchmark, workerId int) map[string][]string {
 			id := b.Randomizer.GetWorker(workerId).Uintn64(testDesc.table.RowsCount - 1)
 
@@ -436,7 +452,7 @@ var TestSelectHeavyRandDBR = TestDesc{
 		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { //nolint:revive
 			return []string{"asc(id)"}
 		}
-		testSelect(b, testDesc, nil, []string{"id"}, where, orderBy, 1)
+		testSelect(b, testDesc, nil, []string{"id"}, []interface{}{&idToRead}, where, orderBy, 1)
 	},
 }
 
@@ -453,8 +469,15 @@ var TestSelectHeavyRandTenantLike = TestDesc{
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
 		var colConfs = testDesc.table.GetColumnsConf([]string{"tenant_id"}, false)
 
+		var idToRead int64
+
 		var where = func(b *benchmark.Benchmark, workerId int) map[string][]string {
 			w := b.GenFakeDataAsMap(workerId, colConfs, false)
+
+			var tenant = fmt.Sprintf("%s", (*w)["tenant_id"])
+			if tenant == "" {
+				b.Log(1, workerId, "tenant_id is empty")
+			}
 
 			return map[string][]string{
 				"tenant_id":     {fmt.Sprintf("%s", (*w)["tenant_id"])},
@@ -465,7 +488,7 @@ var TestSelectHeavyRandTenantLike = TestDesc{
 		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { //nolint:revive
 			return []string{"desc(id)"}
 		}
-		testSelect(b, testDesc, nil, []string{"id"}, where, orderBy, 1)
+		testSelect(b, testDesc, nil, []string{"id"}, []interface{}{&idToRead}, where, orderBy, 1)
 	},
 }
 
@@ -482,12 +505,15 @@ var TestSelectHeavyMinMaxTenant = TestDesc{
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
 		var colConfs = testDesc.table.GetColumnsConf([]string{"tenant_id"}, false)
 
+		var minCompletionTime int64
+		var maxCompletionTime int64
+
 		var where = func(b *benchmark.Benchmark, workerId int) map[string][]string {
 			w := b.GenFakeDataAsMap(workerId, colConfs, false)
 
 			return map[string][]string{"tenant_id": {fmt.Sprintf("%s", (*w)["tenant_id"])}}
 		}
-		testSelect(b, testDesc, nil, []string{"min(completion_time)", "max(completion_time)"}, where, nil, 1)
+		testSelect(b, testDesc, nil, []string{"min(completion_time)", "max(completion_time)"}, []interface{}{&minCompletionTime, &maxCompletionTime}, where, nil, 1)
 	},
 }
 
@@ -505,6 +531,9 @@ var TestSelectHeavyMinMaxTenantAndState = TestDesc{
 
 		var colConfs = testDesc.table.GetColumnsConf([]string{"tenant_id", "state"}, false)
 
+		var minCompletionTime int64
+		var maxCompletionTime int64
+
 		var where = func(b *benchmark.Benchmark, workerId int) map[string][]string {
 			w := b.GenFakeDataAsMap(workerId, colConfs, false)
 
@@ -514,7 +543,7 @@ var TestSelectHeavyMinMaxTenantAndState = TestDesc{
 			}
 		}
 
-		testSelect(b, testDesc, nil, []string{"min(completion_time)", "max(completion_time)"}, where, nil, 1)
+		testSelect(b, testDesc, nil, []string{"min(completion_time)", "max(completion_time)"}, []interface{}{&minCompletionTime, &maxCompletionTime}, where, nil, 1)
 	},
 }
 
@@ -537,6 +566,8 @@ var TestSelectHeavyRandPageByUUID = TestDesc{
 			colConfs = append(colConfs, benchmark.DBFakeColumnConf{ColumnName: "uuid", ColumnType: "uuid"})
 		}
 
+		var idToRead int64
+
 		var where = func(b *benchmark.Benchmark, workerId int) map[string][]string {
 			_, values := b.GenFakeData(workerId, &colConfs, false)
 
@@ -548,7 +579,7 @@ var TestSelectHeavyRandPageByUUID = TestDesc{
 			return map[string][]string{"uuid": valuesToSearch}
 		}
 
-		testSelect(b, testDesc, nil, []string{"id"}, where, nil, 1)
+		testSelect(b, testDesc, nil, []string{"id"}, []interface{}{&idToRead}, where, nil, 1)
 	},
 }
 
@@ -568,6 +599,8 @@ var TestSelectHeavyRandCustomerRecent = TestDesc{
 
 		var colConfs = &[]benchmark.DBFakeColumnConf{{ColumnName: "customer_id", ColumnType: "customer_uuid"}}
 
+		var idToRead int64
+
 		var where = func(b *benchmark.Benchmark, workerId int) map[string][]string {
 			w := b.GenFakeDataAsMap(workerId, colConfs, false)
 
@@ -580,7 +613,7 @@ var TestSelectHeavyRandCustomerRecent = TestDesc{
 			return []string{"desc(enqueue_time)"}
 		}
 
-		testSelect(b, testDesc, nil, []string{"id"}, where, orderBy, 1)
+		testSelect(b, testDesc, nil, []string{"id"}, []interface{}{&idToRead}, where, orderBy, 1)
 	},
 }
 
@@ -600,6 +633,8 @@ var TestSelectHeavyRandCustomerRecentLike = TestDesc{
 
 		var colConfs = &[]benchmark.DBFakeColumnConf{{ColumnName: "customer_id", ColumnType: "customer_uuid"}}
 
+		var idToRead int64
+
 		var where = func(b *benchmark.Benchmark, workerId int) map[string][]string {
 			w := b.GenFakeDataAsMap(workerId, colConfs, false)
 
@@ -613,7 +648,7 @@ var TestSelectHeavyRandCustomerRecentLike = TestDesc{
 			return []string{"desc(enqueue_time)"}
 		}
 
-		testSelect(b, testDesc, nil, []string{"id"}, where, orderBy, 1)
+		testSelect(b, testDesc, nil, []string{"id"}, []interface{}{&idToRead}, where, orderBy, 1)
 	},
 }
 
@@ -631,6 +666,8 @@ var TestSelectHeavyRandCustomerUpdateTimePage = TestDesc{
 
 		var colConfs = []benchmark.DBFakeColumnConf{{ColumnName: "customer_id", ColumnType: "customer_uuid"}}
 		colConfs = append(colConfs, benchmark.DBFakeColumnConf{ColumnName: "update_time", ColumnType: "time", Cardinality: 30})
+
+		var idToRead int64
 
 		var where = func(b *benchmark.Benchmark, workerId int) map[string][]string {
 			w := b.GenFakeDataAsMap(workerId, &colConfs, false)
@@ -651,7 +688,7 @@ var TestSelectHeavyRandCustomerUpdateTimePage = TestDesc{
 			return []string{"asc(update_time)"}
 		}
 
-		testSelect(b, testDesc, nil, []string{"id"}, where, orderBy, 1)
+		testSelect(b, testDesc, nil, []string{"id"}, []interface{}{&idToRead}, where, orderBy, 1)
 	},
 }
 
@@ -668,6 +705,8 @@ var TestSelectHeavyRandCustomerCount = TestDesc{
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
 		var colConfs = &[]benchmark.DBFakeColumnConf{{ColumnName: "customer_id", ColumnType: "customer_uuid"}}
 
+		var countToRead int64
+
 		var where = func(b *benchmark.Benchmark, workerId int) map[string][]string {
 			w := b.GenFakeDataAsMap(workerId, colConfs, false)
 
@@ -676,7 +715,7 @@ var TestSelectHeavyRandCustomerCount = TestDesc{
 			}
 		}
 
-		testSelect(b, testDesc, nil, []string{"COUNT(0)"}, where, nil, 1)
+		testSelect(b, testDesc, nil, []string{"COUNT(0)"}, []interface{}{&countToRead}, where, nil, 1)
 	},
 }
 
@@ -693,6 +732,8 @@ var TestSelectHeavyRandPartnerRecent = TestDesc{
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
 		var colConfs = &[]benchmark.DBFakeColumnConf{{ColumnName: "partner_id", ColumnType: "partner_uuid"}}
 
+		var idToRead int64
+
 		var where = func(b *benchmark.Benchmark, workerId int) map[string][]string {
 			w := b.GenFakeDataAsMap(workerId, colConfs, false)
 
@@ -705,7 +746,7 @@ var TestSelectHeavyRandPartnerRecent = TestDesc{
 			return []string{"desc(enqueue_time)"}
 		}
 
-		testSelect(b, testDesc, nil, []string{"id"}, where, orderBy, 1)
+		testSelect(b, testDesc, nil, []string{"id"}, []interface{}{&idToRead}, where, orderBy, 1)
 	},
 }
 
@@ -722,6 +763,8 @@ var TestSelectHeavyRandPartnerStartUpdateTimePage = TestDesc{
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
 		var colConfs = []benchmark.DBFakeColumnConf{{ColumnName: "partner_id", ColumnType: "partner_uuid"}}
 		colConfs = append(colConfs, benchmark.DBFakeColumnConf{ColumnName: "update_time", ColumnType: "time", Cardinality: 30})
+
+		var idToRead int64
 
 		var where = func(b *benchmark.Benchmark, workerId int) map[string][]string {
 			w := b.GenFakeDataAsMap(workerId, &colConfs, false)
@@ -747,7 +790,7 @@ var TestSelectHeavyRandPartnerStartUpdateTimePage = TestDesc{
 			return []string{"asc(update_time)"}
 		}
 
-		testSelect(b, testDesc, nil, []string{"id"}, where, orderBy, 1)
+		testSelect(b, testDesc, nil, []string{"id"}, []interface{}{&idToRead}, where, orderBy, 1)
 	},
 }
 
@@ -780,8 +823,8 @@ var TestSelectHeavyForUpdateSkipLocked = TestDesc{
 		}
 
 		worker := func(b *benchmark.Benchmark, c *DBConnector, testDesc *TestDesc, batch int) (loops int) { //nolint:revive
-
-			var session = c.database.Session(c.database.Context(context.Background()))
+			var explain = b.TestOpts.(*TestOpts).DBOpts.Explain
+			var session = c.database.Session(c.database.Context(context.Background(), explain))
 			if txErr := session.Transact(func(tx db.DatabaseAccessor) error {
 				var id int64
 				var progress int
@@ -824,7 +867,7 @@ var TestInsertLight = TestDesc{
 func insertByPreparedDataWorker(b *benchmark.Benchmark, c *DBConnector, testDesc *TestDesc, batch int) (loops int) {
 	colConfs := testDesc.table.GetColumnsForInsert(db.WithAutoInc(c.database.DialectName()))
 	workerID := c.WorkerID
-	sess := c.database.Session(c.database.Context(context.Background()))
+	sess := c.database.Session(c.database.Context(context.Background(), false))
 
 	if txErr := sess.Transact(func(tx db.DatabaseAccessor) error {
 		columns, _ := b.GenFakeData(workerID, colConfs, false)
@@ -833,9 +876,7 @@ func insertByPreparedDataWorker(b *benchmark.Benchmark, c *DBConnector, testDesc
 		sql := fmt.Sprintf("INSERT INTO %s (%s) VALUES(%s)", testDesc.table.TableName, strings.Join(columns, ","), parametersPlaceholder)
 		sql = formatSQL(sql, c.database.DialectName())
 
-		t := tx.StatementEnter(sql, nil)
 		stmt, err := tx.Prepare(sql)
-		tx.StatementExit("Prepare()", t, err, false, nil, sql, nil, nil, nil)
 
 		if err != nil {
 			c.Exit(err.Error())
@@ -843,9 +884,7 @@ func insertByPreparedDataWorker(b *benchmark.Benchmark, c *DBConnector, testDesc
 		for i := 0; i < batch; i++ {
 			_, values := b.GenFakeData(workerID, colConfs, false)
 
-			t := tx.StatementEnter("", nil)
 			_, err = stmt.Exec(values...)
-			tx.StatementExit("Exec()", t, err, false, nil, "<< stdin ", values, nil, nil)
 
 			if err != nil {
 				stmt.Close()
@@ -891,7 +930,7 @@ func insertMultiValueDataWorker(b *benchmark.Benchmark, c *DBConnector, testDesc
 		}
 	}
 
-	var session = c.database.Session(c.database.Context(context.Background()))
+	var session = c.database.Session(c.database.Context(context.Background(), false))
 	if txErr := session.Transact(func(tx db.DatabaseAccessor) error {
 		return tx.BulkInsert(testDesc.table.TableName, values, columns)
 	}); txErr != nil {
@@ -921,7 +960,7 @@ func copyDataWorker(b *benchmark.Benchmark, c *DBConnector, testDesc *TestDesc, 
 	var sql string
 	colConfs := testDesc.table.GetColumnsForInsert(db.WithAutoInc(c.database.DialectName()))
 	workerID := c.WorkerID
-	sess := c.database.Session(c.database.Context(context.Background()))
+	sess := c.database.Session(c.database.Context(context.Background(), false))
 
 	if txErr := sess.Transact(func(tx db.DatabaseAccessor) error {
 		columns, _ := b.GenFakeData(workerID, colConfs, false)
@@ -935,9 +974,7 @@ func copyDataWorker(b *benchmark.Benchmark, c *DBConnector, testDesc *TestDesc, 
 			b.Exit("unsupported driver: '%v', supported drivers are: %s|%s", c.database.DialectName(), db.POSTGRES, db.MSSQL)
 		}
 
-		t := tx.StatementEnter(sql, nil)
 		stmt, err := tx.Prepare(sql)
-		tx.StatementExit("Prepare()", t, err, false, nil, sql, nil, nil, nil)
 
 		if err != nil {
 			c.Exit(err.Error())
@@ -945,9 +982,7 @@ func copyDataWorker(b *benchmark.Benchmark, c *DBConnector, testDesc *TestDesc, 
 		for i := 0; i < batch; i++ {
 			_, values := b.GenFakeData(workerID, colConfs, false)
 
-			t := tx.StatementEnter("", nil)
 			_, err = stmt.Exec(values...)
-			tx.StatementExit("Exec()", t, err, false, nil, "<< stdin ", values, nil, nil)
 
 			if err != nil {
 				stmt.Close()
@@ -1124,7 +1159,7 @@ func createLargeObjectWorker(b *benchmark.Benchmark, c *DBConnector, testDesc *T
 	parametersPlaceholder := db.GenDBParameterPlaceholders(0, len(*colConfs))
 	workerID := c.WorkerID
 
-	var session = c.database.Session(c.database.Context(context.Background()))
+	var session = c.database.Session(c.database.Context(context.Background(), false))
 
 	if txErr := session.Transact(func(tx db.DatabaseAccessor) error {
 		var sql string
@@ -1295,13 +1330,16 @@ var TestSelectVector768NearestL2 = TestDesc{
 			{ColumnName: "embedding", ColumnType: "dataset.emb.list.item"},
 		}
 
+		var idToRead int64
+		var vectorToRead = make([]float64, 768)
+
 		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { //nolint:revive
 			var _, vals = b.GenFakeData(workerId, &colConfs, false)
 			var vec = "[" + strings.Trim(strings.Replace(fmt.Sprint(vals[1]), " ", ", ", -1), "[]") + "]"
 			return []string{fmt.Sprintf("nearest(embedding;L2;%s)", vec)}
 		}
 
-		testSelect(b, testDesc, nil, []string{"id", "embedding"}, nil, orderBy, 1)
+		testSelect(b, testDesc, nil, []string{"id", "embedding"}, []interface{}{&idToRead, &vectorToRead}, nil, orderBy, 1)
 	},
 }
 
@@ -1335,13 +1373,16 @@ var TestSelectEmailByEmbeddingNearestL2 = TestDesc{
 			{ColumnName: "embedding", ColumnType: "dataset.Embedding.list.element"},
 		}
 
+		var bodyToRead string
+		var vectorToRead = make([]float64, 768)
+
 		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { //nolint:revive
 			var _, vals = b.GenFakeData(workerId, &colConfs, false)
 			var vec = "[" + strings.Trim(strings.Replace(fmt.Sprint(vals[1]), " ", ", ", -1), "[]") + "]"
 			return []string{fmt.Sprintf("nearest(embedding;L2;%s)", vec)}
 		}
 
-		testSelect(b, testDesc, nil, []string{"body", "embedding"}, nil, orderBy, 1)
+		testSelect(b, testDesc, nil, []string{"body", "embedding"}, []interface{}{&bodyToRead, &vectorToRead}, nil, orderBy, 1)
 	},
 }
 
@@ -1788,6 +1829,8 @@ var TestSelectAdvmTasksLast = TestDesc{
 	databases:   []db.DialectName{db.POSTGRES, db.MSSQL},
 	table:       TestTableAdvmTasks,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
+		var idToRead int64
+
 		var where = func(b *benchmark.Benchmark, workerId int) map[string][]string { //nolint:revive
 			return map[string][]string{
 				"origin": {"1", "2", "3"},
@@ -1797,7 +1840,7 @@ var TestSelectAdvmTasksLast = TestDesc{
 		var orderBy = func(b *benchmark.Benchmark, workerId int) []string { //nolint:revive
 			return []string{"asc(id)"}
 		}
-		testSelect(b, testDesc, nil, []string{"id"}, where, orderBy, 1)
+		testSelect(b, testDesc, nil, []string{"id"}, []interface{}{&idToRead}, where, orderBy, 1)
 	},
 }
 
@@ -1958,7 +2001,7 @@ var TestInsertAdvmDevices = TestDesc{
 
 // CreateTenantWorker creates a tenant and optionally inserts an event into the event bus
 func CreateTenantWorker(b *benchmark.Benchmark, c *DBConnector, testDesc *TestDesc, batch int) (loops int) { //nolint:revive
-	var session = c.database.Session(c.database.Context(context.Background()))
+	var session = c.database.Session(c.database.Context(context.Background(), false))
 	if txErr := session.Transact(func(tx db.DatabaseAccessor) error {
 		for i := 0; i < batch; i++ {
 			var tenantUUID, err = b.Vault.(*DBTestData).TenantsCache.CreateTenant(b.Randomizer.GetWorker(c.WorkerID), tx)
@@ -1982,7 +2025,7 @@ func CreateTenantWorker(b *benchmark.Benchmark, c *DBConnector, testDesc *TestDe
 }
 
 func CreateCTIEntityWorker(b *benchmark.Benchmark, c *DBConnector, testDesc *TestDesc, batch int) (loops int) { //nolint:revive
-	var session = c.database.Session(c.database.Context(context.Background()))
+	var session = c.database.Session(c.database.Context(context.Background(), false))
 	if txErr := session.Transact(func(tx db.DatabaseAccessor) error {
 		for i := 0; i < batch; i++ {
 			if err := b.Vault.(*DBTestData).TenantsCache.CreateCTIEntity(b.Randomizer.GetWorker(c.WorkerID), tx); err != nil {
@@ -2002,64 +2045,35 @@ func tenantAwareCTIAwareWorker(b *benchmark.Benchmark, c *DBConnector, testDesc 
 	c.Log(benchmark.LogTrace, "tenant-aware and CTI-aware SELECT test iteration")
 
 	tableName := testDesc.table.TableName
-	query := buildTenantAwareQuery(c.database.DialectName(), tableName)
+	query := buildTenantAwareQuery(tableName)
 	ctiUUID, err := b.Vault.(*DBTestData).TenantsCache.GetRandomCTIUUID(b.Randomizer.GetWorker(c.WorkerID), 0)
 	if err != nil {
 		b.Exit(err)
 	}
-
-	// TODO: Unify the query building for all dialects
-	var ctiAwareQuery string
-	switch c.database.DialectName() {
-	case db.POSTGRES:
-		ctiAwareQuery = query + fmt.Sprintf(
-			" JOIN `%[1]s` AS `cti_ent` "+
-				"ON `cti_ent`.`uuid`::uuid = `%[2]s`.`cti_entity_uuid` AND `%[2]s`.`cti_entity_uuid` IN ('%[4]s') "+
-				"LEFT JOIN `%[3]s` as `cti_prov` "+
-				"ON `cti_prov`.`tenant_id` = `tenants_child`.`id` AND `cti_prov`.`cti_entity_uuid`::uuid = `%[2]s`.`cti_entity_uuid` "+
-				"WHERE `cti_prov`.`state` = 1 OR `cti_ent`.`global_state` = 1",
-			tenants.TableNameCtiEntities, tableName, tenants.TableNameCtiProvisioning, ctiUUID.String())
-	default:
-		ctiAwareQuery = query + fmt.Sprintf(
-			" JOIN `%[1]s` AS `cti_ent` "+
-				"ON `cti_ent`.`uuid` = `%[2]s`.`cti_entity_uuid` AND `%[2]s`.`cti_entity_uuid` IN ('%[4]s') "+
-				"LEFT JOIN `%[3]s` as `cti_prov` "+
-				"ON `cti_prov`.`tenant_id` = `tenants_child`.`id` AND `cti_prov`.`cti_entity_uuid` = `%[2]s`.`cti_entity_uuid` "+
-				"WHERE `cti_prov`.`state` = 1 OR `cti_ent`.`global_state` = 1",
-			tenants.TableNameCtiEntities, tableName, tenants.TableNameCtiProvisioning, ctiUUID.String())
-	}
+	ctiAwareQuery := query + fmt.Sprintf(
+		" JOIN `%[1]s` AS `cti_ent` "+
+			"ON `cti_ent`.`uuid` = `%[2]s`.`cti_entity_uuid` AND `%[2]s`.`cti_entity_uuid` IN ('%[4]s') "+
+			"LEFT JOIN `%[3]s` as `cti_prov` "+
+			"ON `cti_prov`.`tenant_id` = `tenants_child`.`id` AND `cti_prov`.`cti_entity_uuid` = `%[2]s`.`cti_entity_uuid` "+
+			"WHERE `cti_prov`.`state` = 1 OR `cti_ent`.`global_state` = 1",
+		tenants.TableNameCtiEntities, tableName, tenants.TableNameCtiProvisioning, string(ctiUUID))
 
 	return tenantAwareGenericWorker(b, c, ctiAwareQuery, orderBy)
 }
 
 func tenantAwareWorker(b *benchmark.Benchmark, c *DBConnector, testDesc *TestDesc, orderBy string, batch int) (loops int) { //nolint:revive
-	query := buildTenantAwareQuery(c.database.DialectName(), testDesc.table.TableName)
+	query := buildTenantAwareQuery(testDesc.table.TableName)
 
 	return tenantAwareGenericWorker(b, c, query, orderBy)
 }
 
-func buildTenantAwareQuery(dialectName db.DialectName, tableName string) string {
-	var tenantAwareQuery string
-
-	// TODO: Unify the query building for all dialects
-	switch dialectName {
-	case db.POSTGRES:
-		tenantAwareQuery = fmt.Sprintf("SELECT `%[1]s`.`id` id, `%[1]s`.`tenant_id` FROM `%[1]s` "+
-			"JOIN `%[2]s` AS `tenants_child` ON ((`tenants_child`.`uuid`::uuid = `%[1]s`.`tenant_id`) AND (`tenants_child`.`is_deleted` != {true})) "+
-			"JOIN `%[3]s` AS `tenants_closure` ON ((`tenants_closure`.`child_id` = `tenants_child`.`id`) AND (`tenants_closure`.`barrier` <= 0)) "+
-			"JOIN `%[2]s` AS `tenants_parent` ON ((`tenants_parent`.`id` = `tenants_closure`.`parent_id`) "+
-			"AND (`tenants_parent`.`uuid` IN ('{tenant_uuid}')) AND (`tenants_parent`.`is_deleted` != {true}))",
-			tableName, tenants.TableNameTenants, tenants.TableNameTenantClosure)
-	default:
-		tenantAwareQuery = fmt.Sprintf("SELECT `%[1]s`.`id` id, `%[1]s`.`tenant_id` FROM `%[1]s` "+
-			"JOIN `%[2]s` AS `tenants_child` ON ((`tenants_child`.`uuid` = `%[1]s`.`tenant_id`) AND (`tenants_child`.`is_deleted` != {true})) "+
-			"JOIN `%[3]s` AS `tenants_closure` ON ((`tenants_closure`.`child_id` = `tenants_child`.`id`) AND (`tenants_closure`.`barrier` <= 0)) "+
-			"JOIN `%[2]s` AS `tenants_parent` ON ((`tenants_parent`.`id` = `tenants_closure`.`parent_id`) "+
-			"AND (`tenants_parent`.`uuid` IN ('{tenant_uuid}')) AND (`tenants_parent`.`is_deleted` != {true}))",
-			tableName, tenants.TableNameTenants, tenants.TableNameTenantClosure)
-	}
-
-	return tenantAwareQuery
+func buildTenantAwareQuery(tableName string) string {
+	return fmt.Sprintf("SELECT `%[1]s`.`id` id, `%[1]s`.`tenant_id` FROM `%[1]s` "+
+		"JOIN `%[2]s` AS `tenants_child` ON ((`tenants_child`.`uuid` = `%[1]s`.`tenant_id`) AND (`tenants_child`.`is_deleted` != {true})) "+
+		"JOIN `%[3]s` AS `tenants_closure` ON ((`tenants_closure`.`child_id` = `tenants_child`.`id`) AND (`tenants_closure`.`barrier` <= 0)) "+
+		"JOIN `%[2]s` AS `tenants_parent` ON ((`tenants_parent`.`id` = `tenants_closure`.`parent_id`) "+
+		"AND (`tenants_parent`.`uuid` IN ('{tenant_uuid}')) AND (`tenants_parent`.`is_deleted` != {true}))",
+		tableName, tenants.TableNameTenants, tenants.TableNameTenantClosure)
 }
 
 func tenantAwareGenericWorker(b *benchmark.Benchmark, c *DBConnector, query string, orderBy string) (loops int) {
@@ -2078,7 +2092,7 @@ func tenantAwareGenericWorker(b *benchmark.Benchmark, c *DBConnector, query stri
 		valTrue = "1"
 	}
 	query = strings.ReplaceAll(query, "{true}", valTrue)
-	query = strings.ReplaceAll(query, "{tenant_uuid}", uuid.String())
+	query = strings.ReplaceAll(query, "{tenant_uuid}", string(uuid))
 	if orderBy != "" {
 		query += " " + orderBy
 	}
@@ -2092,7 +2106,7 @@ func tenantAwareGenericWorker(b *benchmark.Benchmark, c *DBConnector, query stri
 
 	c.Log(benchmark.LogTrace, "executing query: %s", query)
 
-	var session = c.database.Session(c.database.Context(context.Background()))
+	var session = c.database.Session(c.database.Context(context.Background(), false))
 	if err = session.QueryRow(query).Scan(&id, &tenantID); err != nil {
 		if !errors.Is(sql.ErrNoRows, err) {
 			c.Exit(err.Error())
@@ -2344,6 +2358,23 @@ func executeAllTests(b *benchmark.Benchmark, testOpts *TestOpts) {
 }
 
 func executeOneTest(b *benchmark.Benchmark, testDesc *TestDesc) {
+	// Get current dialect
+	var dialectName = getDBDriver(b)
+
+	// Skip if current dialect is not supported by this test
+	dialectSupported := false
+	for _, supportedDialect := range testDesc.databases {
+		if dialectName == supportedDialect {
+			dialectSupported = true
+			break
+		}
+	}
+
+	if !dialectSupported {
+		// b.Log(benchmark.LogInfo, "Skipping test '%s' - not supported for dialect '%s'", testDesc.name, dialectName)
+		return
+	}
+
 	testDesc.launcherFunc(b, testDesc)
 }
 

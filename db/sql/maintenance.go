@@ -17,7 +17,11 @@ func (d *sqlDialect) GetType(dataType db.DataType) string {
 	return d.dia.getType(dataType)
 }
 
-// applyMigrations applies a set of migrations to a table
+// applyMigrations implements part of the databaseMigrator interface
+// It applies DDL statements to a table by:
+// 1. Applying default query patches
+// 2. Splitting migrations into separate statements based on dialect
+// 3. Executing each statement in sequence
 func applyMigrations(q querier, d dialect, tableName, tableMigrationSQL string) error {
 	var migrationQueries []string
 
@@ -49,7 +53,11 @@ func applyMigrations(q querier, d dialect, tableName, tableMigrationSQL string) 
 	return nil
 }
 
-// tableExists checks if a table exists
+// tableExists implements part of the databaseMigrator interface
+// It checks if a table exists by:
+// 1. Constructing a dialect-specific query to check table existence
+// 2. Using queryRowContext to execute a COUNT query
+// 3. Returning true if count > 0
 func tableExists(q querier, d dialect, name string) (bool, error) {
 	var query string
 	var args = []interface{}{name}
@@ -187,7 +195,13 @@ func constructSQLDDLQuery(d dialect, tableName string, tableDefinition *db.Table
 	return query
 }
 
-// createTable creates a table if it doesn't exist
+// createTable implements part of the databaseMigrator interface
+// It creates a new table by:
+// 1. Validating input parameters
+// 2. Creating select query builder
+// 3. Checking if table already exists
+// 4. Constructing DDL query if needed
+// 5. Applying migrations to create the table
 func createTable(q querier, d dialect, name string, tableDefinition *db.TableDefinition, ddlQuery string) error {
 	if name == "" {
 		return nil
@@ -223,7 +237,11 @@ func createTable(q querier, d dialect, name string, tableDefinition *db.TableDef
 	return nil
 }
 
-// dropTable drops a table if it exists
+// dropTable implements part of the databaseMigrator interface
+// It removes a table by:
+// 1. Checking if table exists (for TRUNCATE)
+// 2. Using either TRUNCATE or DROP TABLE based on useTruncate flag
+// 3. Executing the appropriate query
 func dropTable(q querier, d dialect, name string, useTruncate bool) error {
 	var query string
 	var args = []interface{}{name}
@@ -251,7 +269,11 @@ func dropTable(q querier, d dialect, name string, useTruncate bool) error {
 	return nil
 }
 
-// indexExists checks if an index exists
+// indexExists implements part of the databaseMigrator interface
+// It checks if an index exists by:
+// 1. Constructing dialect-specific query to check index existence
+// 2. Using queryRowContext to execute a COUNT query
+// 3. Returning true if count > 0
 func indexExists(q querier, d dialect, indexName, tableName string) (bool, error) {
 	var qry string
 	var args = []interface{}{tableName, indexName}
@@ -323,7 +345,11 @@ func makeIndexName(tableName string, columns string, id int) string {
 	return fmt.Sprintf("%s_idx_%s_%d", tableName, name, id)
 }
 
-// createIndex creates an index if it doesn't exist for a given table and columns
+// createIndex implements part of the databaseMigrator interface
+// It creates a new index by:
+// 1. Validating input parameters
+// 2. Checking if index already exists
+// 3. Creating index using standard CREATE INDEX syntax
 func createIndex(q querier, d dialect, indexName string, tableName string, columns []string, indexType db.IndexType) error {
 	if tableName == "" || len(columns) == 0 {
 		return nil
@@ -341,7 +367,11 @@ func createIndex(q querier, d dialect, indexName string, tableName string, colum
 	return err
 }
 
-// dropIndex drops an index if it exists
+// dropIndex implements part of the databaseMigrator interface
+// It removes an index by:
+// 1. Checking if index exists
+// 2. Using dialect-specific DROP INDEX syntax
+// 3. Executing the drop query
 func dropIndex(q querier, d dialect, indexName, tableName string) error {
 	if exists, err := indexExists(q, d, indexName, tableName); err != nil {
 		return fmt.Errorf("db: cannot check index '%v' existence, error: %v", indexName, err)
@@ -368,7 +398,12 @@ func dropIndex(q querier, d dialect, indexName, tableName string) error {
 	return err
 }
 
-// readConstraints reads constraints from the database
+// readConstraints implements part of the databaseMigrator interface
+// It reads database constraints by:
+// 1. Supporting only PostgreSQL currently
+// 2. Querying pg_constraint system table
+// 3. Filtering for foreign key constraints
+// 4. Returning array of Constraint objects
 func readConstraints(q querier, d dialect) ([]db.Constraint, error) {
 	if d.name() != db.POSTGRES {
 		return nil, nil
@@ -407,7 +442,10 @@ func readConstraints(q querier, d dialect) ([]db.Constraint, error) {
 	return constraints, nil
 }
 
-// addConstraints restores constraints in the database
+// addConstraints implements part of the databaseMigrator interface
+// It adds new constraints by:
+// 1. Supporting only PostgreSQL currently
+// 2. Executing ALTER TABLE ADD CONSTRAINT for each constraint
 func addConstraints(q querier, d dialect, constraints []db.Constraint) error {
 	if d.name() != db.POSTGRES || constraints == nil {
 		return nil
@@ -443,7 +481,11 @@ func dropConstraints(q querier, d dialect, constraints []db.Constraint) error {
 	return nil
 }
 
-// createSequence creates a sequence if it doesn't exist
+// createSequence implements part of the databaseMigrator interface
+// It creates a new sequence by:
+// 1. Using dialect-specific sequence creation syntax
+// 2. For SQLite: Creating a table to simulate sequences
+// 3. For other SQL databases: Using CREATE SEQUENCE
 func createSequence(q querier, d dialect, sequenceName string) error {
 	switch d.name() {
 	case db.SQLITE:

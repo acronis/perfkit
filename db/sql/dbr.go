@@ -217,8 +217,13 @@ func (d *dbrQuerier) queryRowContext(ctx context.Context, query string, args ...
 func (d *dbrQuerier) queryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
 	return d.be.QueryContext(ctx, query, args...)
 }
-func (d *dbrQuerier) prepareContext(ctx context.Context, query string) (*sql.Stmt, error) {
-	return d.be.PrepareContext(ctx, query)
+func (d *dbrQuerier) prepareContext(ctx context.Context, query string) (sqlStatement, error) {
+	var stmt, err = d.be.PrepareContext(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+
+	return &sqlStmt{stmt}, nil
 }
 func (d *dbrQuerier) begin(ctx context.Context) (transaction, error) {
 	be, err := d.be.BeginTx(ctx, nil)
@@ -238,8 +243,13 @@ func (t *dbrTransaction) queryRowContext(ctx context.Context, query string, args
 func (t *dbrTransaction) queryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
 	return t.be.QueryContext(ctx, query, args...)
 }
-func (t *dbrTransaction) prepareContext(ctx context.Context, query string) (*sql.Stmt, error) {
-	return t.be.PrepareContext(ctx, query)
+func (t *dbrTransaction) prepareContext(ctx context.Context, query string) (sqlStatement, error) {
+	var stmt, err = t.be.PrepareContext(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+
+	return &sqlStmt{stmt}, nil
 }
 func (t *dbrTransaction) commit() error {
 	return t.be.Commit()
