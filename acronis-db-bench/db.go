@@ -30,6 +30,7 @@ type DatabaseOpts struct {
 	LogQueries   bool `long:"log-queries" description:"log queries" required:"false"`
 	LogReadRows  bool `long:"log-read-rows" description:"log read rows" required:"false"`
 	LogQueryTime bool `long:"log-query-time" description:"log query time" required:"false"`
+	LogSystemOps bool `long:"log-system-operations" description:"log system operations on database side" required:"false"`
 
 	DontCleanup bool `long:"dont-cleanup" description:"do not cleanup DB content before/after the test in '-t all' mode" required:"false"`
 	UseTruncate bool `long:"use-truncate" description:"use TRUNCATE instead of DROP TABLE in cleanup procedure" required:"false"`
@@ -133,7 +134,7 @@ func NewDBConnector(dbOpts *DatabaseOpts, workerID int, logger *benchmark.Logger
 		return c, nil
 	}
 
-	var queryLogger, readRowsLogger, explainLogger db.Logger
+	var queryLogger, readRowsLogger, explainLogger, systemLogger db.Logger
 	if dbOpts.LogQueries {
 		logger.LogLevel = benchmark.LogInfo
 		queryLogger = &dbLogger{level: benchmark.LogInfo, worker: workerID, logger: logger}
@@ -149,6 +150,11 @@ func NewDBConnector(dbOpts *DatabaseOpts, workerID int, logger *benchmark.Logger
 		explainLogger = &dbLogger{level: benchmark.LogInfo, worker: workerID, logger: logger}
 	}
 
+	if dbOpts.LogSystemOps {
+		logger.LogLevel = benchmark.LogInfo
+		systemLogger = &dbLogger{level: benchmark.LogInfo, worker: workerID, logger: logger}
+	}
+
 	var dbConn, err = db.Open(db.Config{
 		ConnString:               dbOpts.ConnString,
 		MaxOpenConns:             dbOpts.MaxOpenConns,
@@ -159,6 +165,7 @@ func NewDBConnector(dbOpts *DatabaseOpts, workerID int, logger *benchmark.Logger
 		QueryLogger:    queryLogger,
 		ReadRowsLogger: readRowsLogger,
 		ExplainLogger:  explainLogger,
+		SystemLogger:   systemLogger,
 	})
 	if err != nil {
 		return nil, err

@@ -115,7 +115,7 @@ func (c *dbrConnector) ConnectionPool(cfg db.Config) (db.Database, error) {
 	}
 
 	if dia.name() == db.POSTGRES {
-		cs, dia, err = initializePostgresDB(cfg.ConnString)
+		cs, dia, err = initializePostgresDB(cfg.ConnString, cfg.SystemLogger)
 		if err != nil {
 			return nil, err
 		}
