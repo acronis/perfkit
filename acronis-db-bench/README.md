@@ -64,6 +64,7 @@ Replace <connection_string> with the data source for your database.
   --log-queries                       log all queries
   --log-read-rows                     log all read rows
   --log-query-time                    log query time
+  --log-system-operations             log system operations
   --dont-cleanup                      do not cleanup DB content before/after the test in '-t all' mode
   --use-truncate                      use TRUNCATE instead of DROP TABLE in cleanup procedure
 ```

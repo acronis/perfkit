@@ -107,6 +107,10 @@ type embeddedPostgresLogger struct {
 }
 
 func (l embeddedPostgresLogger) Write(p []byte) (n int, err error) {
+	if l.logger == nil {
+		return len(p), nil
+	}
+
 	message := string(p)
 
 	var lines = strings.Split(message, "\n")
@@ -127,14 +131,18 @@ func getEmbeddedPostgresDataDir(dir string, logger db.Logger) (string, error) {
 	}
 
 	if _, err := os.Stat(dir); os.IsNotExist(err) {
-		logger.Log("creating Embedded Postgres data dir: " + dir)
+		if logger != nil {
+			logger.Log("creating Embedded Postgres data dir: " + dir)
+		}
 		err = os.MkdirAll(dir, os.ModePerm)
 		if err != nil {
 			return "", fmt.Errorf("failed to create data directory: %v", err)
 		}
 	}
 
-	logger.Log("using Embedded Postgres data dir: " + dir)
+	if logger != nil {
+		logger.Log("using Embedded Postgres data dir: " + dir)
+	}
 
 	return dir, nil
 }
@@ -173,8 +181,12 @@ func Launch(cs string, opts *Opts, logger db.Logger) (string, error) {
 
 		// Start the embedded Postgres instance.
 		if initErr = embeddedPostgresInstance.Start(); initErr != nil {
-			embeddedPostgresInstance = nil
-			initErr = fmt.Errorf("embedded Postgres DB start error: %v", initErr)
+			if initErr.Error() == fmt.Sprintf("process already listening on port %d", port) {
+				initErr = nil
+			} else {
+				embeddedPostgresInstance = nil
+				initErr = fmt.Errorf("embedded Postgres DB start error: %v", initErr)
+			}
 		}
 	})
 

@@ -268,7 +268,7 @@ func postgresSchemaAndConnString(cs string) (string, string, error) {
 	return schemaName, cs, nil
 }
 
-func initializePostgresDB(cs string) (string, dialect, error) {
+func initializePostgresDB(cs string, logger db.Logger) (string, dialect, error) {
 	var schemaName, cleanedConnectionString, err = postgresSchemaAndConnString(cs)
 	if err != nil {
 		return "", nil, fmt.Errorf("db: postgres: %v", err)
@@ -281,11 +281,12 @@ func initializePostgresDB(cs string) (string, dialect, error) {
 
 	var embeddedPostgresEnabled bool
 	if embeddedPostgresOpts != nil && embeddedPostgresOpts.Enabled {
-		cs, err = pgmbed.Launch(cs, embeddedPostgresOpts, nil)
+		cs, err = pgmbed.Launch(cs, embeddedPostgresOpts, logger)
 		if err != nil {
 			return "", nil, fmt.Errorf("db: cannot initialize embedded postgres: %v", err)
 		}
 		embeddedPostgresEnabled = true
+		cleanedConnectionString = cs
 	}
 
 	return cleanedConnectionString, &pgDialect{schemaName: schemaName, embedded: embeddedPostgresEnabled}, err
@@ -295,7 +296,7 @@ func (c *pgConnector) ConnectionPool(cfg db.Config) (db.Database, error) {
 	dbo := &sqlDatabase{}
 	var rwc *sql.DB
 
-	var cs, dia, err = initializePostgresDB(cfg.ConnString)
+	var cs, dia, err = initializePostgresDB(cfg.ConnString, cfg.SystemLogger)
 	if err != nil {
 		return nil, err
 	}

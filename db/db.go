@@ -448,6 +448,25 @@ type Config struct {
 	// - Works with Select(), Query(), and QueryRow() operations
 	// - Returns error if explain not supported by dialect
 	ExplainLogger Logger
+
+	// SystemLogger logs system-level database operations and events.
+	// Primary uses:
+	// 1. Embedded PostgreSQL:
+	//    - Logs database initialization and shutdown
+	//    - Reports data directory creation and usage
+	//    - Captures PostgreSQL server logs
+	//    Example output:
+	//    ```
+	//    -- embedded postgres: creating data dir: /home/user/.embedded-postgres-go/data
+	//    -- embedded postgres: using data dir: /home/user/.embedded-postgres-go/data
+	//    -- embedded postgres: database system is ready to accept connections
+	//    ```
+	//
+	// 2. Other Database Systems:
+	//    - Logs critical system events
+	//    - Reports initialization status
+	//    - Captures server-side messages
+	SystemLogger Logger
 }
 
 // Open opens a database connection using the provided configuration.
