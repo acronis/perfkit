@@ -85,12 +85,6 @@ type DBTestData struct {
 	scores map[string][]benchmark.Score
 }
 
-// DBWorkerData is a structure to store all the worker data
-type DBWorkerData struct {
-	workingConn  *DBConnector
-	tenantsCache *DBConnector
-}
-
 var header = strings.Repeat("=", 120) + "\n"
 
 // Main is the main function of the acronis-db-bench
@@ -213,12 +207,14 @@ func Main() {
 			var workerData = b.WorkerData[workerId].(*DBWorkerData)
 
 			if workerData.workingConn != nil {
-				workerData.workingConn.database.Close()
+				workerData.workingConn.Close()
 			}
 
 			if workerData.tenantsCache != nil {
-				workerData.tenantsCache.database.Close()
+				workerData.tenantsCache.Close()
 			}
+
+			b.WorkerData[workerId] = nil
 		}
 	}
 
@@ -236,6 +232,9 @@ func Main() {
 	if err != nil {
 		b.Exit("Failed to get database info: %v", err)
 	}
+
+	// Has to be returned back to connection pool because it is not used anywhere else
+	c.Release()
 
 	if testOpts.BenchOpts.Info || b.Logger.LogLevel > benchmark.LogInfo {
 		if testOpts.BenchOpts.Info {

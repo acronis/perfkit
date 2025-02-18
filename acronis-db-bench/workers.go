@@ -34,6 +34,7 @@ func initWorker(b *benchmark.Benchmark, workerID int, testDesc *TestDesc, rowsRe
 			tenantCacheDBOpts.ConnString = b.TestOpts.(*TestOpts).BenchOpts.TenantConnString
 
 			if workerData.tenantsCache, err = NewDBConnector(&tenantCacheDBOpts, workerID, b.Logger, 1); err != nil {
+				workerData.release()
 				b.Exit("db: cannot create tenants cache connection: %v", err)
 			}
 		}
@@ -120,8 +121,35 @@ func initCommon(b *benchmark.Benchmark, testDesc *TestDesc, rowsRequired uint64)
 	}
 
 	b.FinishPerWorker = func(workerId int) {
-		conn := b.WorkerData[workerId].(*DBWorkerData).workingConn
-		conn.Release()
+		if workerData, ok := b.WorkerData[workerId].(*DBWorkerData); ok {
+			workerData.release()
+		}
+	}
+
+	b.PreExit = func() {
+		if b.Vault != nil {
+			if testData, ok := b.Vault.(*DBTestData); ok {
+				// First stop the event bus if it exists
+				if testData.EventBus != nil {
+					testData.EventBus.Stop()
+				}
+
+				// Shutdown the connection pool first
+				connPool.shutdown()
+
+				// Then cleanup worker data
+				for workerId := range b.WorkerData {
+					if workerData, ok := b.WorkerData[workerId].(*DBWorkerData); ok {
+						if workerData.workingConn != nil {
+							workerData.workingConn.Close()
+						}
+						if workerData.tenantsCache != nil {
+							workerData.tenantsCache.Close()
+						}
+					}
+				}
+			}
+		}
 	}
 }
 

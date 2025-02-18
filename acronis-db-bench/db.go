@@ -38,8 +38,9 @@ type DatabaseOpts struct {
 
 // dbConnectorsPool is a simple connection pool, required not to saturate DB connection pool
 type dbConnectorsPool struct {
-	lock sync.Mutex
-	pool map[string]*DBConnector
+	lock      sync.Mutex
+	pool      map[string]*DBConnector
+	isClosing bool // New field to track shutdown state
 }
 
 // key returns a unique key for the connection pool
@@ -54,11 +55,15 @@ func (p *dbConnectorsPool) take(dbOpts *DatabaseOpts, workerID int) *DBConnector
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
+	// Don't give out new connections if we're shutting down
+	if p.isClosing {
+		return nil
+	}
+
 	conn, exists := p.pool[k]
 	if exists {
 		delete(p.pool, k)
 		conn.Log(benchmark.LogTrace, "taking connection from the connection pool")
-
 		return conn
 	}
 
@@ -67,17 +72,55 @@ func (p *dbConnectorsPool) take(dbOpts *DatabaseOpts, workerID int) *DBConnector
 
 // put puts a connection to the pool
 func (p *dbConnectorsPool) put(conn *DBConnector) {
+	if conn == nil {
+		return
+	}
+
 	k := p.key(conn.DbOpts.ConnString, conn.WorkerID)
 
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
+	// If we're shutting down, close the connection instead of returning it to the pool
+	if p.isClosing {
+		if conn.database != nil {
+			conn.database.Close()
+			conn.database = nil
+		}
+		return
+	}
+
+	// Check if there's already a connection in the pool
 	_, exists := p.pool[k]
 	if exists {
-		FatalError("trying to put connection while another connection in the pool already exists")
+		// If there is, close the new connection instead of panicking
+		if conn.database != nil {
+			conn.database.Close()
+			conn.database = nil
+		}
+		conn.Log(benchmark.LogWarn, "connection already exists in pool, closing new connection")
+		return
 	}
+
 	p.pool[k] = conn
 	conn.Log(benchmark.LogTrace, "releasing connection to the connection pool")
+}
+
+// shutdown gracefully closes all connections in the pool
+func (p *dbConnectorsPool) shutdown() {
+	p.lock.Lock()
+	defer p.lock.Unlock()
+
+	p.isClosing = true
+
+	// Close all connections in the pool
+	for k, conn := range p.pool {
+		if conn.database != nil {
+			conn.database.Close()
+			conn.database = nil
+		}
+		delete(p.pool, k)
+	}
 }
 
 // newDBConnectorsPool creates a new connection pool
@@ -109,6 +152,21 @@ func connectionsChecker(conn *DBConnector) {
 			}
 		}
 		time.Sleep(3 * time.Second)
+	}
+}
+
+// DBWorkerData is a structure to store all the worker data
+type DBWorkerData struct {
+	workingConn  *DBConnector
+	tenantsCache *DBConnector
+}
+
+func (d *DBWorkerData) release() {
+	if d.workingConn != nil {
+		d.workingConn.Release()
+	}
+	if d.tenantsCache != nil {
+		d.tenantsCache.Release()
 	}
 }
 
@@ -184,9 +242,25 @@ func NewDBConnector(dbOpts *DatabaseOpts, workerID int, logger *benchmark.Logger
 	return c, nil
 }
 
-// Release releases the connection to the pool
+// Release safely releases the connection back to the pool
 func (c *DBConnector) Release() {
-	connPool.put(c)
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	if c.database != nil {
+		connPool.put(c)
+	}
+}
+
+// Close forcefully closes the connection
+func (c *DBConnector) Close() {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	if c.database != nil {
+		c.database.Close()
+		c.database = nil
+	}
 }
 
 // SetLogLevel sets log level
