@@ -2376,6 +2376,17 @@ func executeOneTest(b *benchmark.Benchmark, testDesc *TestDesc) {
 	}
 
 	testDesc.launcherFunc(b, testDesc)
+
+	// b.Log(benchmark.LogInfo, "Test '%s' completed", testDesc.name)
+	select {
+	case <-b.ShutdownCh:
+		b.Log(benchmark.LogInfo, -1, "Gracefully stopping test execution...")
+		b.Exit()
+	default:
+		if b.NeedToExit {
+			b.Exit()
+		}
+	}
 }
 
 func executeAllTestsOnce(b *benchmark.Benchmark, testOpts *TestOpts, workers int) {
