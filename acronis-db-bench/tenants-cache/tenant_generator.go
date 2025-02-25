@@ -522,7 +522,7 @@ func (tc *TenantsCache) PopulateUuidsFromDB(database db.Database) {
 		tc.parentUUIDs[string(storedUUID)] = parents
 	}
 
-	rand.currentID = int64(getMax(database, "id"))
+	rand.currentID.Store(int64(getMax(database, "id")))
 	rand.maxLevel = getMax(database, "nesting_level")
 	if rand.maxLevel >= len(rand.levelTotal) {
 		rand.maxLevel = len(rand.levelTotal) - 1
@@ -710,7 +710,7 @@ type tenantStructureRandomizer struct {
 	weightSumToTenantStructure map[int]tenantStructureData
 	totalWeight                int
 	maxLevel                   int
-	currentID                  int64
+	currentID                  atomic.Int64
 	levelKindIDMap             sync.Map
 }
 
@@ -839,7 +839,7 @@ func (tc *TenantsCache) createRandomTenant(rw *benchmark.RandomizerWorker) (*Ten
 	}
 
 	uuid := guuid.New().String()
-	newID := atomic.AddInt64(&rnd.currentID, 1)
+	newID := rnd.currentID.Add(1)
 	t := TenantObj{
 		ID:              newID,
 		UUID:            TenantUUID(uuid),
