@@ -1998,7 +1998,7 @@ var TestInsertAdvmDevices = TestDesc{
 // TestInsertEmailNested inserts email data into the 'email_nested' table
 var TestInsertEmailNested = TestDesc{
 	name:        "insert-email-nested",
-	metric:      "rows/sec",
+	metric:      "emails/sec",
 	description: "insert an email data into the 'email_nested' table",
 	category:    TestInsert,
 	isReadonly:  false,
@@ -2006,7 +2006,83 @@ var TestInsertEmailNested = TestDesc{
 	databases:   VECTOR,
 	table:       TestTableEmailNested,
 	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
-		testInsertGeneric(b, testDesc)
+		testInsertElasticsearch(b, testDesc)
+	},
+}
+
+// TestAddHistoryToEmailNested update email data with history into the 'email_nested' table
+var TestAddHistoryToEmailNested = TestDesc{
+	name:        "add-email-history-nested",
+	metric:      "histories/sec",
+	description: "add history of an email in the 'email_nested' table",
+	category:    TestUpdate,
+	isReadonly:  false,
+	isDBRTest:   false,
+	databases:   VECTOR,
+	table:       TestTableEmailNested,
+	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
+		testAddHistoryNestedElasticsearch(b, testDesc)
+	},
+}
+
+// TestDeleteHistoryToEmailNested delete history of email data into the 'email_nested' table
+var TestDeleteHistoryToEmailNested = TestDesc{
+	name:        "delete-email-history-nested",
+	metric:      "histories/sec",
+	description: "add history of an email in the 'email_nested' table",
+	category:    TestDelete,
+	isReadonly:  false,
+	isDBRTest:   false,
+	databases:   VECTOR,
+	table:       TestTableEmailNested,
+	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
+		testDeleteHistoryNestedES(b, testDesc)
+	},
+}
+
+// TestInsertEmailParentChild inserts email data into the 'email_parent_child' table
+var TestInsertEmailParentChild = TestDesc{
+	name:        "insert-email-parent-child",
+	metric:      "emails/sec",
+	description: "insert an email data into the 'email_pc' table",
+	category:    TestInsert,
+	isReadonly:  false,
+	isDBRTest:   false,
+	databases:   VECTOR,
+	table:       TestTableEmailParentChild,
+	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
+		//testInsertGeneric(b, testDesc)
+		testInsertPCElasticsearch(b, testDesc)
+	},
+}
+
+// TestAddHistoryToEmailParentChild update email data with history into the 'email_pc' table
+var TestAddHistoryToEmailParentChild = TestDesc{
+	name:        "add-email-history-parent-child",
+	metric:      "histories/sec",
+	description: "add history of an email in the 'email_pc' table",
+	category:    TestUpdate,
+	isReadonly:  false,
+	isDBRTest:   false,
+	databases:   VECTOR,
+	table:       TestTableEmailParentChild,
+	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
+		testAddHistoryPCElasticsearch(b, testDesc)
+	},
+}
+
+// TestDeleteHistoryToEmailParentChild delete history of email data into the 'email_pc' table
+var TestDeleteHistoryToEmailParentChild = TestDesc{
+	name:        "delete-email-history-parent-child",
+	metric:      "histories/sec",
+	description: "add history of an email in the 'email_pc' table",
+	category:    TestUpdate,
+	isReadonly:  false,
+	isDBRTest:   false,
+	databases:   VECTOR,
+	table:       TestTableEmailParentChild,
+	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
+		testDeleteHistoryPCES(b, testDesc)
 	},
 }
 
@@ -2203,6 +2279,66 @@ var TestSelectHeavyLastTenantCTI = TestDesc{
 	},
 }
 
+// TestSearchEmailNested selects all emails with a specific history type on nested mapping
+var TestSearchEmailNested = TestDesc{
+	name:        "search-email-nested",
+	metric:      "emails/sec",
+	description: "select all emails with a specific history type",
+	category:    TestSelect,
+	isReadonly:  true,
+	isDBRTest:   false,
+	databases:   VECTOR,
+	table:       TestTableEmailNested,
+	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
+		testSearchNestedElasticsearch(b, testDesc)
+	},
+}
+
+// TestSearchEmailPC selects all emails with a specific history type on parent-child mapping
+var TestSearchEmailPC = TestDesc{
+	name:        "search-email-parent-child",
+	metric:      "emails/sec",
+	description: "select all emails with a specific history type",
+	category:    TestSelect,
+	isReadonly:  true,
+	isDBRTest:   false,
+	databases:   VECTOR,
+	table:       TestTableEmailParentChild,
+	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
+		testSearchPCElasticsearch(b, testDesc)
+	},
+}
+
+// TestListEmailNested list all emails with their history list on nested mapping
+var TestListEmailNested = TestDesc{
+	name:        "list-email-nested",
+	metric:      "emails/sec",
+	description: "list all emails with its history details",
+	category:    TestSelect,
+	isReadonly:  true,
+	isDBRTest:   false,
+	databases:   VECTOR,
+	table:       TestTableEmailNested,
+	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
+		testListNestedElasticsearch(b, testDesc)
+	},
+}
+
+// TestListEmailPC list all emails with their history list on parent-child mapping
+var TestListEmailPC = TestDesc{
+	name:        "list-email-parent-child",
+	metric:      "emails/sec",
+	description: "list all emails with its history details",
+	category:    TestSelect,
+	isReadonly:  true,
+	isDBRTest:   false,
+	databases:   VECTOR,
+	table:       TestTableEmailParentChild,
+	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
+		testListPCElasticsearch(b, testDesc)
+	},
+}
+
 // GetTests returns all tests in the package for execution
 func GetTests() ([]*TestGroup, map[string]*TestDesc) {
 	allTests = NewTestGroup("all tests")
@@ -2331,6 +2467,15 @@ func GetTests() ([]*TestGroup, map[string]*TestDesc) {
 	tg.add(&TestInsertAdvmDevices)
 
 	tg.add(&TestInsertEmailNested)
+	tg.add(&TestInsertEmailParentChild)
+	tg.add(&TestSearchEmailNested)
+	tg.add(&TestSearchEmailPC)
+	tg.add(&TestListEmailNested)
+	tg.add(&TestListEmailPC)
+	tg.add(&TestAddHistoryToEmailNested)
+	tg.add(&TestAddHistoryToEmailParentChild)
+	tg.add(&TestDeleteHistoryToEmailNested)
+	tg.add(&TestDeleteHistoryToEmailParentChild)
 
 	ret := make(map[string]*TestDesc)
 
