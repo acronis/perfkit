@@ -1995,6 +1995,21 @@ var TestInsertAdvmDevices = TestDesc{
 	},
 }
 
+// TestInsertEmailNested inserts email data into the 'email_nested' table
+var TestInsertEmailNested = TestDesc{
+	name:        "insert-email-nested",
+	metric:      "rows/sec",
+	description: "insert an email data into the 'email_nested' table",
+	category:    TestInsert,
+	isReadonly:  false,
+	isDBRTest:   false,
+	databases:   VECTOR,
+	table:       TestTableEmailNested,
+	launcherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
+		testInsertGeneric(b, testDesc)
+	},
+}
+
 /*
  * Other
  */
@@ -2314,6 +2329,8 @@ func GetTests() ([]*TestGroup, map[string]*TestDesc) {
 	tg.add(&TestInsertAdvmArchives)
 	tg.add(&TestInsertAdvmVaults)
 	tg.add(&TestInsertAdvmDevices)
+
+	tg.add(&TestInsertEmailNested)
 
 	ret := make(map[string]*TestDesc)
 

@@ -200,8 +200,8 @@ var TestTableLight = TestTable{
 	TableDefinition: func(dialect db.DialectName) *db.TableDefinition {
 		return &db.TableDefinition{
 			TableRows: []db.TableRow{
-				{Name: "id", Type: db.DataTypeBigIntAutoIncPK},
-				{Name: "uuid", Type: db.DataTypeUUID, NotNull: true, Indexed: true},
+				db.TableRowItem{Name: "id", Type: db.DataTypeBigIntAutoIncPK},
+				db.TableRowItem{Name: "uuid", Type: db.DataTypeUUID, NotNull: true, Indexed: true},
 			},
 		}
 	},
@@ -227,11 +227,11 @@ var TestTableMedium = TestTable{
 	TableDefinition: func(dialect db.DialectName) *db.TableDefinition {
 		return &db.TableDefinition{
 			TableRows: []db.TableRow{
-				{Name: "id", Type: db.DataTypeBigIntAutoIncPK},
-				{Name: "uuid", Type: db.DataTypeVarCharUUID, NotNull: true, Indexed: true},
-				{Name: "tenant_id", Type: db.DataTypeVarCharUUID, NotNull: true, Indexed: true},
-				{Name: "euc_id", Type: db.DataTypeInt, NotNull: true, Indexed: true},
-				{Name: "progress", Type: db.DataTypeInt},
+				db.TableRowItem{Name: "id", Type: db.DataTypeBigIntAutoIncPK},
+				db.TableRowItem{Name: "uuid", Type: db.DataTypeVarCharUUID, NotNull: true, Indexed: true},
+				db.TableRowItem{Name: "tenant_id", Type: db.DataTypeVarCharUUID, NotNull: true, Indexed: true},
+				db.TableRowItem{Name: "euc_id", Type: db.DataTypeInt, NotNull: true, Indexed: true},
+				db.TableRowItem{Name: "progress", Type: db.DataTypeInt},
 			},
 		}
 	},
@@ -371,104 +371,104 @@ var TestTableHeavy = TestTable{
 		var tableRows []db.TableRow
 
 		tableRows = append(tableRows,
-			db.TableRow{Name: "id", Type: db.DataTypeBigIntAutoIncPK, Indexed: true},
-			db.TableRow{Name: "uuid", Type: db.DataTypeUUID, NotNull: true, Indexed: true},
-			db.TableRow{Name: "checksum", Type: db.DataTypeVarChar64, NotNull: true},
-			db.TableRow{Name: "cti_entity_uuid", Type: db.DataTypeVarChar36, Indexed: true},
+			db.TableRowItem{Name: "id", Type: db.DataTypeBigIntAutoIncPK, Indexed: true},
+			db.TableRowItem{Name: "uuid", Type: db.DataTypeUUID, NotNull: true, Indexed: true},
+			db.TableRowItem{Name: "checksum", Type: db.DataTypeVarChar64, NotNull: true},
+			db.TableRowItem{Name: "cti_entity_uuid", Type: db.DataTypeVarChar36, Indexed: true},
 		)
 
 		if dialect == db.CLICKHOUSE {
 			// Needed for primary key
 			tableRows = append(tableRows,
-				db.TableRow{Name: "partner_id", Type: db.DataTypeUUID, NotNull: true, Indexed: true},
-				db.TableRow{Name: "customer_id", Type: db.DataTypeUUID, NotNull: true, Indexed: true},
-				db.TableRow{Name: "tenant_id", Type: db.DataTypeUUID, NotNull: true, Indexed: true},
+				db.TableRowItem{Name: "partner_id", Type: db.DataTypeUUID, NotNull: true, Indexed: true},
+				db.TableRowItem{Name: "customer_id", Type: db.DataTypeUUID, NotNull: true, Indexed: true},
+				db.TableRowItem{Name: "tenant_id", Type: db.DataTypeUUID, NotNull: true, Indexed: true},
 			)
 		} else if dialect == db.ELASTICSEARCH {
 			tableRows = append(tableRows,
-				db.TableRow{Name: "tenant_id", Type: db.DataTypeUUID, NotNull: true, Indexed: true},
-				db.TableRow{Name: "tenant_vis_list", Type: db.DataTypeUUID, NotNull: true, Indexed: true},
+				db.TableRowItem{Name: "tenant_id", Type: db.DataTypeUUID, NotNull: true, Indexed: true},
+				db.TableRowItem{Name: "tenant_vis_list", Type: db.DataTypeUUID, NotNull: true, Indexed: true},
 			)
 		} else {
 			tableRows = append(tableRows,
-				db.TableRow{Name: "tenant_id", Type: db.DataTypeVarChar36, NotNull: true, Indexed: true},
-				db.TableRow{Name: "euc_id", Type: db.DataTypeVarChar64, NotNull: true, Indexed: true},
+				db.TableRowItem{Name: "tenant_id", Type: db.DataTypeVarChar36, NotNull: true, Indexed: true},
+				db.TableRowItem{Name: "euc_id", Type: db.DataTypeVarChar64, NotNull: true, Indexed: true},
 			)
 		}
 
 		tableRows = append(tableRows,
-			db.TableRow{Name: "workflow_id", Type: db.DataTypeBigInt, NotNull: true, Indexed: true},
-			db.TableRow{Name: "state", Type: db.DataTypeInt, NotNull: true, Indexed: true},
-			db.TableRow{Name: "type", Type: db.DataTypeVarChar64, NotNull: true, Indexed: true},
-			db.TableRow{Name: "queue", Type: db.DataTypeVarChar64, NotNull: true, Indexed: true},
-			db.TableRow{Name: "priority", Type: db.DataTypeInt, NotNull: true, Indexed: true},
+			db.TableRowItem{Name: "workflow_id", Type: db.DataTypeBigInt, NotNull: true, Indexed: true},
+			db.TableRowItem{Name: "state", Type: db.DataTypeInt, NotNull: true, Indexed: true},
+			db.TableRowItem{Name: "type", Type: db.DataTypeVarChar64, NotNull: true, Indexed: true},
+			db.TableRowItem{Name: "queue", Type: db.DataTypeVarChar64, NotNull: true, Indexed: true},
+			db.TableRowItem{Name: "priority", Type: db.DataTypeInt, NotNull: true, Indexed: true},
 
-			db.TableRow{Name: "issuer_id", Type: db.DataTypeVarChar64, NotNull: true, Indexed: true},
-			db.TableRow{Name: "issuer_cluster_id", Type: db.DataTypeVarChar64, Indexed: true},
+			db.TableRowItem{Name: "issuer_id", Type: db.DataTypeVarChar64, NotNull: true, Indexed: true},
+			db.TableRowItem{Name: "issuer_cluster_id", Type: db.DataTypeVarChar64, Indexed: true},
 
-			db.TableRow{Name: "heartbeat_ivl", Type: db.DataTypeBigInt},
-			db.TableRow{Name: "queue_timeout", Type: db.DataTypeBigInt},
-			db.TableRow{Name: "ack_timeout", Type: db.DataTypeBigInt},
-			db.TableRow{Name: "exec_timeout", Type: db.DataTypeBigInt},
-			db.TableRow{Name: "life_time", Type: db.DataTypeBigInt},
+			db.TableRowItem{Name: "heartbeat_ivl", Type: db.DataTypeBigInt},
+			db.TableRowItem{Name: "queue_timeout", Type: db.DataTypeBigInt},
+			db.TableRowItem{Name: "ack_timeout", Type: db.DataTypeBigInt},
+			db.TableRowItem{Name: "exec_timeout", Type: db.DataTypeBigInt},
+			db.TableRowItem{Name: "life_time", Type: db.DataTypeBigInt},
 
-			db.TableRow{Name: "max_assign_count", Type: db.DataTypeInt, NotNull: true},
-			db.TableRow{Name: "assign_count", Type: db.DataTypeInt, NotNull: true},
-			db.TableRow{Name: "cancellable", Type: db.DataTypeBoolean, NotNull: true},
-			db.TableRow{Name: "cancel_requested", Type: db.DataTypeBoolean, NotNull: true},
-			db.TableRow{Name: "blocker_count", Type: db.DataTypeInt, NotNull: true},
+			db.TableRowItem{Name: "max_assign_count", Type: db.DataTypeInt, NotNull: true},
+			db.TableRowItem{Name: "assign_count", Type: db.DataTypeInt, NotNull: true},
+			db.TableRowItem{Name: "cancellable", Type: db.DataTypeBoolean, NotNull: true},
+			db.TableRowItem{Name: "cancel_requested", Type: db.DataTypeBoolean, NotNull: true},
+			db.TableRowItem{Name: "blocker_count", Type: db.DataTypeInt, NotNull: true},
 
-			db.TableRow{Name: "started_by_user", Type: db.DataTypeVarChar256, Indexed: true},
+			db.TableRowItem{Name: "started_by_user", Type: db.DataTypeVarChar256, Indexed: true},
 		)
 
 		if dialect == db.CASSANDRA {
-			tableRows = append(tableRows, db.TableRow{Name: "policy_id", Type: db.DataTypeInt, Indexed: true})
+			tableRows = append(tableRows, db.TableRowItem{Name: "policy_id", Type: db.DataTypeInt, Indexed: true})
 		} else {
-			tableRows = append(tableRows, db.TableRow{Name: "policy_id", Type: db.DataTypeVarChar64, Indexed: true})
+			tableRows = append(tableRows, db.TableRowItem{Name: "policy_id", Type: db.DataTypeVarChar64, Indexed: true})
 		}
 
 		tableRows = append(tableRows,
-			db.TableRow{Name: "policy_type", Type: db.DataTypeVarChar64, Indexed: true},
-			db.TableRow{Name: "policy_name", Type: db.DataTypeVarChar256, Indexed: true},
+			db.TableRowItem{Name: "policy_type", Type: db.DataTypeVarChar64, Indexed: true},
+			db.TableRowItem{Name: "policy_name", Type: db.DataTypeVarChar256, Indexed: true},
 
-			db.TableRow{Name: "resource_id", Type: db.DataTypeVarChar64, Indexed: true},
+			db.TableRowItem{Name: "resource_id", Type: db.DataTypeVarChar64, Indexed: true},
 		)
 
 		if dialect == db.CASSANDRA {
-			tableRows = append(tableRows, db.TableRow{Name: "resource_type", Type: db.DataTypeInt, Indexed: true})
+			tableRows = append(tableRows, db.TableRowItem{Name: "resource_type", Type: db.DataTypeInt, Indexed: true})
 		} else {
-			tableRows = append(tableRows, db.TableRow{Name: "resource_type", Type: db.DataTypeVarChar64, Indexed: true})
+			tableRows = append(tableRows, db.TableRowItem{Name: "resource_type", Type: db.DataTypeVarChar64, Indexed: true})
 		}
 
 		tableRows = append(tableRows,
-			db.TableRow{Name: "resource_name", Type: db.DataTypeVarChar256, Indexed: true},
+			db.TableRowItem{Name: "resource_name", Type: db.DataTypeVarChar256, Indexed: true},
 
-			db.TableRow{Name: "tags", Type: db.DataTypeText, Indexed: true},
+			db.TableRowItem{Name: "tags", Type: db.DataTypeText, Indexed: true},
 
-			db.TableRow{Name: "affinity_agent_id", Type: db.DataTypeVarChar64, NotNull: true, Indexed: true},
-			db.TableRow{Name: "affinity_cluster_id", Type: db.DataTypeVarChar64, NotNull: true, Indexed: true},
+			db.TableRowItem{Name: "affinity_agent_id", Type: db.DataTypeVarChar64, NotNull: true, Indexed: true},
+			db.TableRowItem{Name: "affinity_cluster_id", Type: db.DataTypeVarChar64, NotNull: true, Indexed: true},
 
-			db.TableRow{Name: "argument", Type: db.DataTypeBinaryBlobType},
-			db.TableRow{Name: "context", Type: db.DataTypeBinaryBlobType},
+			db.TableRowItem{Name: "argument", Type: db.DataTypeBinaryBlobType},
+			db.TableRowItem{Name: "context", Type: db.DataTypeBinaryBlobType},
 
-			db.TableRow{Name: "progress", Type: db.DataTypeInt},
-			db.TableRow{Name: "progress_total", Type: db.DataTypeInt},
+			db.TableRowItem{Name: "progress", Type: db.DataTypeInt},
+			db.TableRowItem{Name: "progress_total", Type: db.DataTypeInt},
 
-			db.TableRow{Name: "assigned_agent_id", Type: db.DataTypeVarChar64, Indexed: true},
-			db.TableRow{Name: "assigned_agent_cluster_id", Type: db.DataTypeVarChar64, Indexed: true},
+			db.TableRowItem{Name: "assigned_agent_id", Type: db.DataTypeVarChar64, Indexed: true},
+			db.TableRowItem{Name: "assigned_agent_cluster_id", Type: db.DataTypeVarChar64, Indexed: true},
 
-			db.TableRow{Name: "enqueue_time", Type: db.DataTypeBigInt, Indexed: true},
-			db.TableRow{Name: "assign_time", Type: db.DataTypeBigInt, Indexed: true},
-			db.TableRow{Name: "start_time", Type: db.DataTypeBigInt, Indexed: true},
-			db.TableRow{Name: "update_time", Type: db.DataTypeBigInt, Indexed: true},
-			db.TableRow{Name: "completion_time", Type: db.DataTypeBigInt, Indexed: true},
+			db.TableRowItem{Name: "enqueue_time", Type: db.DataTypeBigInt, Indexed: true},
+			db.TableRowItem{Name: "assign_time", Type: db.DataTypeBigInt, Indexed: true},
+			db.TableRowItem{Name: "start_time", Type: db.DataTypeBigInt, Indexed: true},
+			db.TableRowItem{Name: "update_time", Type: db.DataTypeBigInt, Indexed: true},
+			db.TableRowItem{Name: "completion_time", Type: db.DataTypeBigInt, Indexed: true},
 
-			db.TableRow{Name: "result_code", Type: db.DataTypeInt, Indexed: true},
-			db.TableRow{Name: "result_error", Type: db.DataTypeBinaryBlobType},
-			db.TableRow{Name: "result_warnings", Type: db.DataTypeBinaryBlobType},
-			db.TableRow{Name: "result_payload", Type: db.DataTypeBinaryBlobType},
+			db.TableRowItem{Name: "result_code", Type: db.DataTypeInt, Indexed: true},
+			db.TableRowItem{Name: "result_error", Type: db.DataTypeBinaryBlobType},
+			db.TableRowItem{Name: "result_warnings", Type: db.DataTypeBinaryBlobType},
+			db.TableRowItem{Name: "result_payload", Type: db.DataTypeBinaryBlobType},
 
-			db.TableRow{Name: "const_val", Type: db.DataTypeInt},
+			db.TableRowItem{Name: "const_val", Type: db.DataTypeInt},
 		)
 
 		var tableDef = &db.TableDefinition{
@@ -521,8 +521,8 @@ var TestTableVector768 = TestTable{
 		var tableRows []db.TableRow
 
 		tableRows = append(tableRows,
-			db.TableRow{Name: "id", Type: db.DataTypeBigInt, Indexed: true},
-			db.TableRow{Name: "embedding", Type: db.DataTypeVector768Float32, Indexed: true},
+			db.TableRowItem{Name: "id", Type: db.DataTypeBigInt, Indexed: true},
+			db.TableRowItem{Name: "embedding", Type: db.DataTypeVector768Float32, Indexed: true},
 		)
 
 		var tableDef = &db.TableDefinition{
@@ -554,13 +554,13 @@ var TestTableEmailSecurity = TestTable{
 		var tableRows []db.TableRow
 
 		tableRows = append(tableRows,
-			db.TableRow{Name: "id", Type: db.DataTypeBigInt, Indexed: true},
-			db.TableRow{Name: "date", Type: db.DataTypeDateTime, Indexed: true},
-			db.TableRow{Name: "sender", Type: db.DataTypeVarChar, Indexed: true},
-			db.TableRow{Name: "recipient", Type: db.DataTypeVarChar, Indexed: true},
-			db.TableRow{Name: "subject", Type: db.DataTypeVarChar, Indexed: true},
-			db.TableRow{Name: "body", Type: db.DataTypeText, Indexed: true},
-			db.TableRow{Name: "embedding", Type: db.DataTypeVector768Float32, Indexed: true},
+			db.TableRowItem{Name: "id", Type: db.DataTypeBigInt, Indexed: true},
+			db.TableRowItem{Name: "date", Type: db.DataTypeDateTime, Indexed: true},
+			db.TableRowItem{Name: "sender", Type: db.DataTypeVarChar, Indexed: true},
+			db.TableRowItem{Name: "recipient", Type: db.DataTypeVarChar, Indexed: true},
+			db.TableRowItem{Name: "subject", Type: db.DataTypeVarChar, Indexed: true},
+			db.TableRowItem{Name: "body", Type: db.DataTypeText, Indexed: true},
+			db.TableRowItem{Name: "embedding", Type: db.DataTypeVector768Float32, Indexed: true},
 		)
 
 		var tableDef = &db.TableDefinition{
@@ -590,11 +590,11 @@ var TestTableBlob = TestTable{
 	TableDefinition: func(dialect db.DialectName) *db.TableDefinition {
 		return &db.TableDefinition{
 			TableRows: []db.TableRow{
-				{Name: "id", Type: db.DataTypeBigIntAutoIncPK},
-				{Name: "uuid", Type: db.DataTypeUUID, NotNull: true, Indexed: true},
-				{Name: "tenant_id", Type: db.DataTypeUUID, NotNull: true, Indexed: true},
-				{Name: "timestamp", Type: db.DataTypeBigInt, NotNull: true, Indexed: true},
-				{Name: "data", Type: db.DataTypeHugeBlob, NotNull: true},
+				db.TableRowItem{Name: "id", Type: db.DataTypeBigIntAutoIncPK},
+				db.TableRowItem{Name: "uuid", Type: db.DataTypeUUID, NotNull: true, Indexed: true},
+				db.TableRowItem{Name: "tenant_id", Type: db.DataTypeUUID, NotNull: true, Indexed: true},
+				db.TableRowItem{Name: "timestamp", Type: db.DataTypeBigInt, NotNull: true, Indexed: true},
+				db.TableRowItem{Name: "data", Type: db.DataTypeHugeBlob, NotNull: true},
 			},
 		}
 	},
@@ -698,12 +698,12 @@ var TestTableTimeSeriesSQL = TestTable{
 	TableDefinition: func(dialect db.DialectName) *db.TableDefinition {
 		return &db.TableDefinition{
 			TableRows: []db.TableRow{
-				{Name: "id", Type: db.DataTypeBigIntAutoIncPK},
-				{Name: "tenant_id", Type: db.DataTypeVarCharUUID, NotNull: true, Indexed: true},
-				{Name: "device_id", Type: db.DataTypeVarCharUUID, NotNull: true, Indexed: true},
-				{Name: "metric_id", Type: db.DataTypeVarCharUUID, NotNull: true, Indexed: true},
-				{Name: "ts", Type: db.DataTypeTimestamp, NotNull: true, Indexed: true},
-				{Name: "value", Type: db.DataTypeInt, NotNull: true},
+				db.TableRowItem{Name: "id", Type: db.DataTypeBigIntAutoIncPK},
+				db.TableRowItem{Name: "tenant_id", Type: db.DataTypeVarCharUUID, NotNull: true, Indexed: true},
+				db.TableRowItem{Name: "device_id", Type: db.DataTypeVarCharUUID, NotNull: true, Indexed: true},
+				db.TableRowItem{Name: "metric_id", Type: db.DataTypeVarCharUUID, NotNull: true, Indexed: true},
+				db.TableRowItem{Name: "ts", Type: db.DataTypeTimestamp, NotNull: true, Indexed: true},
+				db.TableRowItem{Name: "value", Type: db.DataTypeInt, NotNull: true},
 			},
 		}
 	},
@@ -1099,6 +1099,50 @@ var TestTableAdvmDevices = TestTable{
 	Indexes: [][]string{{"origin"}, {"name"}, {"type"}, {"group_name"}, {"registered_at"}, {"agent_name"}, {"agent_is_active"}},
 }
 
+// TestTableEmailNested is table to store email objects with nested fields
+var TestTableEmailNested = TestTable{
+	TableName: "acronis_db_bench_email_nested",
+	Databases: ALL,
+	columns: [][]interface{}{
+		{"id", "autoinc"},
+		{"uuid", "uuid"},
+		{"euc_id", "int", 2147483647},
+		{"progress", "int", 100},
+		//{"history.history_type", "string", 32},
+		//{"history.timestamp", "time_ns", 90},
+		//{"history.event", "string", 4960},
+	},
+	InsertColumns: []string{}, // all
+	UpdateColumns: []string{"progress"},
+	TableDefinition: func(dialect db.DialectName) *db.TableDefinition {
+		return &db.TableDefinition{
+			TableRows: []db.TableRow{
+				db.TableRowItem{Name: "id", Type: db.DataTypeBigIntAutoInc},
+				db.TableRowItem{Name: "uuid", Type: db.DataTypeUUID, NotNull: true, Indexed: true},
+				db.TableRowItem{Name: "euc_id", Type: db.DataTypeInt, NotNull: true, Indexed: true},
+				db.TableRowItem{Name: "progress", Type: db.DataTypeInt},
+				db.TableRowSubtable{
+					Name: "history",
+					Type: db.DataTypeNested,
+					Subtable: []db.TableRow{
+						db.TableRowItem{Name: "history_type", Type: db.DataTypeVarChar, Indexed: true},
+						db.TableRowItem{Name: "timestamp", Type: db.DataTypeDateTime, Indexed: true},
+						db.TableRowItem{Name: "event", Type: db.DataTypeVarChar, Indexed: true},
+					},
+				},
+			},
+			PrimaryKey: []string{"id"},
+		}
+	},
+	CreateQuery: `create table {table} (
+			id {$bigint_autoinc_pk},
+			uuid {$varchar_uuid} {$notnull},
+			euc_id int {$notnull},
+			progress int {$null}
+			) {$engine};`,
+	Indexes: [][]string{{"tenant_id"}},
+}
+
 // TestTableTenants is table to store tenants
 var TestTableTenants = TestTable{}
 
@@ -1135,6 +1179,7 @@ var TestTables = map[string]TestTable{
 	"acronis_db_bench_advm_archives":             TestTableAdvmArchives,
 	"acronis_db_bench_advm_vaults":               TestTableAdvmVaults,
 	"acronis_db_bench_advm_devices":              TestTableAdvmDevices,
+	"acronis_db_bench_email_nested":              TestTableEmailNested,
 }
 
 func JSONTableCreateQueryPatchFunc(table string, query string, dialect db.DialectName) (string, error) { //nolint:revive
