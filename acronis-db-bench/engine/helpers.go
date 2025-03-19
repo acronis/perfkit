@@ -1,4 +1,4 @@
-package main
+package engine
 
 import (
 	"fmt"
@@ -36,14 +36,14 @@ func createTables(b *benchmark.Benchmark) {
 
 	_, tests := GetTests()
 	for _, t := range tests {
-		if t.table.TableName != "" && t.dbIsSupported(dialectName) {
-			usedTables.Add(t.table.TableName)
+		if t.Table.TableName != "" && t.dbIsSupported(dialectName) {
+			usedTables.Add(t.Table.TableName)
 		}
 	}
 
 	fmt.Printf("creating the tables ... ")
 
-	c := dbConnector(b)
+	c := DbConnector(b)
 	for _, tableDesc := range TestTables {
 		if usedTables.Contains(tableDesc.TableName) && tableDesc.dbIsSupported(dialectName) {
 			tableDesc.Create(c, b)
@@ -55,17 +55,17 @@ func createTables(b *benchmark.Benchmark) {
 		tc = tenants.NewTenantsCache(b)
 		b.Vault.(*DBTestData).TenantsCache = tc
 	}
-	tc.CreateTables(c.database)
-	c.database.CreateSequence(SequenceName)
+	tc.CreateTables(c.Database)
+	c.Database.CreateSequence(SequenceName)
 	c.Release()
 
-	eb := events.NewEventBus(c.database, b.Logger)
+	eb := events.NewEventBus(c.Database, b.Logger)
 	eb.CreateTables()
 
 	fmt.Printf("done\n")
 }
 
-func dbConnector(b *benchmark.Benchmark) *DBConnector {
+func DbConnector(b *benchmark.Benchmark) *DBConnector {
 	var conn, err = NewDBConnector(&b.TestOpts.(*TestOpts).DBOpts, 0, b.Logger, 1)
 	if err != nil {
 		FatalError(err.Error())
@@ -85,28 +85,28 @@ func cleanupTables(b *benchmark.Benchmark) {
 
 	fmt.Printf("cleaning up the test tables ... ")
 
-	c := dbConnector(b)
+	c := DbConnector(b)
 
 	for tableName := range TestTables {
-		c.database.DropTable(tableName)
+		c.Database.DropTable(tableName)
 	}
 
 	if b.Vault.(*DBTestData).TenantsCache == nil {
 		b.Vault.(*DBTestData).TenantsCache = tenants.NewTenantsCache(b)
 	}
 
-	b.Vault.(*DBTestData).TenantsCache.DropTables(c.database)
-	c.database.DropSequence(SequenceName)
+	b.Vault.(*DBTestData).TenantsCache.DropTables(c.Database)
+	c.Database.DropSequence(SequenceName)
 	c.Release()
 
-	eb := events.NewEventBus(c.database, b.Logger)
+	eb := events.NewEventBus(c.Database, b.Logger)
 	eb.DropTables()
 
 	fmt.Printf("done\n")
 }
 
 func getDBInfo(b *benchmark.Benchmark, content []string) (ret string) {
-	c := dbConnector(b)
+	c := DbConnector(b)
 
 	tableNames := make([]string, 0, len(TestTables))
 	for k := range TestTables {
@@ -117,12 +117,12 @@ func getDBInfo(b *benchmark.Benchmark, content []string) (ret string) {
 	var tableSchemaInfo, tablesVolumeInfo []string
 	var err error
 
-	tableSchemaInfo, err = c.database.GetTablesSchemaInfo(tableNames)
+	tableSchemaInfo, err = c.Database.GetTablesSchemaInfo(tableNames)
 	if err != nil {
 		FatalError(err.Error())
 	}
 
-	tablesVolumeInfo, err = c.database.GetTablesVolumeInfo(tableNames)
+	tablesVolumeInfo, err = c.Database.GetTablesVolumeInfo(tableNames)
 	if err != nil {
 		FatalError(err.Error())
 	}
@@ -140,7 +140,7 @@ func getDBInfo(b *benchmark.Benchmark, content []string) (ret string) {
 	return ret
 }
 
-func formatSQL(sqlTemlate string, dialectName db.DialectName) string {
+func FormatSQL(sqlTemlate string, dialectName db.DialectName) string {
 	if dialectName == db.POSTGRES {
 		return sqlTemlate
 	}
