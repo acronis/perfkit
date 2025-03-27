@@ -519,7 +519,7 @@ func (e *EventBus) DoFetch() (bool, error) {
 			SELECT s.int_id, s.topic_id, d.type_id, s.seq, s.seq_time, d.data
 			FROM acronis_db_bench_eventbus_stream s
 					 INNER JOIN acronis_db_bench_eventbus_data d ON s.int_id = d.int_id
-			WHERE s.topic_id = %s
+			WHERE s.topic_id = %d
 			  AND s.seq IS NOT NULL
 			  AND s.seq > %d
 			ORDER BY s.seq
@@ -574,7 +574,7 @@ func (e *EventBus) DoArchive() (bool, error) {
 	for t := 1; t < MaxTopics+1; t++ {
 		if txErr := sess.Transact(func(tx db.DatabaseAccessor) error {
 			var cur64 int64
-			if err := tx.QueryRow("SELECT acked_cursor FROM acronis_db_bench_eventbus_topics WHERE internal_id = $1", t).Scan(cur64); err != nil {
+			if err := tx.QueryRow("SELECT acked_cursor FROM acronis_db_bench_eventbus_topics WHERE internal_id = $1", t).Scan(&cur64); err != nil {
 				return err
 			}
 

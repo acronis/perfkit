@@ -11,7 +11,7 @@ MODULE_DIRS = benchmark acronis-db-bench acronis-restrelay-bench
 GO_INSTALLABLE_DIRS = acronis-db-bench
 
 # Directories that we want to test and track coverage for.
-TEST_DIRS = benchmark acronis-restrelay-bench
+TEST_DIRS = benchmark acronis-restrelay-bench acronis-db-bench
 
 include acronis-restrelay-bench/restrelay-bench.Makefile
 
@@ -39,10 +39,26 @@ test:
 
 .PHONY: cover
 cover:
+	@mkdir -p coverage
+	@echo "Running coverage tests..."
 	@$(foreach dir,$(TEST_DIRS), ( \
 		cd $(dir) && \
-		go test -race -coverprofile=cover.out -coverpkg=./... ./... \
-		&& go tool cover -html=cover.out -o cover.html) &&) true
+		go test -race -coverprofile=../coverage/$(dir).out -coverpkg=./... ./... && \
+		go tool cover -html=../coverage/$(dir).out -o ../coverage/$(dir).html) &&) true
+	@echo "Generating total coverage..."
+	@echo "mode: atomic" > coverage/total.out
+	@$(foreach dir,$(TEST_DIRS), \
+		tail -n +2 coverage/$(dir).out >> coverage/total.out &&) true
+	@go tool cover -html=coverage/total.out -o coverage/total.html
+	@echo "Generating coverage summary table..."
+	@echo "+-------------------------+----------+---------------------------+"
+	@echo "| Directory               | Coverage | HTML Report               |"
+	@echo "+-------------------------+----------+---------------------------+"
+	@$(foreach dir,$(TEST_DIRS), \
+		printf "| %-23s | %-8s | %-25s |\n" "$(dir)" "$$(go tool cover -func=coverage/$(dir).out | grep 'total:' | awk '{print $$3}')" "coverage/$(dir).html" &&) true
+	@echo "+-------------------------+----------+---------------------------+"
+	@printf "| %-23s | %-8s | %-25s |\n" "Total" "$$(go tool cover -func=coverage/total.out | grep 'total:' | awk '{print $$3}')" "coverage/total.html"
+	@echo "+-------------------------+----------+---------------------------+"
 
 .PHONY: install
 install: go-install
