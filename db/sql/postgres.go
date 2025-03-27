@@ -306,7 +306,7 @@ func (c *pgConnector) ConnectionPool(cfg db.Config) (db.Database, error) {
 	}
 
 	if err = rwc.Ping(); err != nil {
-		return nil, fmt.Errorf("db: failed ping postgresql db at %v, err: %v", sanitizeConn(cfg.ConnString), err)
+		return nil, fmt.Errorf("db: failed ping postgresql db at %v, err: %v\n", sanitizeConn(cfg.ConnString), err)
 	}
 
 	dbo.rw = &sqlQuerier{rwc}
