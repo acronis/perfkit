@@ -124,14 +124,27 @@ func (d *esDatabase) GetTablesVolumeInfo(tableNames []string) ([]string, error) 
 	return getTablesVolumeInfo(d.rw, tableNames)
 }
 
-func (d *esDatabase) Context(ctx context.Context) *db.Context {
-	return &db.Context{Ctx: ctx}
+func (d *esDatabase) Context(ctx context.Context, explain bool) *db.Context {
+	return &db.Context{
+		Ctx:         ctx,
+		Explain:     explain,
+		BeginTime:   atomic.NewInt64(0),
+		PrepareTime: atomic.NewInt64(0),
+		ExecTime:    atomic.NewInt64(0),
+		QueryTime:   atomic.NewInt64(0),
+		DeallocTime: atomic.NewInt64(0),
+		CommitTime:  atomic.NewInt64(0),
+	}
 }
 
 func (d *esDatabase) Session(c *db.Context) db.Session {
 	return &esSession{
 		esGateway: esGateway{
-			q:   timedQuerier{q: d.rw, dbtime: atomic.NewInt64(c.DBtime.Nanoseconds()), queryLogger: d.queryLogger},
+			q: timedQuerier{q: d.rw,
+				execTime:    c.ExecTime,
+				queryTime:   c.QueryTime,
+				queryLogger: d.queryLogger,
+			},
 			ctx: c,
 		},
 	}
@@ -155,8 +168,10 @@ func (d *esDatabase) Close() error {
 }
 
 type timedQuerier struct {
-	dbtime *atomic.Int64 // *time.Duration
-	q      querier
+	q querier
+
+	execTime  *atomic.Int64 // *time.Duration
+	queryTime *atomic.Int64 // *time.Duration
 
 	queryLogger db.Logger
 }
@@ -166,7 +181,7 @@ func accountTime(t *atomic.Int64, since time.Time) {
 }
 
 func (tq timedQuerier) insert(ctx context.Context, idxName indexName, query *BulkIndexRequest) (*BulkIndexResult, int, error) {
-	defer accountTime(tq.dbtime, time.Now())
+	defer accountTime(tq.execTime, time.Now())
 
 	if tq.queryLogger != nil {
 		tq.queryLogger.Log("bulk insert:\n%v", query.Reader())
@@ -176,7 +191,7 @@ func (tq timedQuerier) insert(ctx context.Context, idxName indexName, query *Bul
 }
 
 func (tq timedQuerier) search(ctx context.Context, idxName indexName, request *SearchRequest) ([]map[string]interface{}, error) {
-	defer accountTime(tq.dbtime, time.Now())
+	defer accountTime(tq.queryTime, time.Now())
 
 	if tq.queryLogger != nil {
 		tq.queryLogger.Log("search:\n%s", request.String())
@@ -186,7 +201,7 @@ func (tq timedQuerier) search(ctx context.Context, idxName indexName, request *S
 }
 
 func (tq timedQuerier) count(ctx context.Context, idxName indexName, request *CountRequest) (int64, error) {
-	defer accountTime(tq.dbtime, time.Now())
+	defer accountTime(tq.queryTime, time.Now())
 
 	if tq.queryLogger != nil {
 		tq.queryLogger.Log("count:\n%s", request.String())

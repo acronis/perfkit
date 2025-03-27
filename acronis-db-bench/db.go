@@ -14,15 +14,23 @@ const SequenceName = "acronis_db_bench_sequence" // SequenceName is the name of 
 
 // DatabaseOpts represents common flags for every test
 type DatabaseOpts struct {
-	ConnString   string `long:"connection-string" description:"connection string" default:"sqlite://:memory:" required:"false"`
+	// Driver and Dsn are deprecated, keep for backward compatibility, use ConnString instead
+	Driver string `long:"driver" description:"(deprecated) db driver (postgres|mysql|sqlite3)" required:"false"`
+	Dsn    string `long:"dsn" description:"(deprecated) dsn connection string" required:"false"`
+
+	ConnString   string `long:"connection-string" description:"connection string" required:"false"`
 	MaxOpenConns int    `long:"max-open-cons" description:"max open connections per worker" default:"2" required:"false"`
 	Reconnect    bool   `long:"reconnect" description:"reconnect to DB before every test iteration" required:"false"`
 
-	DryRun bool `long:"dry-run" description:"do not execute any INSERT/UPDATE/DELETE queries on DB-side" required:"false"`
+	EnableQueryStringInterpolation bool `long:"enable-query-string-interpolation" description:"enable query string interpolation during insert queries construction" required:"false"`
 
-	LogQueries    bool `long:"log-queries" description:"log queries" required:"false"`
-	LogReadedRows bool `long:"log-readed-rows" description:"log readed rows" required:"false"`
-	LogQueryTime  bool `long:"log-query-time" description:"log query time" required:"false"`
+	DryRun  bool `long:"dry-run" description:"do not execute any INSERT/UPDATE/DELETE queries on DB-side" required:"false"`
+	Explain bool `long:"explain" description:"prepend the test queries by EXPLAIN ANALYZE" required:"false"`
+
+	LogQueries   bool `long:"log-queries" description:"log queries" required:"false"`
+	LogReadRows  bool `long:"log-read-rows" description:"log read rows" required:"false"`
+	LogQueryTime bool `long:"log-query-time" description:"log query time" required:"false"`
+	LogSystemOps bool `long:"log-system-operations" description:"log system operations on database side" required:"false"`
 
 	DontCleanup bool `long:"dont-cleanup" description:"do not cleanup DB content before/after the test in '-t all' mode" required:"false"`
 	UseTruncate bool `long:"use-truncate" description:"use TRUNCATE instead of DROP TABLE in cleanup procedure" required:"false"`
@@ -30,8 +38,9 @@ type DatabaseOpts struct {
 
 // dbConnectorsPool is a simple connection pool, required not to saturate DB connection pool
 type dbConnectorsPool struct {
-	lock sync.Mutex
-	pool map[string]*DBConnector
+	lock      sync.Mutex
+	pool      map[string]*DBConnector
+	isClosing bool // New field to track shutdown state
 }
 
 // key returns a unique key for the connection pool
@@ -46,11 +55,15 @@ func (p *dbConnectorsPool) take(dbOpts *DatabaseOpts, workerID int) *DBConnector
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
+	// Don't give out new connections if we're shutting down
+	if p.isClosing {
+		return nil
+	}
+
 	conn, exists := p.pool[k]
 	if exists {
 		delete(p.pool, k)
 		conn.Log(benchmark.LogTrace, "taking connection from the connection pool")
-
 		return conn
 	}
 
@@ -59,17 +72,55 @@ func (p *dbConnectorsPool) take(dbOpts *DatabaseOpts, workerID int) *DBConnector
 
 // put puts a connection to the pool
 func (p *dbConnectorsPool) put(conn *DBConnector) {
+	if conn == nil {
+		return
+	}
+
 	k := p.key(conn.DbOpts.ConnString, conn.WorkerID)
 
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
+	// If we're shutting down, close the connection instead of returning it to the pool
+	if p.isClosing {
+		if conn.database != nil {
+			conn.database.Close()
+			conn.database = nil
+		}
+		return
+	}
+
+	// Check if there's already a connection in the pool
 	_, exists := p.pool[k]
 	if exists {
-		FatalError("trying to put connection while another connection in the pool already exists")
+		// If there is, close the new connection instead of panicking
+		if conn.database != nil {
+			conn.database.Close()
+			conn.database = nil
+		}
+		conn.Log(benchmark.LogWarn, "connection already exists in pool, closing new connection")
+		return
 	}
+
 	p.pool[k] = conn
 	conn.Log(benchmark.LogTrace, "releasing connection to the connection pool")
+}
+
+// shutdown gracefully closes all connections in the pool
+func (p *dbConnectorsPool) shutdown() {
+	p.lock.Lock()
+	defer p.lock.Unlock()
+
+	p.isClosing = true
+
+	// Close all connections in the pool
+	for k, conn := range p.pool {
+		if conn.database != nil {
+			conn.database.Close()
+			conn.database = nil
+		}
+		delete(p.pool, k)
+	}
 }
 
 // newDBConnectorsPool creates a new connection pool
@@ -104,6 +155,21 @@ func connectionsChecker(conn *DBConnector) {
 	}
 }
 
+// DBWorkerData is a structure to store all the worker data
+type DBWorkerData struct {
+	workingConn  *DBConnector
+	tenantsCache *DBConnector
+}
+
+func (d *DBWorkerData) release() {
+	if d.workingConn != nil {
+		d.workingConn.Release()
+	}
+	if d.tenantsCache != nil {
+		d.tenantsCache.Release()
+	}
+}
+
 /*
  * DB connection management
  */
@@ -126,31 +192,38 @@ func NewDBConnector(dbOpts *DatabaseOpts, workerID int, logger *benchmark.Logger
 		return c, nil
 	}
 
-	var queryLogger, readedRowsLogger, queryTimeLogger db.Logger
+	var queryLogger, readRowsLogger, explainLogger, systemLogger db.Logger
 	if dbOpts.LogQueries {
 		logger.LogLevel = benchmark.LogInfo
 		queryLogger = &dbLogger{level: benchmark.LogInfo, worker: workerID, logger: logger}
 	}
 
-	if dbOpts.LogReadedRows {
+	if dbOpts.LogReadRows {
 		logger.LogLevel = benchmark.LogInfo
-		readedRowsLogger = &dbLogger{level: benchmark.LogInfo, worker: workerID, logger: logger}
+		readRowsLogger = &dbLogger{level: benchmark.LogInfo, worker: workerID, logger: logger}
 	}
 
-	if dbOpts.LogQueryTime {
+	if dbOpts.Explain {
 		logger.LogLevel = benchmark.LogInfo
-		queryTimeLogger = &dbLogger{level: benchmark.LogInfo, worker: workerID, logger: logger}
+		explainLogger = &dbLogger{level: benchmark.LogInfo, worker: workerID, logger: logger}
+	}
+
+	if dbOpts.LogSystemOps {
+		logger.LogLevel = benchmark.LogInfo
+		systemLogger = &dbLogger{level: benchmark.LogInfo, worker: workerID, logger: logger}
 	}
 
 	var dbConn, err = db.Open(db.Config{
-		ConnString:   dbOpts.ConnString,
-		MaxOpenConns: dbOpts.MaxOpenConns,
-		DryRun:       dbOpts.DryRun,
-		UseTruncate:  dbOpts.UseTruncate,
+		ConnString:               dbOpts.ConnString,
+		MaxOpenConns:             dbOpts.MaxOpenConns,
+		QueryStringInterpolation: dbOpts.EnableQueryStringInterpolation,
+		DryRun:                   dbOpts.DryRun,
+		UseTruncate:              dbOpts.UseTruncate,
 
-		QueryLogger:      queryLogger,
-		ReadedRowsLogger: readedRowsLogger,
-		QueryTimeLogger:  queryTimeLogger,
+		QueryLogger:    queryLogger,
+		ReadRowsLogger: readRowsLogger,
+		ExplainLogger:  explainLogger,
+		SystemLogger:   systemLogger,
 	})
 	if err != nil {
 		return nil, err
@@ -169,9 +242,25 @@ func NewDBConnector(dbOpts *DatabaseOpts, workerID int, logger *benchmark.Logger
 	return c, nil
 }
 
-// Release releases the connection to the pool
+// Release safely releases the connection back to the pool
 func (c *DBConnector) Release() {
-	connPool.put(c)
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	if c.database != nil {
+		connPool.put(c)
+	}
+}
+
+// Close forcefully closes the connection
+func (c *DBConnector) Close() {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	if c.database != nil {
+		c.database.Close()
+		c.database = nil
+	}
 }
 
 // SetLogLevel sets log level

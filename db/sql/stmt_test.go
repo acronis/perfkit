@@ -35,8 +35,10 @@ func (suite *TestingSuite) TestPrepareStatement() {
 			return err
 		}
 
-		if rows, err := stmt.Exec(args...); err != nil {
-			return err
+		defer stmt.Close()
+
+		if rows, stmtErr := stmt.Exec(args...); stmtErr != nil {
+			return stmtErr
 		} else {
 			if d.DialectName() != db.CLICKHOUSE {
 				if rowsAffected, rowsErr := rows.RowsAffected(); rowsErr != nil {
@@ -45,8 +47,6 @@ func (suite *TestingSuite) TestPrepareStatement() {
 					return err
 				}
 			}
-
-			stmt.Close()
 		}
 
 		return nil

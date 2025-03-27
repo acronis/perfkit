@@ -34,6 +34,7 @@ func initWorker(b *benchmark.Benchmark, workerID int, testDesc *TestDesc, rowsRe
 			tenantCacheDBOpts.ConnString = b.TestOpts.(*TestOpts).BenchOpts.TenantConnString
 
 			if workerData.tenantsCache, err = NewDBConnector(&tenantCacheDBOpts, workerID, b.Logger, 1); err != nil {
+				workerData.release()
 				b.Exit("db: cannot create tenants cache connection: %v", err)
 			}
 		}
@@ -45,6 +46,11 @@ func initWorker(b *benchmark.Benchmark, workerID int, testDesc *TestDesc, rowsRe
 		conn := b.WorkerData[0].(*DBWorkerData).workingConn
 		testData := b.Vault.(*DBTestData)
 		testData.TestDesc = testDesc
+
+		// Initialize TenantsCache if it's nil
+		if testData.TenantsCache == nil {
+			testData.TenantsCache = tenants.NewTenantsCache(b)
+		}
 
 		tableName := testDesc.table.TableName
 
@@ -67,7 +73,7 @@ func initWorker(b *benchmark.Benchmark, workerID int, testDesc *TestDesc, rowsRe
 				t.Create(conn, b)
 			}
 
-			var session = conn.database.Session(conn.database.Context(context.Background()))
+			var session = conn.database.Session(conn.database.Context(context.Background(), false))
 			var rowNum int64
 			if rows, err := session.Select(tableName, &db.SelectCtrl{Fields: []string{"COUNT(0)"}}); err != nil {
 				b.Exit(fmt.Sprintf("db: cannot get rows count in table '%s': %v", tableName, err))
@@ -98,7 +104,7 @@ func initWorker(b *benchmark.Benchmark, workerID int, testDesc *TestDesc, rowsRe
 			tenantCacheDatabase = conn.database
 		}
 
-		if err := b.Vault.(*DBTestData).TenantsCache.Init(tenantCacheDatabase); err != nil {
+		if err := testData.TenantsCache.Init(tenantCacheDatabase); err != nil {
 			b.Exit("db: cannot initialize tenants cache: %v", err)
 		}
 	}
@@ -115,8 +121,35 @@ func initCommon(b *benchmark.Benchmark, testDesc *TestDesc, rowsRequired uint64)
 	}
 
 	b.FinishPerWorker = func(workerId int) {
-		conn := b.WorkerData[workerId].(*DBWorkerData).workingConn
-		conn.Release()
+		if workerData, ok := b.WorkerData[workerId].(*DBWorkerData); ok {
+			workerData.release()
+		}
+	}
+
+	b.PreExit = func() {
+		if b.Vault != nil {
+			if testData, ok := b.Vault.(*DBTestData); ok {
+				// First stop the event bus if it exists
+				if testData.EventBus != nil {
+					testData.EventBus.Stop()
+				}
+
+				// Shutdown the connection pool first
+				connPool.shutdown()
+
+				// Then cleanup worker data
+				for workerId := range b.WorkerData {
+					if workerData, ok := b.WorkerData[workerId].(*DBWorkerData); ok {
+						if workerData.workingConn != nil {
+							workerData.workingConn.Close()
+						}
+						if workerData.tenantsCache != nil {
+							workerData.tenantsCache.Close()
+						}
+					}
+				}
+			}
+		}
 	}
 }
 
@@ -144,6 +177,7 @@ func testSelect(
 	testDesc *TestDesc,
 	fromFunc func(b *benchmark.Benchmark, workerId int) string,
 	what []string,
+	variablesToRead []interface{},
 	whereFunc func(b *benchmark.Benchmark, workerId int) map[string][]string,
 	orderByFunc func(b *benchmark.Benchmark, workerId int) []string,
 	rowsRequired uint64,
@@ -154,7 +188,7 @@ func testSelect(
 		b.Exit("TestOpts type conversion error")
 	}
 
-	explain := testOpts.BenchOpts.Explain
+	explain := testOpts.DBOpts.Explain
 
 	batch := b.Vault.(*DBTestData).EffectiveBatch
 
@@ -208,7 +242,7 @@ func testSelect(
 			}
 		}
 
-		var session = c.database.Session(c.database.Context(context.Background()))
+		var session = c.database.Session(c.database.Context(context.Background(), explain))
 		var rows, err = session.Select(from, &db.SelectCtrl{
 			Fields: what,
 			Where:  whereCond,
@@ -223,8 +257,8 @@ func testSelect(
 		}
 
 		for rows.Next() {
-			if err != nil {
-				b.Exit(err)
+			if scanErr := rows.Scan(variablesToRead...); scanErr != nil {
+				// b.Exit(scanErr)
 			}
 		}
 
@@ -303,7 +337,8 @@ func testSelectRawSQLQuery(
 			query = regexp.MustCompile(`\$\d+`).ReplaceAllString(query, "?")
 		}
 
-		var session = c.database.Session(c.database.Context(context.Background()))
+		var explain = b.TestOpts.(*TestOpts).DBOpts.Explain
+		var session = c.database.Session(c.database.Context(context.Background(), explain))
 		var rows, err = session.Query(query)
 		if err != nil {
 			b.Exit("db: cannot select rows: %v", err)
@@ -363,7 +398,7 @@ func testInsertGeneric(b *benchmark.Benchmark, testDesc *TestDesc) {
 			rows := table.RowsCount
 
 			var c = workerData.workingConn
-			var sess = c.database.Session(c.database.Context(context.Background()))
+			var sess = c.database.Session(c.database.Context(context.Background(), false))
 
 			if txErr := sess.Transact(func(tx db.DatabaseAccessor) error {
 				var txBatch, prepareErr = tx.Prepare(sql)
@@ -444,7 +479,7 @@ func testInsertGeneric(b *benchmark.Benchmark, testDesc *TestDesc) {
 			workerData := b.WorkerData[workerId].(*DBWorkerData)
 
 			var c = workerData.workingConn
-			var sess = c.database.Session(c.database.Context(context.Background()))
+			var sess = c.database.Session(c.database.Context(context.Background(), false))
 
 			if txErr := sess.Transact(func(tx db.DatabaseAccessor) error {
 				for i := 0; i < batch; i++ {
@@ -456,7 +491,7 @@ func testInsertGeneric(b *benchmark.Benchmark, testDesc *TestDesc) {
 
 					if b.TestOpts.(*TestOpts).BenchOpts.Events {
 						rw := b.Randomizer.GetWorker(workerId)
-						if err := b.Vault.(*DBTestData).EventBus.InsertEvent(rw, tx, rw.UUID().String()); err != nil {
+						if err := b.Vault.(*DBTestData).EventBus.InsertEvent(rw, tx, rw.UUID()); err != nil {
 							return err
 						}
 					}
@@ -565,7 +600,7 @@ func testUpdateGeneric(b *benchmark.Benchmark, testDesc *TestDesc, updateRows ui
 
 		b.Worker = func(workerId int) (loops int) {
 			var c = b.WorkerData[workerId].(*DBWorkerData).workingConn
-			var session = c.database.Session(c.database.Context(context.Background()))
+			var session = c.database.Session(c.database.Context(context.Background(), false))
 			if txErr := session.Transact(func(tx db.DatabaseAccessor) error {
 				for i := 0; i < batch; i++ {
 					id := int64(b.Randomizer.GetWorker(workerId).Uintn64(table.RowsCount-updateRows) + updateRows)
@@ -582,7 +617,7 @@ func testUpdateGeneric(b *benchmark.Benchmark, testDesc *TestDesc, updateRows ui
 
 					if b.TestOpts.(*TestOpts).BenchOpts.Events {
 						rw := b.Randomizer.GetWorker(workerId)
-						if err = b.Vault.(*DBTestData).EventBus.InsertEvent(rw, tx, rw.UUID().String()); err != nil {
+						if err = b.Vault.(*DBTestData).EventBus.InsertEvent(rw, tx, rw.UUID()); err != nil {
 							return err
 						}
 					}
@@ -670,7 +705,7 @@ func testDeleteGeneric(b *benchmark.Benchmark, testDesc *TestDesc, deleteRows ui
 
 		b.Worker = func(workerId int) (loops int) {
 			var c = b.WorkerData[workerId].(*DBWorkerData).workingConn
-			var session = c.database.Session(c.database.Context(context.Background()))
+			var session = c.database.Session(c.database.Context(context.Background(), false))
 			if txErr := session.Transact(func(tx db.DatabaseAccessor) error {
 				for i := 0; i < batch; i++ {
 					id := int64(b.Randomizer.GetWorker(workerId).Uintn64(table.RowsCount-deleteRows) + deleteRows)
@@ -687,7 +722,7 @@ func testDeleteGeneric(b *benchmark.Benchmark, testDesc *TestDesc, deleteRows ui
 
 					if b.TestOpts.(*TestOpts).BenchOpts.Events {
 						rw := b.Randomizer.GetWorker(workerId)
-						if err := b.Vault.(*DBTestData).EventBus.InsertEvent(rw, tx, rw.UUID().String()); err != nil {
+						if err := b.Vault.(*DBTestData).EventBus.InsertEvent(rw, tx, rw.UUID()); err != nil {
 							return err
 						}
 					}

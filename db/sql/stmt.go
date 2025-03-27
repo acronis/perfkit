@@ -2,100 +2,58 @@ package sql
 
 import (
 	"database/sql"
-	"time"
 
 	"github.com/acronis/perfkit/db"
 )
 
-// StatementEnter is called before executing a statement
-func (g *sqlGateway) StatementEnter(query string, args ...interface{}) time.Time { //nolint:revive
-	var startTime time.Time
+// sqlStatement defines the interface for prepared statement operations
+type sqlStatement interface {
+	// Exec executes a prepared statement with the given arguments.
+	// Returns a Result interface and error.
+	// Usage example:
+	//   stmt.Exec(2, 2, "test") // for most dialects
+	//   stmt.Exec(sql.Named("Origin", 2), sql.Named("Type", 2), sql.Named("Name", "test")) // for MSSQL
+	Exec(args ...any) (db.Result, error)
 
-	/*
-		if query != "" {
-			a.lastQuery = query
-		}
-
-		if a.log.LogLevel >= c.logLevel {
-			startTime = time.Now()
-		}
-
-	*/
-
-	return startTime
+	// Close releases resources associated with the prepared statement.
+	// Should be called when the statement is no longer needed.
+	// Typically used with defer:
+	//   defer stmt.Close()
+	Close() error
 }
 
-// StatementExit is called after executing a statement
-func (g *sqlGateway) StatementExit(statement string, startTime time.Time, err error, showRowsAffected bool, result db.Result, format string, args []interface{}, rows db.Rows, dest []interface{}) {
-	/*
-		if a.Logger.LogLevel < c.logLevel && err == nil {
-			return
-		}
-
-		var msg string
-		if a.Logger.LogLevel >= LogTrace {
-			if format == "" {
-				msg = fmt.Sprintf("%v", args...)
-			} else {
-				msg = fmt.Sprintf(format, args...)
-			}
-		} else {
-			msg = format
-		}
-
-		if err == nil {
-			if a.Logger.LogLevel >= LogDebug {
-				msg += fmt.Sprintf(" # dur: %.6f", getElapsedTime(startTime))
-			}
-			if a.Logger.LogLevel >= LogTrace {
-				if c.dialect.Name() != db.CLICKHOUSE && showRowsAffected && result != nil {
-					affectedRows, err := result.RowsAffected()
-					if err != nil {
-						c.Exit("DB: %s failed: %s\nError: %s", c.dialect.Name(), statement, err.Error())
-					}
-					msg += fmt.Sprintf(" # affected rows: %d", affectedRows)
-				}
-				if rows != nil {
-					msg += fmt.Sprintf(" # = %d row(s): %s", len(rows.Data), rows.Dump())
-				}
-				if dest != nil {
-					var vals []string
-					for _, v := range dest {
-						vals = append(vals, db.DumpRecursive(v, ""))
-					}
-					msg += fmt.Sprintf(" = %v", strings.Join(vals, ", "))
-				}
-			}
-			c.Log(c.logLevel, msg)
-		} else {
-			c.Log(LogError, fmt.Sprintf("%s: '%s' error:\n%s", statement, msg, err.Error()))
-		}
-
-	*/
-}
-
+// sqlStmt implements the sqlStatement interface by wrapping a *sql.Stmt
 type sqlStmt struct {
-	stmt *sql.Stmt
+	stmt *sql.Stmt // underlying SQL prepared statement
 }
 
+// Exec executes the prepared statement with the given arguments.
+// Implements the sqlStatement interface.
+// Args can be either positional parameters (?, $1, etc.) or named parameters (@Name)
+// depending on the SQL dialect being used.
+// Returns the sql.Result from the underlying statement execution.
 func (s *sqlStmt) Exec(args ...any) (db.Result, error) {
 	return s.stmt.Exec(args...)
 }
 
+// Close releases the database resources associated with the prepared statement.
+// Should be called when done with the statement to prevent resource leaks.
+// Implements the sqlStatement interface.
 func (s *sqlStmt) Close() error {
 	return s.stmt.Close()
 }
 
+// Prepare creates a prepared statement for the given query.
+// Part of the db.DatabaseAccessor interface.
+// The query format depends on the dialect:
+//   - MSSQL: Uses @param named parameters
+//   - PostgreSQL: Uses $1, $2, etc. positional parameters
+//   - Others: Uses ? positional parameters
+//
+// Example queries:
+//   - MSSQL: "INSERT INTO table (col1, col2) VALUES (@Param1, @Param2)"
+//   - PostgreSQL: "INSERT INTO table (col1, col2) VALUES ($1, $2)"
+//   - Others: "INSERT INTO table (col1, col2) VALUES (?, ?)"
 func (g *sqlGateway) Prepare(query string) (db.Stmt, error) {
-	var stmt, err = g.rw.prepareContext(g.ctx, query)
-	if err != nil {
-		return nil, err
-	}
-
-	return &sqlStmt{stmt: stmt}, err
-}
-
-// getElapsedTime returns elapsed time since startTime
-func getElapsedTime(prevTime time.Time) float64 {
-	return time.Since(prevTime).Seconds()
+	return g.rw.prepareContext(g.ctx, query)
 }

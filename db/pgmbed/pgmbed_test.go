@@ -1,8 +1,11 @@
 package pgmbed
 
 import (
+	"database/sql"
 	"fmt"
 	"testing"
+
+	_ "github.com/lib/pq"
 )
 
 type testLogger struct{}
@@ -38,6 +41,26 @@ func TestLaunch(t *testing.T) {
 	}
 
 	t.Logf("connection string for second attempt of launching embedded postgres: %s", cs)
+
+	// Test database connection by executing SELECT 1
+	db, err := sql.Open("postgres", cs)
+	if err != nil {
+		t.Errorf("failed to open database connection: %v", err)
+		return
+	}
+	defer db.Close()
+
+	var result int
+	err = db.QueryRow("SELECT 1").Scan(&result)
+	if err != nil {
+		t.Errorf("failed to execute query: %v", err)
+		return
+	}
+
+	if result != 1 {
+		t.Errorf("unexpected result: got %d, want 1", result)
+		return
+	}
 
 	// Simulate closing connections
 	if err = Terminate(); err != nil {

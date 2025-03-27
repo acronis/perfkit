@@ -1,11 +1,13 @@
 package benchmark
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"os"
 	"os/signal"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -80,6 +82,9 @@ type Benchmark struct {
 	CliArgs    []string
 	WorkerData []WorkerData
 	Vault      AnyData
+
+	ShutdownCh chan struct{}
+	signalDone chan struct{}
 }
 
 // New creates a new Benchmark instance with default values
@@ -115,6 +120,8 @@ func New() *Benchmark {
 			fmt.Printf("time: %f sec; threads: %d; loops: %d; rate: %.2f %s;\n", score.Seconds, score.Workers, score.Loops, score.Rate, score.Metric)
 		},
 		OptsInitialized: false,
+		ShutdownCh:      make(chan struct{}),
+		signalDone:      make(chan struct{}),
 	}
 	b.Logger = NewLogger(LogWarn)
 	b.Cli.Init(os.Args[0], &b.CommonOpts)
@@ -212,11 +219,24 @@ func (b *Benchmark) Run() {
 	}
 
 	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+
+	// Create a context that we can cancel
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel() // Ensure we cancel the context when Run() exits
+
+	// Start signal handler with context
 	go func() {
-		<-sigChan
-		fmt.Printf(" Getting process interruption signal...\n")
-		b.NeedToExit = true
+		select {
+		case sig := <-sigChan:
+			b.Log(LogInfo, -1, "Received signal %v, initiating graceful shutdown...", sig)
+			b.Shutdown()
+		case <-ctx.Done():
+			// Clean up signal handling
+			signal.Stop(sigChan)
+			close(sigChan)
+			return
+		}
 	}()
 
 	b.Randomizer = NewRandomizer(b.CommonOpts.RandSeed, b.CommonOpts.Workers)
@@ -264,41 +284,46 @@ func (b *Benchmark) Run() {
 	if b.CommonOpts.Repeat > 1 {
 		fmt.Printf("Avg rate: %8.1f; Min rate: %8.1f; Max rate: %8.1f\n", sumRate/float64(b.CommonOpts.Repeat), minRate, maxRate)
 	}
+
+	// The deferred cancel() will clean up the signal handling goroutine
 }
 
 // runner is a helper function for running tests in parallel
 func runner(id int, b *Benchmark, loops *int, requiredLoops int, wg *sync.WaitGroup) {
+	var doneLoops = 0
+
+	defer func() {
+		*loops = doneLoops
+		wg.Done()
+	}()
+
 	var l int
-	doneLoops := 0
-	if b.CommonOpts.Loops != 0 {
-		for doneLoops < requiredLoops {
+	var startTime = time.Now().UnixNano()
+	for {
+		select {
+		case <-b.ShutdownCh:
+			b.Log(LogInfo, id, "Worker %d shutting down...", id)
+			return
+		default:
+			if b.CommonOpts.Loops != 0 {
+				if doneLoops >= requiredLoops {
+					return
+				}
+			} else {
+				if time.Now().UnixNano()-startTime >= int64(b.CommonOpts.Duration*1000000000) {
+					return
+				}
+			}
+
 			b.PreWorker(id)
 			l = b.Worker(id)
 			if l == 0 {
-				break
+				return
 			}
 			doneLoops += l
 
 			if b.NeedToExit {
-				break
-			}
-
-			if b.CommonOpts.Sleep > 0 {
-				time.Sleep(time.Millisecond * time.Duration(b.CommonOpts.Sleep))
-			}
-		}
-	} else {
-		startTime := time.Now().UnixNano()
-		for time.Now().UnixNano()-startTime < int64(b.CommonOpts.Duration*1000000000) {
-			b.PreWorker(id)
-			l = b.Worker(id)
-			if l == 0 {
-				break
-			}
-			doneLoops += l
-
-			if b.NeedToExit {
-				break
+				return
 			}
 
 			if b.CommonOpts.Sleep > 0 {
@@ -306,10 +331,6 @@ func runner(id int, b *Benchmark, loops *int, requiredLoops int, wg *sync.WaitGr
 			}
 		}
 	}
-
-	*loops = doneLoops
-
-	wg.Done()
 }
 
 // Exit calls os.Exit() and sets 127 exit code if there is a message (+ args) passed, otherwise just exit with 0 (successfull exit)
@@ -350,4 +371,10 @@ func (b *Benchmark) Geomean(x []Score) float64 {
 	s /= float64(len(x))
 
 	return math.Exp(s)
+}
+
+// Shutdown gracefully shuts down the benchmark
+func (b *Benchmark) Shutdown() {
+	close(b.ShutdownCh)
+	b.NeedToExit = true
 }

@@ -64,52 +64,83 @@ func (d *cassandraDialect) encodeTime(timestamp time.Time) string {
 // GetType returns Cassandra-specific types
 func (d *cassandraDialect) getType(dataType db.DataType) string {
 	switch dataType {
+	// Primary Keys and IDs
+	case db.DataTypeId:
+		return "int"
+	case db.DataTypeTenantUUIDBoundID:
+		return "varchar" // Composite key with tenant UUID
+
+	// Integer Types
 	case db.DataTypeInt:
-		return "INT"
-	case db.DataTypeString:
-		return "VARCHAR"
-	case db.DataTypeString256:
-		return "VARCHAR(256)"
-	case db.DataTypeText:
-		return "VARCHAR"
+		return "int" // Standard integer
 	case db.DataTypeBigInt:
-		return "bigint"
+		return "bigint" // Large integer
 	case db.DataTypeBigIntAutoIncPK:
-		return "bigint PRIMARY KEY" // Cassandra does not support auto-increment, bigint is closest
+		return "bigint primary key" // Auto-incrementing big integer primary key
 	case db.DataTypeBigIntAutoInc:
-		return "bigint" // Use bigint for large integers
+		return "bigint" // Auto-incrementing big integer
+	case db.DataTypeSmallInt:
+		return "{$smallint}" // Small integer
+	case db.DataTypeTinyInt:
+		return "tinyint" // Tiny integer
+
+	// String Types
+	case db.DataTypeVarChar:
+		return "varchar" // Variable-length string
+	case db.DataTypeVarChar32:
+		return "varchar" // VARCHAR(32)
+	case db.DataTypeVarChar36:
+		return "varchar" // VARCHAR(36)
+	case db.DataTypeVarChar64:
+		return "varchar" // VARCHAR(64)
+	case db.DataTypeVarChar128:
+		return "varchar" // VARCHAR(128)
+	case db.DataTypeVarChar256:
+		return "varchar" // VARCHAR(256)
+	case db.DataTypeText:
+		return "varchar" // Unlimited length text
+	case db.DataTypeLongText:
+		return "varchar" // Long text
 	case db.DataTypeAscii:
 		return "" // Charset specification is not needed in Cassandra
+
+	// UUID Types
 	case db.DataTypeUUID:
-		return "UUID" // Cassandra supports UUID type
+		return "uuid" // Cassandra supports UUID type
 	case db.DataTypeVarCharUUID:
 		return "varchar" // Cassandra supports UUID type
+
+	// Binary Types
 	case db.DataTypeLongBlob:
 		return "blob" // Use blob for binary data
 	case db.DataTypeHugeBlob:
 		return "blob" // Use blob for binary data
-	case db.DataTypeDateTime:
-		return "timestamp" // DateTime type for date and time
-	case db.DataTypeDateTime6:
-		return "timestamp with time zone" // Timestamp with time zone
-	case db.DataTypeTimestamp6:
-		return "timestamp with time zone" // Timestamp with time zone
-	case db.DataTypeCurrentTimeStamp6:
-		return "now()" // Function for current timestamp
 	case db.DataTypeBinary20:
 		return "blob" // varchar for fixed-length binary data
 	case db.DataTypeBinaryBlobType:
 		return "blob" // Use blob for binary data
+
+	// Date and Time Types
+	case db.DataTypeDateTime:
+		return "timestamp" // DateTime type for date and time
+	case db.DataTypeDateTime6:
+		return "timestamp with time zone" // Timestamp with time zone
+	case db.DataTypeTimestamp:
+		return "timestamp" // Timestamp
+	case db.DataTypeTimestamp6:
+		return "timestamp with time zone" // Timestamp with time zone
+	case db.DataTypeCurrentTimeStamp6:
+		return "{$current_timestamp6}" // Current timestamp with microseconds
+
+	// Boolean Types
 	case db.DataTypeBoolean:
 		return "boolean"
 	case db.DataTypeBooleanFalse:
 		return "false"
 	case db.DataTypeBooleanTrue:
 		return "true"
-	case db.DataTypeTinyInt:
-		return "tinyint"
-	case db.DataTypeLongText:
-		return "text" // Use text for long text
+
+	// Constraints and Modifiers
 	case db.DataTypeUnique:
 		return "" // Unique values are not supported
 	case db.DataTypeEngine:
@@ -118,8 +149,6 @@ func (d *cassandraDialect) getType(dataType db.DataType) string {
 		return ""
 	case db.DataTypeNull:
 		return ""
-	case db.DataTypeTenantUUIDBoundID:
-		return "varchar"
 	default:
 		return ""
 	}
@@ -127,6 +156,10 @@ func (d *cassandraDialect) getType(dataType db.DataType) string {
 
 func (d *cassandraDialect) randFunc() string {
 	return ""
+}
+
+func (d *cassandraDialect) supportTransactions() bool {
+	return false
 }
 
 func (d *cassandraDialect) isRetriable(err error) bool {
@@ -212,7 +245,12 @@ func (c *cassandraConnector) ConnectionPool(cfg db.Config) (db.Database, error) 
 	rwc.SetMaxIdleConns(maxConn)
 
 	dbo.dialect = &cassandraDialect{keySpace: keySpace}
+	dbo.useTruncate = cfg.UseTruncate
+	dbo.queryStringInterpolation = cfg.QueryStringInterpolation
+	dbo.dryRun = cfg.DryRun
 	dbo.queryLogger = cfg.QueryLogger
+	dbo.readRowsLogger = cfg.ReadRowsLogger
+	dbo.explainLogger = cfg.ExplainLogger
 
 	return dbo, nil
 }
@@ -221,56 +259,104 @@ func (c *cassandraConnector) DialectName(scheme string) (db.DialectName, error) 
 	return db.CASSANDRA, nil
 }
 
+// cassandraQuerier implements the querier and accessor interfaces for Cassandra
+// This structure is created to maintain compatibility with the sql package interfaces
+// even though Cassandra doesn't support transactions. It wraps the standard sql.DB
+// to provide query functionality while maintaining the expected interface structure.
 type cassandraQuerier struct {
 	be *sql.DB
 }
+
+// cassandraTransaction implements the transaction interface for Cassandra
+// Since Cassandra doesn't support true transactions, this is a no-op implementation
+// that allows the code to maintain compatibility with the sql package interfaces
+// while actually executing queries directly against the database.
 type cassandraTransaction struct {
 	be *sql.DB
 }
 
+// ping verifies the database connection is still alive
 func (d *cassandraQuerier) ping(ctx context.Context) error {
 	return d.be.PingContext(ctx)
 }
+
+// stats returns database statistics
 func (d *cassandraQuerier) stats() sql.DBStats {
 	return d.be.Stats()
 }
+
+// rawSession returns the underlying database session
 func (d *cassandraQuerier) rawSession() interface{} {
 	return d.be
 }
+
+// close closes the database connection
 func (d *cassandraQuerier) close() error {
 	return d.be.Close()
 }
+
+// execContext executes a query without returning any rows
 func (d *cassandraQuerier) execContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
 	return d.be.ExecContext(ctx, query, args...)
 }
+
+// queryRowContext executes a query that returns a single row
 func (d *cassandraQuerier) queryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row {
 	return d.be.QueryRowContext(ctx, query, args...)
 }
+
+// queryContext executes a query that returns rows
 func (d *cassandraQuerier) queryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
 	return d.be.QueryContext(ctx, query, args...)
 }
-func (d *cassandraQuerier) prepareContext(ctx context.Context, query string) (*sql.Stmt, error) {
-	return d.be.PrepareContext(ctx, query)
+
+// prepareContext creates a prepared statement for later queries or executions
+func (d *cassandraQuerier) prepareContext(ctx context.Context, query string) (sqlStatement, error) {
+	var stmt, err = d.be.PrepareContext(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	return &sqlStmt{stmt}, nil
 }
+
+// begin starts a new "transaction" (no-op for Cassandra)
 func (d *cassandraQuerier) begin(ctx context.Context) (transaction, error) {
 	return &cassandraTransaction{d.be}, nil
 }
 
+// Transaction interface implementation methods below
+// Note: These methods execute directly since Cassandra doesn't support transactions
+
+// execContext executes a query without returning any rows
 func (t *cassandraTransaction) execContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
 	return t.be.ExecContext(ctx, query, args...)
 }
+
+// queryRowContext executes a query that returns a single row
 func (t *cassandraTransaction) queryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row {
 	return t.be.QueryRowContext(ctx, query, args...)
 }
+
+// queryContext executes a query that returns rows
 func (t *cassandraTransaction) queryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
 	return t.be.QueryContext(ctx, query, args...)
 }
-func (t *cassandraTransaction) prepareContext(ctx context.Context, query string) (*sql.Stmt, error) {
-	return t.be.PrepareContext(ctx, query)
+
+// prepareContext creates a prepared statement for later queries or executions
+func (t *cassandraTransaction) prepareContext(ctx context.Context, query string) (sqlStatement, error) {
+	var stmt, err = t.be.PrepareContext(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	return &sqlStmt{stmt}, nil
 }
+
+// commit is a no-op since Cassandra doesn't support transactions
 func (t *cassandraTransaction) commit() error {
 	return nil
 }
+
+// rollback is a no-op since Cassandra doesn't support transactions
 func (t *cassandraTransaction) rollback() error {
 	return nil
 }

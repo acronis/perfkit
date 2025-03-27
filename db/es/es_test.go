@@ -46,10 +46,10 @@ func testTableDefinition() *db.TableDefinition {
 			{Name: "@timestamp", Type: db.DataTypeDateTime, Indexed: true},
 			{Name: "id", Type: db.DataTypeId, Indexed: true},
 			{Name: "uuid", Type: db.DataTypeUUID, Indexed: true},
-			{Name: "type", Type: db.DataTypeString, Indexed: true},
-			{Name: "policy_name", Type: db.DataTypeString, Indexed: true},
-			{Name: "resource_name", Type: db.DataTypeString, Indexed: true},
-			{Name: "accessors", Type: db.DataTypeString, Indexed: true},
+			{Name: "type", Type: db.DataTypeVarChar, Indexed: true},
+			{Name: "policy_name", Type: db.DataTypeVarChar, Indexed: true},
+			{Name: "resource_name", Type: db.DataTypeVarChar, Indexed: true},
+			{Name: "accessors", Type: db.DataTypeVarChar, Indexed: true},
 			{Name: "start_time", Type: db.DataTypeDateTime, Indexed: true},
 		},
 	}
@@ -73,7 +73,7 @@ func (suite *TestingSuite) makeTestSession() (db.Database, db.Session, *db.Conte
 		require.NoError(suite.T(), err, "init scheme")
 	}
 
-	var c = dbo.Context(context.Background())
+	var c = dbo.Context(context.Background(), false)
 
 	s := dbo.Session(c)
 
@@ -83,7 +83,12 @@ func (suite *TestingSuite) makeTestSession() (db.Database, db.Session, *db.Conte
 func logDbTime(t *testing.T, c *db.Context) {
 	t.Helper()
 
-	t.Log("dbtime", c.DBtime)
+	t.Log("beginTime", time.Duration(c.BeginTime.Load()))
+	t.Log("prepareTime", time.Duration(c.PrepareTime.Load()))
+	t.Log("execTime", time.Duration(c.ExecTime.Load()))
+	t.Log("queryTime", time.Duration(c.QueryTime.Load()))
+	t.Log("deallocTime", time.Duration(c.DeallocTime.Load()))
+	t.Log("commitTime", time.Duration(c.CommitTime.Load()))
 }
 
 func cleanup(t *testing.T, dbo db.Database) {

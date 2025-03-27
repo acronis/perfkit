@@ -20,7 +20,7 @@ func (suite *TestingSuite) makeVectorTestSession() (db.Database, db.Session, *db
 		QueryLogger:     logger,
 	})
 
-	require.NoError(suite.T(), err, "making test esSession")
+	require.NoError(suite.T(), err, "making test sqlSession")
 
 	var tableSpec = testVectorTableDefinition(dbo.DialectName())
 
@@ -28,7 +28,7 @@ func (suite *TestingSuite) makeVectorTestSession() (db.Database, db.Session, *db
 		require.NoError(suite.T(), err, "init scheme")
 	}
 
-	var c = dbo.Context(context.Background())
+	var c = dbo.Context(context.Background(), false)
 
 	s := dbo.Session(c)
 
@@ -54,6 +54,17 @@ func testVectorTableDefinition(dia db.DialectName) *db.TableDefinition {
 }
 
 func (suite *TestingSuite) TestVectorSearch() {
+	var actualDialect, err = dbDialect(suite.ConnString)
+	if err != nil {
+		suite.T().Error(err)
+		return
+	}
+
+	if actualDialect.name() != db.POSTGRES {
+		suite.T().Skip("only postgresql supports vector search")
+		return
+	}
+
 	d, s, c := suite.makeVectorTestSession()
 	defer logDbTime(suite.T(), c)
 	defer vectorCleanup(suite.T(), d)

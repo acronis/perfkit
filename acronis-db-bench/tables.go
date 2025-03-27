@@ -175,7 +175,9 @@ func (t *TestTable) Create(c *DBConnector, b *benchmark.Benchmark) {
 			}
 		}
 
-		c.database.CreateTable(t.TableName, nil, tableCreationQuery)
+		if err = c.database.CreateTable(t.TableName, nil, tableCreationQuery); err != nil {
+			b.Exit(err.Error())
+		}
 	}
 
 	for _, columns := range t.Indexes {
@@ -198,10 +200,9 @@ var TestTableLight = TestTable{
 	TableDefinition: func(dialect db.DialectName) *db.TableDefinition {
 		return &db.TableDefinition{
 			TableRows: []db.TableRow{
-				{Name: "id", Type: db.DataTypeBigIntAutoInc},
+				{Name: "id", Type: db.DataTypeBigIntAutoIncPK},
 				{Name: "uuid", Type: db.DataTypeUUID, NotNull: true, Indexed: true},
 			},
-			PrimaryKey: []string{"id"},
 		}
 	},
 	CreateQuery: `create table {table} (
@@ -226,13 +227,12 @@ var TestTableMedium = TestTable{
 	TableDefinition: func(dialect db.DialectName) *db.TableDefinition {
 		return &db.TableDefinition{
 			TableRows: []db.TableRow{
-				{Name: "id", Type: db.DataTypeBigIntAutoInc},
-				{Name: "uuid", Type: db.DataTypeUUID, NotNull: true, Indexed: true},
-				{Name: "tenant_id", Type: db.DataTypeUUID, NotNull: true, Indexed: true},
+				{Name: "id", Type: db.DataTypeBigIntAutoIncPK},
+				{Name: "uuid", Type: db.DataTypeVarCharUUID, NotNull: true, Indexed: true},
+				{Name: "tenant_id", Type: db.DataTypeVarCharUUID, NotNull: true, Indexed: true},
 				{Name: "euc_id", Type: db.DataTypeInt, NotNull: true, Indexed: true},
 				{Name: "progress", Type: db.DataTypeInt},
 			},
-			PrimaryKey: []string{"id"},
 		}
 	},
 	CreateQuery: `create table {table} (
@@ -320,6 +320,8 @@ var TestTableHeavy = TestTable{
 		{"cti_entity_uuid", "cti_uuid", 0},
 
 		{"tenant_id", "tenant_uuid", 0},
+		{"euc_id", "string", 0, 64},
+
 		// {"tenant_vis_list", "tenant_uuid_parents", 0},
 
 		{"workflow_id", "int", 2147483647},
@@ -334,27 +336,29 @@ var TestTableHeavy = TestTable{
 		{"assign_count", "int", 5},
 		{"cancellable", "bool", 0},
 		{"cancel_requested", "bool", 0},
+		{"blocker_count", "int", 3},
+
 		{"started_by_user", "string", 0, 32},
 
-		{"policy_id", "uuid", 1024},
+		{"policy_id", "int", 1024},
 		{"policy_type", "string", 1024, 64},
 		{"policy_name", "string", 16384, 256},
 
-		{"resource_id", "uuid", 1024},
-		{"resource_type", "string", 1024, 64},
-		{"resource_name", "string", 16384, 256},
+		{"resource_id", "uuid", 0},
+		{"resource_type", "int", 256},
+		{"resource_name", "string", 0, 256},
 
-		{"affinity_agent_id", "uuid", 0, 16384},
-		{"affinity_cluster_id", "uuid", 0, 32},
+		{"affinity_agent_id", "uuid", 0},
+		{"affinity_cluster_id", "string", 0, 32},
 
 		{"progress", "int", 100},
 		{"progress_total", "int", 100},
 
-		{"enqueue_time", "time", 30},
-		{"assign_time", "time", 30},
-		{"start_time", "time", 30},
-		{"update_time", "time", 30},
-		{"completion_time", "time", 0},
+		{"enqueue_time", "time_ns", 0},
+		{"assign_time", "time_ns", 0},
+		{"start_time", "time_ns", 0},
+		{"update_time", "time_ns", 0},
+		{"completion_time", "time_ns", 0},
 
 		{"result_code", "int", 32},
 		{"result_payload", "rbyte", 0, 256},
@@ -367,10 +371,10 @@ var TestTableHeavy = TestTable{
 		var tableRows []db.TableRow
 
 		tableRows = append(tableRows,
-			db.TableRow{Name: "id", Type: db.DataTypeBigIntAutoInc, Indexed: true},
+			db.TableRow{Name: "id", Type: db.DataTypeBigIntAutoIncPK, Indexed: true},
 			db.TableRow{Name: "uuid", Type: db.DataTypeUUID, NotNull: true, Indexed: true},
-			db.TableRow{Name: "checksum", Type: db.DataTypeString, NotNull: true},
-			db.TableRow{Name: "cti_entity_uuid", Type: db.DataTypeUUID, Indexed: true},
+			db.TableRow{Name: "checksum", Type: db.DataTypeVarChar64, NotNull: true},
+			db.TableRow{Name: "cti_entity_uuid", Type: db.DataTypeVarChar36, Indexed: true},
 		)
 
 		if dialect == db.CLICKHOUSE {
@@ -387,64 +391,82 @@ var TestTableHeavy = TestTable{
 			)
 		} else {
 			tableRows = append(tableRows,
-				db.TableRow{Name: "tenant_id", Type: db.DataTypeUUID, NotNull: true, Indexed: true},
+				db.TableRow{Name: "tenant_id", Type: db.DataTypeVarChar36, NotNull: true, Indexed: true},
+				db.TableRow{Name: "euc_id", Type: db.DataTypeVarChar64, NotNull: true, Indexed: true},
 			)
 		}
 
 		tableRows = append(tableRows,
-			db.TableRow{Name: "workflow_id", Type: db.DataTypeInt, NotNull: true, Indexed: true},
+			db.TableRow{Name: "workflow_id", Type: db.DataTypeBigInt, NotNull: true, Indexed: true},
 			db.TableRow{Name: "state", Type: db.DataTypeInt, NotNull: true, Indexed: true},
-			db.TableRow{Name: "type", Type: db.DataTypeString, NotNull: true, Indexed: true},
-			db.TableRow{Name: "queue", Type: db.DataTypeString, NotNull: true, Indexed: true},
+			db.TableRow{Name: "type", Type: db.DataTypeVarChar64, NotNull: true, Indexed: true},
+			db.TableRow{Name: "queue", Type: db.DataTypeVarChar64, NotNull: true, Indexed: true},
 			db.TableRow{Name: "priority", Type: db.DataTypeInt, NotNull: true, Indexed: true},
 
-			db.TableRow{Name: "issuer_id", Type: db.DataTypeUUID, NotNull: true, Indexed: true},
-			db.TableRow{Name: "issuer_cluster_id", Type: db.DataTypeUUID, Indexed: true},
+			db.TableRow{Name: "issuer_id", Type: db.DataTypeVarChar64, NotNull: true, Indexed: true},
+			db.TableRow{Name: "issuer_cluster_id", Type: db.DataTypeVarChar64, Indexed: true},
 
-			db.TableRow{Name: "heartbeat_ivl_ns", Type: db.DataTypeInt},
-			db.TableRow{Name: "queue_timeout_ns", Type: db.DataTypeInt},
-			db.TableRow{Name: "ack_timeout_ns", Type: db.DataTypeInt},
-			db.TableRow{Name: "exec_timeout_ns", Type: db.DataTypeInt},
-			db.TableRow{Name: "life_time", Type: db.DataTypeInt},
+			db.TableRow{Name: "heartbeat_ivl", Type: db.DataTypeBigInt},
+			db.TableRow{Name: "queue_timeout", Type: db.DataTypeBigInt},
+			db.TableRow{Name: "ack_timeout", Type: db.DataTypeBigInt},
+			db.TableRow{Name: "exec_timeout", Type: db.DataTypeBigInt},
+			db.TableRow{Name: "life_time", Type: db.DataTypeBigInt},
 
-			db.TableRow{Name: "max_assign_count", Type: db.DataTypeInt},
-			db.TableRow{Name: "assign_count", Type: db.DataTypeInt},
-			db.TableRow{Name: "cancellable", Type: db.DataTypeBoolean},
-			db.TableRow{Name: "cancel_requested", Type: db.DataTypeBoolean},
-			db.TableRow{Name: "started_by_user", Type: db.DataTypeString, Indexed: true},
+			db.TableRow{Name: "max_assign_count", Type: db.DataTypeInt, NotNull: true},
+			db.TableRow{Name: "assign_count", Type: db.DataTypeInt, NotNull: true},
+			db.TableRow{Name: "cancellable", Type: db.DataTypeBoolean, NotNull: true},
+			db.TableRow{Name: "cancel_requested", Type: db.DataTypeBoolean, NotNull: true},
+			db.TableRow{Name: "blocker_count", Type: db.DataTypeInt, NotNull: true},
 
-			db.TableRow{Name: "policy_id", Type: db.DataTypeString, Indexed: true},
-			db.TableRow{Name: "policy_type", Type: db.DataTypeString, Indexed: true},
-			db.TableRow{Name: "policy_name", Type: db.DataTypeString, Indexed: true},
+			db.TableRow{Name: "started_by_user", Type: db.DataTypeVarChar256, Indexed: true},
+		)
 
-			db.TableRow{Name: "resource_id", Type: db.DataTypeString, Indexed: true},
-			db.TableRow{Name: "resource_type", Type: db.DataTypeString, Indexed: true},
-			db.TableRow{Name: "resource_name", Type: db.DataTypeString, Indexed: true},
+		if dialect == db.CASSANDRA {
+			tableRows = append(tableRows, db.TableRow{Name: "policy_id", Type: db.DataTypeInt, Indexed: true})
+		} else {
+			tableRows = append(tableRows, db.TableRow{Name: "policy_id", Type: db.DataTypeVarChar64, Indexed: true})
+		}
 
-			db.TableRow{Name: "tags", Type: db.DataTypeString, Indexed: true},
+		tableRows = append(tableRows,
+			db.TableRow{Name: "policy_type", Type: db.DataTypeVarChar64, Indexed: true},
+			db.TableRow{Name: "policy_name", Type: db.DataTypeVarChar256, Indexed: true},
 
-			db.TableRow{Name: "affinity_agent_id", Type: db.DataTypeString, Indexed: true},
-			db.TableRow{Name: "affinity_cluster_id", Type: db.DataTypeString, Indexed: true},
+			db.TableRow{Name: "resource_id", Type: db.DataTypeVarChar64, Indexed: true},
+		)
 
-			db.TableRow{Name: "argument", Type: db.DataTypeString},
-			db.TableRow{Name: "context", Type: db.DataTypeString},
+		if dialect == db.CASSANDRA {
+			tableRows = append(tableRows, db.TableRow{Name: "resource_type", Type: db.DataTypeInt, Indexed: true})
+		} else {
+			tableRows = append(tableRows, db.TableRow{Name: "resource_type", Type: db.DataTypeVarChar64, Indexed: true})
+		}
+
+		tableRows = append(tableRows,
+			db.TableRow{Name: "resource_name", Type: db.DataTypeVarChar256, Indexed: true},
+
+			db.TableRow{Name: "tags", Type: db.DataTypeText, Indexed: true},
+
+			db.TableRow{Name: "affinity_agent_id", Type: db.DataTypeVarChar64, NotNull: true, Indexed: true},
+			db.TableRow{Name: "affinity_cluster_id", Type: db.DataTypeVarChar64, NotNull: true, Indexed: true},
+
+			db.TableRow{Name: "argument", Type: db.DataTypeBinaryBlobType},
+			db.TableRow{Name: "context", Type: db.DataTypeBinaryBlobType},
 
 			db.TableRow{Name: "progress", Type: db.DataTypeInt},
 			db.TableRow{Name: "progress_total", Type: db.DataTypeInt},
 
-			db.TableRow{Name: "assigned_agent_id", Type: db.DataTypeString, Indexed: true},
-			db.TableRow{Name: "assigned_agent_cluster_id", Type: db.DataTypeString, Indexed: true},
+			db.TableRow{Name: "assigned_agent_id", Type: db.DataTypeVarChar64, Indexed: true},
+			db.TableRow{Name: "assigned_agent_cluster_id", Type: db.DataTypeVarChar64, Indexed: true},
 
-			db.TableRow{Name: "enqueue_time", Type: db.DataTypeDateTime, Indexed: true},
-			db.TableRow{Name: "assign_time", Type: db.DataTypeDateTime, Indexed: true},
-			db.TableRow{Name: "start_time", Type: db.DataTypeDateTime, Indexed: true},
-			db.TableRow{Name: "update_time", Type: db.DataTypeDateTime, Indexed: true},
-			db.TableRow{Name: "completion_time", Type: db.DataTypeDateTime, Indexed: true},
+			db.TableRow{Name: "enqueue_time", Type: db.DataTypeBigInt, Indexed: true},
+			db.TableRow{Name: "assign_time", Type: db.DataTypeBigInt, Indexed: true},
+			db.TableRow{Name: "start_time", Type: db.DataTypeBigInt, Indexed: true},
+			db.TableRow{Name: "update_time", Type: db.DataTypeBigInt, Indexed: true},
+			db.TableRow{Name: "completion_time", Type: db.DataTypeBigInt, Indexed: true},
 
 			db.TableRow{Name: "result_code", Type: db.DataTypeInt, Indexed: true},
-			db.TableRow{Name: "result_error", Type: db.DataTypeString},
-			db.TableRow{Name: "result_warnings", Type: db.DataTypeString},
-			db.TableRow{Name: "result_payload", Type: db.DataTypeString},
+			db.TableRow{Name: "result_error", Type: db.DataTypeBinaryBlobType},
+			db.TableRow{Name: "result_warnings", Type: db.DataTypeBinaryBlobType},
+			db.TableRow{Name: "result_payload", Type: db.DataTypeBinaryBlobType},
 
 			db.TableRow{Name: "const_val", Type: db.DataTypeInt},
 		)
@@ -454,8 +476,6 @@ var TestTableHeavy = TestTable{
 		}
 		if dialect == db.CLICKHOUSE {
 			tableDef.PrimaryKey = []string{"partner_id", "customer_id", "toDate(update_time)"}
-		} else {
-			tableDef.PrimaryKey = []string{"id"}
 		}
 
 		if dialect == db.ELASTICSEARCH {
@@ -467,23 +487,23 @@ var TestTableHeavy = TestTable{
 	CreateQuery: `create table {table} (` + tableHeavySchema + `) {$engine};`,
 	Indexes: [][]string{
 		{"uuid"},
-		{"completion_time_ns"},
+		{"completion_time"},
 		{"cti_entity_uuid"},
 		{"tenant_id"},
 		{"euc_id"},
 		{"queue", "state", "affinity_agent_id", "affinity_cluster_id", "tenant_id", "priority"},
 		{"queue", "state", "affinity_agent_id", "affinity_cluster_id", "euc_id", "priority"},
-		{"update_time_ns"},
-		{"state", "completion_time_ns"},
-		{"start_time_ns"},
-		{"enqueue_time_ns"},
+		{"update_time"},
+		{"state", "completion_time"},
+		{"start_time"},
+		{"enqueue_time"},
 		{"resource_id"},
 		{"policy_id"},
 		{"result_code"},
-		{"resource_id", "enqueue_time_ns"},
+		{"resource_id", "enqueue_time"},
 		{"type"},
-		{"type", "tenant_id", "enqueue_time_ns"},
-		{"type", "euc_id", "enqueue_time_ns"},
+		{"type", "tenant_id", "enqueue_time"},
+		{"type", "euc_id", "enqueue_time"},
 		{"queue", "type", "tenant_id"},
 		{"queue", "type", "euc_id"},
 	},
@@ -536,9 +556,9 @@ var TestTableEmailSecurity = TestTable{
 		tableRows = append(tableRows,
 			db.TableRow{Name: "id", Type: db.DataTypeBigInt, Indexed: true},
 			db.TableRow{Name: "date", Type: db.DataTypeDateTime, Indexed: true},
-			db.TableRow{Name: "sender", Type: db.DataTypeString, Indexed: true},
-			db.TableRow{Name: "recipient", Type: db.DataTypeString, Indexed: true},
-			db.TableRow{Name: "subject", Type: db.DataTypeString, Indexed: true},
+			db.TableRow{Name: "sender", Type: db.DataTypeVarChar, Indexed: true},
+			db.TableRow{Name: "recipient", Type: db.DataTypeVarChar, Indexed: true},
+			db.TableRow{Name: "subject", Type: db.DataTypeVarChar, Indexed: true},
 			db.TableRow{Name: "body", Type: db.DataTypeText, Indexed: true},
 			db.TableRow{Name: "embedding", Type: db.DataTypeVector768Float32, Indexed: true},
 		)
@@ -567,6 +587,17 @@ var TestTableBlob = TestTable{
 		{"data", "blob"},
 	},
 	InsertColumns: []string{}, // all
+	TableDefinition: func(dialect db.DialectName) *db.TableDefinition {
+		return &db.TableDefinition{
+			TableRows: []db.TableRow{
+				{Name: "id", Type: db.DataTypeBigIntAutoIncPK},
+				{Name: "uuid", Type: db.DataTypeUUID, NotNull: true, Indexed: true},
+				{Name: "tenant_id", Type: db.DataTypeUUID, NotNull: true, Indexed: true},
+				{Name: "timestamp", Type: db.DataTypeBigInt, NotNull: true, Indexed: true},
+				{Name: "data", Type: db.DataTypeHugeBlob, NotNull: true},
+			},
+		}
+	},
 	CreateQuery: `create table {table} (
 		id {$bigint_autoinc_pk},
 		uuid {$varchar_uuid} {$notnull},
@@ -601,7 +632,7 @@ var TestTableLargeObj = TestTable{
 // TestTableJSON is table to store JSON data
 var TestTableJSON = TestTable{
 	TableName: "acronis_db_bench_json",
-	Databases: RELATIONAL,
+	Databases: []db.DialectName{db.MYSQL, db.POSTGRES},
 	columns: [][]interface{}{
 		{"previous", "bigint", 0},
 		{"sequence", "bigint", 0},
@@ -664,6 +695,18 @@ var TestTableTimeSeriesSQL = TestTable{
 		{"value", "int", 100},
 	},
 	InsertColumns: []string{}, // all
+	TableDefinition: func(dialect db.DialectName) *db.TableDefinition {
+		return &db.TableDefinition{
+			TableRows: []db.TableRow{
+				{Name: "id", Type: db.DataTypeBigIntAutoIncPK},
+				{Name: "tenant_id", Type: db.DataTypeVarCharUUID, NotNull: true, Indexed: true},
+				{Name: "device_id", Type: db.DataTypeVarCharUUID, NotNull: true, Indexed: true},
+				{Name: "metric_id", Type: db.DataTypeVarCharUUID, NotNull: true, Indexed: true},
+				{Name: "ts", Type: db.DataTypeTimestamp, NotNull: true, Indexed: true},
+				{Name: "value", Type: db.DataTypeInt, NotNull: true},
+			},
+		}
+	},
 	CreateQuery: `create table acronis_db_bench_ts_sql(
 			id {$bigint_autoinc_pk},
 			tenant_id {$varchar_uuid} {$notnull},
@@ -748,7 +791,7 @@ var TestTableAdvmTasks = TestTable{
 // TestTableAdvmResources is table to store resources
 var TestTableAdvmResources = TestTable{
 	TableName: "acronis_db_bench_advm_resources",
-	Databases: RELATIONAL,
+	Databases: []db.DialectName{db.POSTGRES, db.MSSQL},
 	columns: [][]interface{}{
 		{"origin", "int", 20},
 		{"resource_uuid", "uuid", 100000},
@@ -787,7 +830,7 @@ var TestTableAdvmResources = TestTable{
 // inspired by the Event Archive table
 var TestTableAdvmResourcesStatuses = TestTable{
 	TableName: "acronis_db_bench_advm_resources_statuses",
-	Databases: RELATIONAL,
+	Databases: []db.DialectName{db.POSTGRES, db.MSSQL},
 	columns: [][]interface{}{
 		{"origin", "int", 20},
 		{"state", "int", 4},
@@ -816,7 +859,7 @@ var TestTableAdvmResourcesStatuses = TestTable{
 // inspired by the Event Archive table
 var TestTableAdvmAgentsResources = TestTable{
 	TableName: "acronis_db_bench_advm_agent_resources",
-	Databases: RELATIONAL,
+	Databases: []db.DialectName{db.POSTGRES, db.MSSQL},
 	columns: [][]interface{}{
 		{"origin", "int", 20},
 		{"agent_uuid", "uuid", 100000},
@@ -839,7 +882,7 @@ var TestTableAdvmAgentsResources = TestTable{
 // inspired by the Event Archive table
 var TestTableAdvmAgents = TestTable{
 	TableName: "acronis_db_bench_advm_agents",
-	Databases: RELATIONAL,
+	Databases: []db.DialectName{db.POSTGRES, db.MSSQL},
 	columns: [][]interface{}{
 		{"origin", "int", 20},
 		{"uuid", "uuid", 100000},
@@ -881,7 +924,7 @@ var TestTableAdvmAgents = TestTable{
 // inspired by the Event Archive table
 var TestTableAdvmBackupResources = TestTable{
 	TableName: "acronis_db_bench_advm_backup_resources",
-	Databases: RELATIONAL,
+	Databases: []db.DialectName{db.POSTGRES, db.MSSQL},
 	columns: [][]interface{}{
 		{"origin", "int", 20},
 		{"backup_id", "int", 400000},
@@ -902,7 +945,7 @@ var TestTableAdvmBackupResources = TestTable{
 // inspired by the Event Archive table
 var TestTableAdvmBackups = TestTable{
 	TableName: "acronis_db_bench_advm_backups",
-	Databases: RELATIONAL,
+	Databases: []db.DialectName{db.POSTGRES, db.MSSQL},
 	columns: [][]interface{}{
 		{"origin", "int", 20},
 
@@ -929,7 +972,7 @@ var TestTableAdvmBackups = TestTable{
 // inspired by the Event Archive table
 var TestTableAdvmArchives = TestTable{
 	TableName: "acronis_db_bench_advm_archives",
-	Databases: RELATIONAL,
+	Databases: []db.DialectName{db.POSTGRES, db.MSSQL},
 	columns: [][]interface{}{
 		{"origin", "int", 20},
 
@@ -958,7 +1001,7 @@ var TestTableAdvmArchives = TestTable{
 // inspired by the Event Archive table
 var TestTableAdvmVaults = TestTable{
 	TableName: "acronis_db_bench_advm_vaults",
-	Databases: RELATIONAL,
+	Databases: []db.DialectName{db.POSTGRES, db.MSSQL},
 	columns: [][]interface{}{
 		{"origin", "int", 20},
 
@@ -982,7 +1025,7 @@ var TestTableAdvmVaults = TestTable{
 // inspired by the Event Archive table
 var TestTableAdvmDevices = TestTable{
 	TableName: "acronis_db_bench_advm_devices",
-	Databases: RELATIONAL,
+	Databases: []db.DialectName{db.POSTGRES, db.MSSQL},
 	columns: [][]interface{}{
 		{"origin", "int", 20},
 		{"uuid", "uuid", 0},

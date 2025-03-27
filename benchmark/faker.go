@@ -6,8 +6,6 @@ import (
 	"os"
 	"sync"
 	"time"
-
-	"github.com/google/uuid"
 )
 
 /*
@@ -138,29 +136,23 @@ func (rw *RandomizerWorker) Uintn64(max uint64) uint64 {
 }
 
 // UUID returns random UUID	v4 value (RFC 4122)
-func (rw *RandomizerWorker) UUID() uuid.UUID {
+func (rw *RandomizerWorker) UUID() string {
 	r := rw.Unique()
 
-	var val = fmt.Sprintf("%04x%04x-%04x-%04x-%04x-%04x%04x%04x",
+	return fmt.Sprintf("%04x%04x-%04x-%04x-%04x-%04x%04x%04x",
 		r.Int31n(0xffff), r.Int31n(0xffff),
 		r.Int31n(0xffff),
 		r.Int31n(0xffff)&0x0fff|0x4000,
 		r.Int31n(0xffff)&0x3fff|0x8000,
 		r.Int31n(0xffff), r.Int31n(0xffff), r.Int31n(0xffff),
 	)
-
-	var id, _ = uuid.ParseBytes([]byte(val))
-	return id
 }
 
 // UUIDn returns random UUID v4 value (RFC 4122) with given limit
-func (rw *RandomizerWorker) UUIDn(limit int) uuid.UUID {
+func (rw *RandomizerWorker) UUIDn(limit int) string {
 	r := rw.Unique()
 
-	var val = fmt.Sprintf("01234567-89ab-cdef-0123-0000%08x", r.Intn(limit))
-
-	var id, _ = uuid.ParseBytes([]byte(val))
-	return id
+	return fmt.Sprintf("01234567-89ab-cdef-0123-0000%08x", r.Intn(limit))
 }
 
 // RandTime returns random time within the given limit

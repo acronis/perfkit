@@ -106,7 +106,7 @@ func (e *EventBus) MainLoop() {
 // QueueIsEmpty returns true if the event bus queue is empty
 func (e *EventBus) QueueIsEmpty() (bool, error) {
 	c := e.workerConn
-	session := c.Session(c.Context(context.Background()))
+	session := c.Session(c.Context(context.Background(), false))
 
 	var rowNum uint64
 	if err := session.QueryRow("SELECT COUNT(*) FROM acronis_db_bench_eventbus_events;").Scan(&rowNum); err != nil {
@@ -167,7 +167,7 @@ func (e *EventBus) CreateTables() error {
 		return err
 	}
 
-	var session = c.Session(c.Context(context.Background()))
+	var session = c.Session(c.Context(context.Background(), false))
 	if txErr := session.Transact(func(tx db.DatabaseAccessor) error {
 		for i := 1; i < MaxTopics+1; i++ {
 			var eventTopic = EventTopic{
@@ -323,7 +323,7 @@ func (e *EventBus) DoAlign() (bool, error) {
 	var unused interface{}
 	var newEventsFound bool
 
-	var session = c.Session(c.Context(context.Background()))
+	var session = c.Session(c.Context(context.Background(), false))
 	if txErr := session.Transact(func(tx db.DatabaseAccessor) error {
 
 		/*
@@ -473,7 +473,7 @@ func (e *EventBus) DoAlign() (bool, error) {
 // DoMaxSeqShifter simulates events max sequence shift
 func (e *EventBus) DoMaxSeqShifter() (bool, error) {
 	var c = e.workerConn
-	var sess = c.Session(c.Context(context.Background()))
+	var sess = c.Session(c.Context(context.Background(), false))
 
 	for t := 1; t < MaxTopics+1; t++ {
 		if txErr := sess.Transact(func(tx db.DatabaseAccessor) error {
@@ -507,7 +507,7 @@ func (e *EventBus) DoMaxSeqShifter() (bool, error) {
 // DoFetch simulates events sending
 func (e *EventBus) DoFetch() (bool, error) {
 	var c = e.workerConn
-	var sess = c.Session(c.Context(context.Background()))
+	var sess = c.Session(c.Context(context.Background(), false))
 
 	for t := 1; t < MaxTopics+1; t++ {
 		var cur64 int64
@@ -569,7 +569,7 @@ func (e *EventBus) DoFetchConsolidated() bool {
 // DoArchive simulates events archiving
 func (e *EventBus) DoArchive() (bool, error) {
 	var c = e.workerConn
-	var sess = c.Session(c.Context(context.Background()))
+	var sess = c.Session(c.Context(context.Background(), false))
 
 	for t := 1; t < MaxTopics+1; t++ {
 		if txErr := sess.Transact(func(tx db.DatabaseAccessor) error {

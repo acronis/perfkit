@@ -61,7 +61,6 @@ type BenchOpts struct {
 	ProfilerPort      int    `long:"profiler-port" description:"open profiler on given port (e.g. 6060)" required:"false" default:"0"`
 	Describe          bool   `long:"describe" description:"describe what test is going to do" required:"false"`
 	DescribeAll       bool   `long:"describe-all" description:"describe all the tests" required:"false"`
-	Explain           bool   `long:"explain" description:"prepend the test queries by EXPLAIN ANALYZE" required:"false"`
 	Query             string `short:"q" long:"query" description:"execute given query, one can use:\n{CTI} - for random CTI UUID\n{TENANT} - randon tenant UUID"`
 }
 
@@ -84,12 +83,6 @@ type DBTestData struct {
 	EffectiveBatch int // EffectiveBatch reflects the default value if the --batch option is not set, it can be different for different tests
 
 	scores map[string][]benchmark.Score
-}
-
-// DBWorkerData is a structure to store all the worker data
-type DBWorkerData struct {
-	workingConn  *DBConnector
-	tenantsCache *DBConnector
 }
 
 var header = strings.Repeat("=", 120) + "\n"
@@ -116,7 +109,7 @@ func Main() {
 		testData := b.Vault.(*DBTestData)
 		var format string
 
-		if b.TestOpts.(*TestOpts).BenchOpts.Explain {
+		if b.TestOpts.(*TestOpts).DBOpts.Explain {
 			return
 		}
 
@@ -135,6 +128,11 @@ func Main() {
 	testOpts, ok := b.TestOpts.(*TestOpts)
 	if !ok {
 		b.Exit("db type conversion error")
+	}
+
+	var connStringErr error
+	if testOpts.DBOpts.ConnString, connStringErr = constructConnStringFromOpts(testOpts.DBOpts); connStringErr != nil {
+		b.Exit("failed to construct connection string: %v", connStringErr)
 	}
 
 	d := DBTestData{}
@@ -209,12 +207,14 @@ func Main() {
 			var workerData = b.WorkerData[workerId].(*DBWorkerData)
 
 			if workerData.workingConn != nil {
-				workerData.workingConn.database.Close()
+				workerData.workingConn.Close()
 			}
 
 			if workerData.tenantsCache != nil {
-				workerData.tenantsCache.database.Close()
+				workerData.tenantsCache.Close()
 			}
+
+			b.WorkerData[workerId] = nil
 		}
 	}
 
@@ -232,6 +232,9 @@ func Main() {
 	if err != nil {
 		b.Exit("Failed to get database info: %v", err)
 	}
+
+	// Has to be returned back to connection pool because it is not used anywhere else
+	c.Release()
 
 	if testOpts.BenchOpts.Info || b.Logger.LogLevel > benchmark.LogInfo {
 		if testOpts.BenchOpts.Info {

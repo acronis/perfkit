@@ -19,33 +19,49 @@ import (
  * DB connection management
  */
 
+// querier defines the interface for database query operations
 type querier interface {
+	// execContext executes a query without returning any rows
 	execContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
+	// queryRowContext executes a query that returns a single row
 	queryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row
+	// queryContext executes a query that returns rows
 	queryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
-	prepareContext(ctx context.Context, query string) (*sql.Stmt, error)
+	// prepareContext creates a prepared statement for later queries or executions
+	prepareContext(ctx context.Context, query string) (sqlStatement, error)
 }
 
+// accessor extends querier with database connection management operations
 type accessor interface {
 	querier
 
+	// ping verifies the database connection is still alive
 	ping(ctx context.Context) error
+	// stats returns database statistics
 	stats() sql.DBStats
+	// rawSession returns the underlying database session
 	rawSession() interface{}
+	// close closes the database connection
 	close() error
 }
 
+// transaction represents a database transaction
 type transaction interface {
 	querier
 
+	// commit commits the transaction
 	commit() error
+	// rollback aborts the transaction
 	rollback() error
 }
 
+// transactor provides the ability to begin new transactions
 type transactor interface {
+	// begin starts a new transaction
 	begin(ctx context.Context) (transaction, error)
 }
 
+// inTx executes a function within a transaction
 func inTx(ctx context.Context, t transactor, d dialect, fn func(q querier, d dialect) error) error {
 	tx, err := t.begin(ctx)
 	if err != nil {
@@ -78,22 +94,29 @@ func inTx(ctx context.Context, t transactor, d dialect, fn func(q querier, d dia
 	return err
 }
 
+// sqlGateway provides core database functionality
 type sqlGateway struct {
-	ctx        context.Context
-	rw         querier
-	dialect    dialect
-	InsideTX   bool
-	MaxRetries int
+	ctx     context.Context // Current context
+	rw      querier         // Query executor
+	dialect dialect         // SQL dialect being used
 
-	queryLogger db.Logger
+	InsideTX                 bool // Indicates if running within transaction
+	MaxRetries               int  // Maximum number of retry attempts
+	QueryStringInterpolation bool // Whether to interpolate query strings
+
+	explain bool // Whether to explain queries
+
+	readRowsLogger db.Logger // Logger for read operations
+	explainLogger  db.Logger // Logger for query explanations
 }
 
-type esSession struct {
+// sqlSession represents a database session
+type sqlSession struct {
 	sqlGateway
-	t transactor
+	t transactor // Transaction manager
 }
 
-func (s *esSession) Transact(fn func(tx db.DatabaseAccessor) error) error {
+func (s *sqlSession) Transact(fn func(tx db.DatabaseAccessor) error) error {
 	var err error
 	var maxRetries = s.MaxRetries
 	if maxRetries == 0 {
@@ -102,7 +125,17 @@ func (s *esSession) Transact(fn func(tx db.DatabaseAccessor) error) error {
 
 	for i := 0; i < maxRetries; i++ {
 		err = inTx(s.ctx, s.t, s.dialect, func(q querier, dl dialect) error {
-			gw := sqlGateway{s.ctx, q, dl, true, s.MaxRetries, s.queryLogger}
+			gw := sqlGateway{
+				s.ctx,
+				q,
+				dl,
+				true,
+				s.MaxRetries,
+				s.QueryStringInterpolation,
+				s.explain,
+				s.readRowsLogger,
+				s.explainLogger,
+			}
 			return fn(&gw) // bad but will work for now?
 		})
 
@@ -115,16 +148,17 @@ func (s *esSession) Transact(fn func(tx db.DatabaseAccessor) error) error {
 
 // database is a wrapper for DB connection
 type sqlDatabase struct {
-	rw          accessor
-	t           transactor
-	dialect     dialect
-	useTruncate bool
+	rw      accessor
+	t       transactor
+	dialect dialect
 
-	queryLogger      db.Logger
-	readedRowsLogger db.Logger
-	queryTimeLogger  db.Logger
+	useTruncate              bool
+	queryStringInterpolation bool
+	dryRun                   bool
 
-	lastQuery string
+	queryLogger    db.Logger
+	readRowsLogger db.Logger
+	explainLogger  db.Logger
 }
 
 // Ping pings the DB
@@ -227,174 +261,50 @@ func (d *sqlDatabase) GetTablesVolumeInfo(tableNames []string) ([]string, error)
 	return getTablesVolumeInfo(d.rw, d.dialect, tableNames)
 }
 
-func accountTime(t *atomic.Int64, since time.Time) {
-	t.Add(time.Since(since).Nanoseconds())
-}
-
-type timedQuerier struct {
-	dbtime *atomic.Int64 // Do not move
-	q      querier
-
-	queryLogger db.Logger
-}
-
-func (tq timedQuerier) execContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
-	defer accountTime(tq.dbtime, time.Now())
-
-	if tq.queryLogger != nil {
-		tq.queryLogger.Log(query)
+func (d *sqlDatabase) Context(ctx context.Context, explain bool) *db.Context {
+	return &db.Context{
+		Ctx:         ctx,
+		Explain:     explain,
+		BeginTime:   atomic.NewInt64(0),
+		PrepareTime: atomic.NewInt64(0),
+		ExecTime:    atomic.NewInt64(0),
+		QueryTime:   atomic.NewInt64(0),
+		DeallocTime: atomic.NewInt64(0),
+		CommitTime:  atomic.NewInt64(0),
 	}
-
-	return tq.q.execContext(ctx, query, args...)
-}
-
-func (tq timedQuerier) queryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row {
-	defer accountTime(tq.dbtime, time.Now())
-
-	if tq.queryLogger != nil {
-		tq.queryLogger.Log(query)
-	}
-
-	return tq.q.queryRowContext(ctx, query, args...)
-}
-
-func (tq timedQuerier) queryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
-	defer accountTime(tq.dbtime, time.Now())
-
-	if tq.queryLogger != nil {
-		tq.queryLogger.Log(query, args...)
-	}
-
-	return tq.q.queryContext(ctx, query, args...)
-}
-
-func (tq timedQuerier) prepareContext(ctx context.Context, query string) (*sql.Stmt, error) {
-	defer accountTime(tq.dbtime, time.Now())
-
-	if tq.queryLogger != nil {
-		tq.queryLogger.Log(query)
-	}
-
-	return tq.q.prepareContext(ctx, query)
-}
-
-type timedTransaction struct {
-	dbtime     *atomic.Int64 // *time.Duration
-	committime *atomic.Int64 // *time.Duration
-	tx         transaction
-
-	queryLogger db.Logger
-}
-
-func (ttx timedTransaction) execContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
-	defer accountTime(ttx.dbtime, time.Now())
-
-	if ttx.queryLogger != nil {
-		ttx.queryLogger.Log(query)
-	}
-
-	return ttx.tx.execContext(ctx, query, args...)
-}
-
-func (ttx timedTransaction) queryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row {
-	defer accountTime(ttx.dbtime, time.Now())
-
-	if ttx.queryLogger != nil {
-		ttx.queryLogger.Log(query)
-	}
-
-	return ttx.tx.queryRowContext(ctx, query, args...)
-}
-
-func (ttx timedTransaction) queryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
-	defer accountTime(ttx.dbtime, time.Now())
-
-	if ttx.queryLogger != nil {
-		ttx.queryLogger.Log(query)
-	}
-
-	return ttx.tx.queryContext(ctx, query, args...)
-}
-
-func (ttx timedTransaction) prepareContext(ctx context.Context, query string) (*sql.Stmt, error) {
-	defer accountTime(ttx.dbtime, time.Now())
-
-	if ttx.queryLogger != nil {
-		ttx.queryLogger.Log(query)
-	}
-
-	return ttx.tx.prepareContext(ctx, query)
-}
-
-func (ttx timedTransaction) commit() error {
-	defer accountTime(ttx.committime, time.Now())
-
-	if ttx.queryLogger != nil {
-		ttx.queryLogger.Log("COMMIT")
-	}
-
-	return ttx.tx.commit()
-}
-
-func (ttx timedTransaction) rollback() error {
-	defer accountTime(ttx.committime, time.Now())
-
-	if ttx.queryLogger != nil {
-		ttx.queryLogger.Log("ROLLBACK")
-	}
-
-	return ttx.tx.rollback()
-}
-
-type timedTransactor struct {
-	dbtime     *atomic.Int64
-	begintime  *atomic.Int64
-	committime *atomic.Int64
-	t          transactor
-
-	queryLogger db.Logger
-}
-
-func (tt timedTransactor) begin(ctx context.Context) (transaction, error) {
-	defer accountTime(tt.begintime, time.Now())
-
-	if tt.queryLogger != nil {
-		tt.queryLogger.Log("BEGIN")
-	}
-
-	var t, err = tt.t.begin(ctx)
-
-	if err != nil {
-		return t, err
-	}
-
-	return timedTransaction{
-		tx:          t,
-		dbtime:      atomic.NewInt64(tt.dbtime.Load()),
-		committime:  atomic.NewInt64(tt.committime.Load()),
-		queryLogger: tt.queryLogger,
-	}, nil
-}
-
-func (d *sqlDatabase) Context(ctx context.Context) *db.Context {
-	return &db.Context{Ctx: ctx}
 }
 
 func (d *sqlDatabase) Session(c *db.Context) db.Session {
-	return &esSession{
+	return &sqlSession{
 		sqlGateway: sqlGateway{
-			ctx:         c.Ctx,
-			rw:          timedQuerier{q: d.rw, dbtime: atomic.NewInt64(c.DBtime.Nanoseconds()), queryLogger: d.queryLogger},
-			dialect:     d.dialect,
-			InsideTX:    false,
-			queryLogger: d.queryLogger,
+			ctx: c.Ctx,
+			rw: wrappedQuerier{
+				q:           d.rw,
+				prepareTime: c.PrepareTime,
+				execTime:    c.ExecTime,
+				queryTime:   c.QueryTime,
+				deallocTime: c.DeallocTime,
+				dryRun:      d.dryRun,
+				queryLogger: d.queryLogger,
+			},
+			dialect:                  d.dialect,
+			InsideTX:                 false,
+			QueryStringInterpolation: d.queryStringInterpolation,
+			explain:                  c.Explain,
+			readRowsLogger:           d.readRowsLogger,
+			explainLogger:            d.explainLogger,
 		},
-		t: timedTransactor{
-			t:           d.t,
-			begintime:   atomic.NewInt64(c.BeginTime.Nanoseconds()),
-			dbtime:      atomic.NewInt64(c.DBtime.Nanoseconds()),
-			committime:  atomic.NewInt64(c.CommitTime.Nanoseconds()),
-			queryLogger: d.queryLogger,
+		t: wrappedTransactor{
+			t:              d.t,
+			beginTime:      c.BeginTime,
+			prepareTime:    c.PrepareTime,
+			execTime:       c.ExecTime,
+			queryTime:      c.QueryTime,
+			deallocTime:    c.DeallocTime,
+			commitTime:     c.CommitTime,
+			dryRun:         d.dryRun,
+			queryLogger:    d.queryLogger,
+			txNotSupported: !d.dialect.supportTransactions(),
 		},
 	}
 }
@@ -403,7 +313,7 @@ func (d *sqlDatabase) RawSession() interface{} {
 	if d.queryLogger != nil && d.rw != nil {
 		stats := d.rw.stats()
 		if stats.OpenConnections > 1 {
-			d.queryLogger.Log("Potential connections leak detected, ensure the previous DB query closed the connection: %s", d.lastQuery)
+			d.queryLogger.Log("potential connections leak detected, ensure the previous DB query closed the connection")
 		}
 	}
 
@@ -424,24 +334,43 @@ func (d *sqlDatabase) Close() error {
 	return d.dialect.close()
 }
 
+// dialect defines the interface for SQL dialect-specific operations
 type dialect interface {
+	// name returns the dialect name
 	name() db.DialectName
+	// encodeString converts a string to dialect-specific format
 	encodeString(s string) string
+	// encodeUUID converts a UUID to dialect-specific format
 	encodeUUID(s uuid.UUID) string
+	// encodeVector converts a float32 slice to dialect-specific format
 	encodeVector(vs []float32) string
+	// encodeBool converts a boolean to dialect-specific format
 	encodeBool(b bool) string
+	// encodeBytes converts a byte slice to dialect-specific format
 	encodeBytes(bs []byte) string
+	// encodeTime converts a timestamp to dialect-specific format
 	encodeTime(timestamp time.Time) string
+	// getType returns the dialect-specific type for a given data type
 	getType(dataType db.DataType) string
+	// randFunc returns the dialect-specific random function
 	randFunc() string
+	// supportTransactions indicates if dialect supports transactions
+	supportTransactions() bool
+	// isRetriable determines if an error can be retried
 	isRetriable(err error) bool
+	// canRollback determines if transaction can be rolled back
 	canRollback(err error) bool
+	// table returns the dialect-specific table name
 	table(table string) string
+	// schema returns the dialect-specific schema
 	schema() string
+	// recommendations returns dialect-specific recommendations
 	recommendations() []db.Recommendation
+	// close cleans up any dialect-specific resources
 	close() error
 }
 
+// sanitizeConn removes sensitive information from connection string
 func sanitizeConn(cs string) string {
 	sanitized := cs
 	u, _ := url.Parse(cs)

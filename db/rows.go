@@ -4,12 +4,16 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
-	"strings"
 )
 
 type Row interface {
 	Scan(dest ...any) error
 }
+
+// EmptyRow is a struct for storing empty row
+type EmptyRow struct{}
+
+func (r *EmptyRow) Scan(dest ...any) error { return nil }
 
 // Rows is a struct for storing DB rows (as a slice of Row) and current index
 type Rows interface {
@@ -17,7 +21,6 @@ type Rows interface {
 	Err() error
 	Scan(dest ...interface{}) error
 	Close() error
-	Dump() string
 }
 
 // EmptyRows is a struct for storing DB rows (as a slice of dbRow) and current index
@@ -27,12 +30,13 @@ func (r *EmptyRows) Next() bool                     { return false }
 func (r *EmptyRows) Err() error                     { return nil }
 func (r *EmptyRows) Scan(dest ...interface{}) error { return nil }
 func (r *EmptyRows) Close() error                   { return nil }
-func (r *EmptyRows) Dump() string                   { return "" }
 
 // CountRows is a struct for storing DB rows (as a slice of dbRow) and current index
 type CountRows struct {
 	Count int64
 	read  bool
+
+	readRowsLogger Logger
 }
 
 func (r *CountRows) Next() bool {
@@ -64,10 +68,13 @@ func (r *CountRows) Scan(dest ...interface{}) error {
 		return fmt.Errorf("unsupported type to convert (type=%T)", d)
 	}
 
+	if r.readRowsLogger != nil {
+		r.readRowsLogger.Log("Row: %d", val)
+	}
+
 	return nil
 }
 func (r *CountRows) Close() error { return nil }
-func (r *CountRows) Dump() string { return "" }
 
 type surrogateRowsRow []interface{}
 
@@ -188,20 +195,4 @@ func (r *SurrogateRows) Scan(dest ...interface{}) error {
 // Close implements sql.Rows interface for DBRows struct (used in tests)
 func (r *SurrogateRows) Close() error {
 	return nil
-}
-
-// Dump returns string representation of DBRows struct (used in tests)
-func (r *SurrogateRows) Dump() string {
-	ret := make([]string, 0, len(r.data))
-	for n, row := range r.data {
-		if n > 10 {
-			// do not flood the logs
-			ret = append(ret, "... truncated ...")
-
-			break
-		}
-		ret = append(ret, DumpRecursive(row, " "))
-	}
-
-	return "[" + strings.Join(ret, ", ") + "]"
 }

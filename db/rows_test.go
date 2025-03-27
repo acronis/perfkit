@@ -73,30 +73,3 @@ func TestClose(t *testing.T) {
 		t.Errorf("Close() error, expected no error but got: %v", err)
 	}
 }
-
-// TestDumpWithMultipleRows tests Dump() function
-func TestDumpWithMultipleRows(t *testing.T) {
-	rows := &SurrogateRows{
-		data: []surrogateRowsRow{
-			{"test", 1, true},
-			{"test2", 2, false},
-		},
-	}
-	dump := rows.Dump()
-	if dump == "" {
-		t.Errorf("Dump() error, dump is empty")
-	}
-}
-
-// TestDumpWithSingleRow tests Dump() function
-func TestDumpWithSingleRow(t *testing.T) {
-	rows := &SurrogateRows{
-		data: []surrogateRowsRow{
-			{"test", 1, true},
-		},
-	}
-	dump := rows.Dump()
-	if dump == "" {
-		t.Errorf("Dump() error, dump is empty")
-	}
-}

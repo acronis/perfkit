@@ -67,7 +67,7 @@ func (suite *TestingSuite) TestSelect() {
 	}
 
 	var selectCtrl = &db.SelectCtrl{
-		Fields: []string{"origin"},
+		Fields: []string{"origin", "name"},
 	}
 	selectCtrl.Page.Limit = 2
 
@@ -95,7 +95,8 @@ func (suite *TestingSuite) TestSelect() {
 		var values []int
 		for rows.Next() {
 			var origin int
-			if scanErr := rows.Scan(&origin); scanErr != nil {
+			var name string
+			if scanErr := rows.Scan(&origin, &name); scanErr != nil {
 				suite.T().Error(scanErr)
 				return
 			}

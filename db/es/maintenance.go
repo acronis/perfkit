@@ -82,7 +82,7 @@ func convertToEsType(t db.TableRow) fieldSpec {
 		spec.Type = fieldTypeLong
 	case db.DataTypeUUID:
 		spec.Type = fieldTypeKeyword
-	case db.DataTypeString:
+	case db.DataTypeVarChar:
 		spec.Type = fieldTypeKeyword
 	case db.DataTypeText:
 		spec.Type = fieldTypeText
