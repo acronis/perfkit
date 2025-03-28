@@ -41,6 +41,10 @@ func (d *msDialect) encodeVector(vs []float32) string {
 	return ""
 }
 
+func (d *msDialect) encodeOrderByVector(field, operator, vector string) string {
+	return "" // MSSQL doesn't support vector search
+}
+
 func (d *msDialect) encodeBool(b bool) string {
 	if b {
 		return "1"
