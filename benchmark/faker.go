@@ -42,7 +42,13 @@ func (cc *cardinalityCacheType) randStringWithCardinality(randID int, pfx string
 		if !exists {
 			var entities []string
 			for n := 0; n < cardinality; n++ {
-				bytes := make([]byte, rr.Intn(maxsize-minsize-len(pfx))+minsize)
+				lenOfRandomStr := minsize
+
+				if (maxsize - minsize - len(pfx)) > 0 {
+					lenOfRandomStr = rr.Intn(maxsize-minsize-len(pfx)) + minsize
+				}
+
+				bytes := make([]byte, lenOfRandomStr)
 				l := len(letterBytes)
 				for i := range bytes {
 					bytes[i] = letterBytes[rr.Intn(l)]
