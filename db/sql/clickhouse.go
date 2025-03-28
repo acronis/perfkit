@@ -40,6 +40,10 @@ func (d *clickHouseDialect) encodeVector(vs []float32) string {
 	return ""
 }
 
+func (d *clickHouseDialect) encodeOrderByVector(field, operator, vector string) string {
+	return "" // ClickHouse doesn't support vector search
+}
+
 func (d *clickHouseDialect) encodeBool(b bool) string {
 	// borrowed from dbr
 	if b {

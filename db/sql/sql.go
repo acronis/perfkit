@@ -344,6 +344,8 @@ type dialect interface {
 	encodeUUID(s uuid.UUID) string
 	// encodeVector converts a float32 slice to dialect-specific format
 	encodeVector(vs []float32) string
+	// encodeOrderByVector converts a field and vector to dialect-specific format
+	encodeOrderByVector(field, operator, vector string) string
 	// encodeBool converts a boolean to dialect-specific format
 	encodeBool(b bool) string
 	// encodeBytes converts a byte slice to dialect-specific format

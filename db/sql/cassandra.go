@@ -44,6 +44,10 @@ func (d *cassandraDialect) encodeVector(vs []float32) string {
 	return ""
 }
 
+func (d *cassandraDialect) encodeOrderByVector(field, operator, vector string) string {
+	return "" // Cassandra doesn't support vector search
+}
+
 func (d *cassandraDialect) encodeBool(b bool) string {
 	// borrowed from dbr
 	if b {

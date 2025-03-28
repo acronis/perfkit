@@ -85,7 +85,7 @@ type selectBuilder struct {
 // - fields: columns to select
 // - values: order specifications (e.g. "asc(field)", "desc(field)")
 // Returns the ORDER BY clause or error
-func (b selectBuilder) sqlOrder(fields []string, values []string) (string, error) {
+func (b selectBuilder) sqlOrder(d dialect, fields []string, values []string) (string, error) {
 	var result = ""
 	if len(fields) == 0 { // select count
 		return result, nil
@@ -129,15 +129,11 @@ func (b selectBuilder) sqlOrder(fields []string, values []string) (string, error
 			}
 
 			var field = args[0]
-			var operator string
-			switch args[1] {
-			case "L2":
-				operator = "<->"
-			}
-
+			var operator = args[1]
 			var vector = args[2]
 
-			orderStatement = fmt.Sprintf("%s %s '%s'", field, operator, vector)
+			// Use dialect-specific vector ordering
+			orderStatement = d.encodeOrderByVector(field, operator, vector)
 		}
 
 		if result == "" {
@@ -357,7 +353,7 @@ func (b selectBuilder) sql(d dialect, c *db.SelectCtrl) (string, bool, error) {
 		return "", true, nil
 	}
 
-	if order, err = b.sqlOrder(c.Fields, c.Order); err != nil {
+	if order, err = b.sqlOrder(d, c.Fields, c.Order); err != nil {
 		return "", false, err
 	}
 
