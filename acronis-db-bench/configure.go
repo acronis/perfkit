@@ -27,7 +27,16 @@ func constructConnStringFromOpts(opts DatabaseOpts) (string, error) {
 		}
 	} else {
 		// No valid connection configuration provided
-		return "", fmt.Errorf("no valid connection configuration found")
+		return "", fmt.Errorf("specify the DB connection string using --connection-string\n" +
+			"examples:\n" +
+			"  PostgreSQL:    postgresql://user:password@localhost:5432/database?sslmode=disable\n" +
+			"  MySQL/MariaDB: mysql://user:password@tcp(localhost:3306)/database\n" +
+			"  MS SQL Server: sqlserver://user:password@localhost:1433?database=database\n" +
+			"  SQLite:        sqlite:///path/to/database.db\n" +
+			"  ClickHouse:    clickhouse://user:password@localhost:9000/database\n" +
+			"  Cassandra:     cql://user:password@localhost:9042?keyspace=database\n" +
+			"  ElasticSearch: es://user::password@localhost:9200\n" +
+			"  OpenSearch:    opensearch://user::password@localhost:9200")
 	}
 
 	return connString, nil

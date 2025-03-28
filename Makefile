@@ -61,7 +61,7 @@ cover:
 	@echo "+-------------------------+----------+---------------------------+"
 
 .PHONY: install
-install: go-install
+install: go-install sign-binaries
 
 .PHONY: go-install
 go-install:
@@ -69,6 +69,21 @@ go-install:
 	    cd $(dir) && \
 		go install -v -ldflags "-X main.Version=`cat VERSION`" ./... \
 		&& echo `go list -f '{{.Module.Path}}'`-v`cat VERSION` has been installed to `go list -f '{{.Target}}'`) &&) true
+
+# Sign binaries on MacOS to prevent them from being killed by Gatekeeper
+.PHONY: sign-binaries
+sign-binaries:
+	@if [ "$$(uname)" = "Darwin" ]; then \
+		echo "Signing binaries for MacOS..."; \
+		$(foreach dir,$(GO_INSTALLABLE_DIRS), \
+			binary_path=$$(cd $(dir) && go list -f '{{.Target}}'); \
+			if [ -f "$$binary_path" ]; then \
+				echo "Signing $$binary_path"; \
+				codesign --force --sign - "$$binary_path" || echo "Warning: Failed to sign $$binary_path"; \
+			fi;) \
+	else \
+		echo "Not on MacOS, skipping binary signing"; \
+	fi
 
 .PHONY: install-acronis-db-bench
 install-acronis-db-bench:
