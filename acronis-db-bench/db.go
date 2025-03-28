@@ -18,7 +18,7 @@ type DatabaseOpts struct {
 	Driver string `long:"driver" description:"(deprecated) db driver (postgres|mysql|sqlite3)" required:"false"`
 	Dsn    string `long:"dsn" description:"(deprecated) dsn connection string" required:"false"`
 
-	ConnString   string `long:"connection-string" description:"connection string" required:"false"`
+	ConnString   string `long:"connection-string" description:"connection string (can also be set via ACRONIS_DB_BENCH_CONNECTION_STRING environment variable)" required:"false"`
 	MaxOpenConns int    `long:"max-open-cons" description:"max open connections per worker" default:"2" required:"false"`
 	Reconnect    bool   `long:"reconnect" description:"reconnect to DB before every test iteration" required:"false"`
 

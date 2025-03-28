@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"net/url"
+	"os"
 	"strings"
 )
 
@@ -14,7 +15,7 @@ func constructConnStringFromOpts(opts DatabaseOpts) (string, error) {
 
 	var connString string
 	if opts.ConnString != "" {
-		// Use the provided connection string
+		// Use the provided connection string from command line (highest priority)
 		connString = opts.ConnString
 	} else if opts.Driver != "" || opts.Dsn != "" {
 		// Construct the connection string from Driver and Dsn if they are provided
@@ -26,17 +27,23 @@ func constructConnStringFromOpts(opts DatabaseOpts) (string, error) {
 			return "", err
 		}
 	} else {
-		// No valid connection configuration provided
-		return "", fmt.Errorf("specify the DB connection string using --connection-string\n" +
-			"examples:\n" +
-			"  PostgreSQL:    postgresql://user:password@localhost:5432/database?sslmode=disable\n" +
-			"  MySQL/MariaDB: mysql://user:password@tcp(localhost:3306)/database\n" +
-			"  MS SQL Server: sqlserver://user:password@localhost:1433?database=database\n" +
-			"  SQLite:        sqlite:///path/to/database.db\n" +
-			"  ClickHouse:    clickhouse://user:password@localhost:9000/database\n" +
-			"  Cassandra:     cql://user:password@localhost:9042?keyspace=database\n" +
-			"  ElasticSearch: es://user::password@localhost:9200\n" +
-			"  OpenSearch:    opensearch://user::password@localhost:9200")
+		// Check for connection string in environment variable
+		envConnString := os.Getenv("ACRONIS_DB_BENCH_CONNECTION_STRING")
+		if envConnString != "" {
+			connString = envConnString
+		} else {
+			// No valid connection configuration provided
+			return "", fmt.Errorf("specify the DB connection string using --connection-string or ACRONIS_DB_BENCH_CONNECTION_STRING environment variable\n" +
+				"examples:\n" +
+				"  PostgreSQL:    postgresql://user:password@localhost:5432/database?sslmode=disable\n" +
+				"  MySQL/MariaDB: mysql://user:password@tcp(localhost:3306)/database\n" +
+				"  MS SQL Server: sqlserver://user:password@localhost:1433?database=database\n" +
+				"  SQLite:        sqlite:///path/to/database.db\n" +
+				"  ClickHouse:    clickhouse://user:password@localhost:9000/database\n" +
+				"  Cassandra:     cql://user:password@localhost:9042?keyspace=database\n" +
+				"  ElasticSearch: es://user::password@localhost:9200\n" +
+				"  OpenSearch:    opensearch://user::password@localhost:9200")
+		}
 	}
 
 	return connString, nil

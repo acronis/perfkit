@@ -50,6 +50,18 @@ acronis-db-bench --connection-string "<connection_string>" ...
 
 Replace <connection_string> with the data source for your database.
 
+### Environment Variables
+
+You can use environment variables instead of command-line options for certain parameters:
+
+```bash
+# Set the connection string via environment variable
+export ACRONIS_DB_BENCH_CONNECTION_STRING="postgresql://user:password@localhost:5432/database?sslmode=disable"
+acronis-db-bench -t all
+```
+
+Note: If both the `--connection-string` command-line option and the `ACRONIS_DB_BENCH_CONNECTION_STRING` environment variable are set, the command-line option takes precedence.
+
 ### Options
 
 #### Database options
