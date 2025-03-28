@@ -158,6 +158,8 @@ var TestRawQuery = TestDesc{
 		var worker testWorkerFunc
 		var explain = b.TestOpts.(*TestOpts).DBOpts.Explain
 
+		// Fix for connection leaks: always close the rows object returned from a query
+		// to ensure the connection is properly released back to the pool
 		if strings.Contains(query, "{") {
 			worker = func(b *benchmark.Benchmark, c *DBConnector, testDesc *TestDesc, batch int) (loops int) { //nolint:revive
 				q := query
@@ -180,18 +182,23 @@ var TestRawQuery = TestDesc{
 				fmt.Printf("query %s\n", q)
 
 				var session = c.database.Session(c.database.Context(context.Background(), explain))
-				if _, err := session.Query(q); err != nil {
+				rows, err := session.Query(q)
+				if err != nil {
 					b.Exit(err)
 				}
+				defer rows.Close()
 
 				return 1
 			}
 		} else {
 			worker = func(b *benchmark.Benchmark, c *DBConnector, testDesc *TestDesc, batch int) (loops int) {
 				var session = c.database.Session(c.database.Context(context.Background(), explain))
-				if _, err := session.Query(query); err != nil {
+
+				rows, err := session.Query(query)
+				if err != nil {
 					b.Exit(err)
 				}
+				defer rows.Close()
 
 				return 1
 			}
