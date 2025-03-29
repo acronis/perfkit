@@ -46,11 +46,10 @@
 //	    DryRun:       false,
 //	}
 //
-// The logger provides functionalities to create a new logger, log a message, log a message with a new line, and log a message with a specific level.
+// The logger provides functionalities to create a new logger, log a message, and log a message with a specific level.
 //
 // Example:
 //
-//	logger := NewLogger(1)
-//	logger.Log(1, 1, "This is a log message")
-//	logger.Logn(1, 1, "This is a log message with a new line")
+//	logger := logger.NewPlaneLogger(logger.LevelWarn, false)
+//	logger.Log(logger.LevelWarn, "This is a log message")
 package benchmark

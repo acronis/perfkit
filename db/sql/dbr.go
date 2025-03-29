@@ -10,6 +10,7 @@ import (
 	"github.com/gocraft/dbr/v2"
 
 	"github.com/acronis/perfkit/db"
+	"github.com/acronis/perfkit/logger"
 )
 
 func init() {
@@ -32,7 +33,7 @@ type dbrQuery struct {
 
 // DBREventReceiver is a wrapper for dbr.EventReceiver interface
 type dbrEventReceiver struct {
-	queryLogger db.Logger
+	queryLogger logger.Logger
 	exitOnError bool
 	queries     []dbrQuery
 }
@@ -42,30 +43,30 @@ func (r *dbrEventReceiver) Event(eventName string) {
 	if eventName == "dbr.begin" || eventName == "dbr.commit" {
 		return
 	}
-	r.queryLogger.Log("DBREventReceiver::Event occured: %s", eventName)
+	r.queryLogger.Trace("DBREventReceiver::Event occured: %s", eventName)
 }
 
 // EventKv logs query and its key-value pairs into DBREventReceiver.queries slice (if logLevel >= LogInfo)
 func (r *dbrEventReceiver) EventKv(eventName string, kvs map[string]string) {
-	r.queryLogger.Log("DBREventReceiver::EventKv occured: %s: kvs: %v", eventName, kvs)
+	r.queryLogger.Trace("DBREventReceiver::EventKv occured: %s: kvs: %v", eventName, kvs)
 }
 
 // EventErr logs query and its error into DBREventReceiver.queries slice (if logLevel >= LogInfo)
 func (r *dbrEventReceiver) EventErr(eventName string, err error) error { //nolint:revive
-	r.queryLogger.Log("DBREventReceiver::EventErr occured: %s", eventName)
+	r.queryLogger.Error("DBREventReceiver::EventErr occured: %s", eventName)
 
 	return nil
 }
 
 // Timing logs query and its duration into DBREventReceiver.queries slice (if logLevel >= LogInfo)
 func (r *dbrEventReceiver) Timing(eventName string, nanoseconds int64) {
-	r.queryLogger.Log("DBREventReceiver::Timing occured: %s: ns: %d", eventName, nanoseconds)
+	r.queryLogger.Trace("DBREventReceiver::Timing occured: %s: ns: %d", eventName, nanoseconds)
 }
 
 // EventErrKv logs query and its error into DBREventReceiver.queries slice (if logLevel >= LogInfo)
 func (r *dbrEventReceiver) EventErrKv(eventName string, err error, kvs map[string]string) error {
 	if err != nil {
-		r.queryLogger.Log("eventName: %s: %s # %s", eventName, kvs["sql"], err)
+		r.queryLogger.Trace("eventName: %s: %s # %s", eventName, kvs["sql"], err)
 	}
 
 	return nil

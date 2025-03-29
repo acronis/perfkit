@@ -8,6 +8,8 @@ replace github.com/acronis/perfkit/benchmark => ../benchmark
 
 replace github.com/acronis/perfkit/db => ../db
 
+replace github.com/acronis/perfkit/logger => ../logger
+
 require (
 	github.com/acronis/perfkit/benchmark v0.0.0-20240611181402-c39abde90e6f
 	github.com/acronis/perfkit/db v0.0.0-00010101000000-000000000000

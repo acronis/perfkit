@@ -3,7 +3,6 @@ package benchmark
 import (
 	"fmt"
 	"math/rand"
-	"os"
 	"sync"
 	"time"
 )
@@ -62,29 +61,26 @@ func (cc *cardinalityCacheType) randStringWithCardinality(randID int, pfx string
 }
 
 // RandStringBytes generates random string with given length and other parameters
-func (b *Benchmark) RandStringBytes(workerID int, pfx string, cardinality int, maxsize int, minsize int, seeded bool) string {
+func (rz *Randomizer) RandStringBytes(pfx string, cardinality int, maxsize int, minsize int, seeded bool) string {
 	if maxsize == minsize {
 		return ""
 	}
-
-	rw := b.Randomizer.GetWorker(workerID)
-
 	if cardinality != 0 {
-		return cardinalityCache.randStringWithCardinality(rw.Intn(cardinality), pfx, cardinality, maxsize, minsize)
+		return cardinalityCache.randStringWithCardinality(rz.Intn(cardinality), pfx, cardinality, maxsize, minsize)
 	}
 
 	var bytes []byte
 	l := len(letterBytes)
 
 	if seeded {
-		bytes = make([]byte, rw.Seeded().Intn(maxsize-minsize)+minsize)
+		bytes = make([]byte, rz.Seeded().Intn(maxsize-minsize)+minsize)
 		for i := range bytes {
-			bytes[i] = letterBytes[rw.Seeded().Intn(l)]
+			bytes[i] = letterBytes[rz.Seeded().Intn(l)]
 		}
 	} else {
-		bytes = make([]byte, rw.Unique().Intn(maxsize-minsize)+minsize)
+		bytes = make([]byte, rz.Unique().Intn(maxsize-minsize)+minsize)
 		for i := range bytes {
-			bytes[i] = letterBytes[rw.Unique().Intn(l)]
+			bytes[i] = letterBytes[rz.Unique().Intn(l)]
 		}
 	}
 
@@ -95,49 +91,42 @@ func (b *Benchmark) RandStringBytes(workerID int, pfx string, cardinality int, m
  * Randomizer
  */
 
-// RandomizerWorker is a struct for storing randomizer data
-type RandomizerWorker struct {
-	fixed  *rand.Rand // fixed randomizer
-	seeded *rand.Rand // seeded seed'able randomizer
-	unique *rand.Rand // unique always unique randomizer
-}
-
 // Fixed returns fixed randomizer (always returns the same values)
-func (rw *RandomizerWorker) Fixed() *rand.Rand {
-	return rw.fixed
+func (rz *Randomizer) Fixed() *rand.Rand {
+	return rz.fixed
 }
 
 // Seeded returns seeded randomizer (seed'able)
-func (rw *RandomizerWorker) Seeded() *rand.Rand {
-	return rw.seeded
+func (rz *Randomizer) Seeded() *rand.Rand {
+	return rz.seeded
 }
 
 // Unique returns unique randomizer (always unique)
-func (rw *RandomizerWorker) Unique() *rand.Rand {
-	return rw.unique
+func (rz *Randomizer) Unique() *rand.Rand {
+	return rz.unique
 }
 
 // Intn returns random int value within the 0...max range
-func (rw *RandomizerWorker) Intn(max int) int {
+func (rz *Randomizer) Intn(max int) int {
 	if max == 0 {
 		return 0
 	}
 
-	return rw.Seeded().Intn(max)
+	return rz.Seeded().Intn(max)
 }
 
 // Uintn64 returns random uint64 value within the 0...max range
-func (rw *RandomizerWorker) Uintn64(max uint64) uint64 {
+func (rz *Randomizer) Uintn64(max uint64) uint64 {
 	if max == 0 {
 		return 0
 	}
 
-	return rw.Seeded().Uint64() % max //nolint:gosec
+	return rz.Seeded().Uint64() % max //nolint:gosec
 }
 
 // UUID returns random UUID	v4 value (RFC 4122)
-func (rw *RandomizerWorker) UUID() string {
-	r := rw.Unique()
+func (rz *Randomizer) UUID() string {
+	r := rz.Unique()
 
 	return fmt.Sprintf("%04x%04x-%04x-%04x-%04x-%04x%04x%04x",
 		r.Int31n(0xffff), r.Int31n(0xffff),
@@ -149,30 +138,30 @@ func (rw *RandomizerWorker) UUID() string {
 }
 
 // UUIDn returns random UUID v4 value (RFC 4122) with given limit
-func (rw *RandomizerWorker) UUIDn(limit int) string {
-	r := rw.Unique()
+func (rz *Randomizer) UUIDn(limit int) string {
+	r := rz.Unique()
 
 	return fmt.Sprintf("01234567-89ab-cdef-0123-0000%08x", r.Intn(limit))
 }
 
 // RandTime returns random time within the given limit
-func (rw *RandomizerWorker) RandTime(daysAgoLimit int) time.Time {
+func (rz *Randomizer) RandTime(daysAgoLimit int) time.Time {
 	now := time.Now()
 
 	days := time.Duration(daysAgoLimit) * 24 * time.Hour
 	from := now.Add(-days)
 
-	randomDays := time.Duration(rw.Intn(90)) * 24 * time.Hour
-	randomHours := time.Duration(rw.Intn(24)) * time.Hour
-	randomMinutes := time.Duration(rw.Intn(60)) * time.Minute
+	randomDays := time.Duration(rz.Intn(90)) * 24 * time.Hour
+	randomHours := time.Duration(rz.Intn(24)) * time.Hour
+	randomMinutes := time.Duration(rz.Intn(60)) * time.Minute
 	randomDuration := randomDays + randomHours + randomMinutes
 
 	return from.Add(randomDuration)
 }
 
 // Read fills the blob with random data
-func (rw *RandomizerWorker) Read(blob []byte) error {
-	_, err := rw.Seeded().Read(blob)
+func (rz *Randomizer) Read(blob []byte) error {
+	_, err := rz.Seeded().Read(blob)
 	if err != nil {
 		err = fmt.Errorf("error reading random data: %s", err)
 	}
@@ -187,60 +176,39 @@ func (rw *RandomizerWorker) Read(blob []byte) error {
  * - 0 value is returned ~1K times
  * - max returned value is ~10K
  */
-func (rw *RandomizerWorker) IntnExp(max int) int {
-	return rw.Intn(rw.Intn(max) + 1)
+func (rz *Randomizer) IntnExp(max int) int {
+	return rz.Intn(rz.Intn(max) + 1)
 }
 
-// NewRandomizerWorker returns new RandomizerWorker object with given seed and workerID
-func NewRandomizerWorker(seed int64, workerID int) *RandomizerWorker {
-	rw := RandomizerWorker{}
+func NewRandomizer(seed int64, workerID int) *Randomizer {
+	rz := Randomizer{}
+
 	if seed == 0 {
 		seed = time.Now().UnixNano()
 	} else {
 		seed += 1 + int64(workerID)
 	}
 
-	rw.fixed = rand.New(rand.NewSource(0))
-	rw.seeded = rand.New(rand.NewSource(seed))
-	rw.unique = rand.New(rand.NewSource(time.Now().UnixNano()))
-
-	return &rw
-}
-
-// RandomizerPlugin is a
-type RandomizerPlugin interface {
-	GenCommonFakeValue(columnType string, rw *RandomizerWorker, cardinality int) (bool, interface{})
-	GenFakeValue(columnType string, rw *RandomizerWorker, cardinality int, preGenerated map[string]interface{}) (bool, interface{})
-}
-
-// Randomizer is a struct for storing randomizer data
-type Randomizer struct {
-	worker  map[int]*RandomizerWorker // worker is a map, id -> RandomizerWorker
-	plugins map[string]RandomizerPlugin
-}
-
-// NewRandomizer returns new Randomizer object with given seed and workers count
-func NewRandomizer(seed int64, workers int) *Randomizer {
-	rz := Randomizer{}
-	rz.worker = make(map[int]*RandomizerWorker)
-
-	for w := 0; w <= workers; w++ {
-		rz.worker[w] = NewRandomizerWorker(seed, w)
-	}
-	rz.worker[-1] = NewRandomizerWorker(seed, -1)
+	rz.fixed = rand.New(rand.NewSource(0))
+	rz.seeded = rand.New(rand.NewSource(seed))
+	rz.unique = rand.New(rand.NewSource(time.Now().UnixNano()))
 
 	return &rz
 }
 
-// GetWorker returns RandomizerWorker object for given workerID
-func (rz *Randomizer) GetWorker(workerID int) *RandomizerWorker {
-	rw, exists := rz.worker[workerID]
-	if !exists {
-		fmt.Printf("fatal error: %v", fmt.Sprintf("random generator for worker %d has not been initialized, probably NewRandomizer() was not initilized properly", workerID))
-		os.Exit(127)
-	}
+// RandomizerPlugin is a
+type RandomizerPlugin interface {
+	GenCommonFakeValue(columnType string, rz *Randomizer, cardinality int) (bool, interface{})
+	GenFakeValue(columnType string, rz *Randomizer, cardinality int, preGenerated map[string]interface{}) (bool, interface{})
+}
 
-	return rw
+// Randomizer is a struct for storing randomizer data
+type Randomizer struct {
+	plugins map[string]RandomizerPlugin
+
+	fixed  *rand.Rand // fixed randomizer
+	seeded *rand.Rand // seeded seed'able randomizer
+	unique *rand.Rand // unique always unique randomizer
 }
 
 func (rz *Randomizer) RegisterPlugin(name string, plugin RandomizerPlugin) { //nolint:revive
@@ -265,89 +233,86 @@ type DBFakeColumnConf struct {
 }
 
 // GenFakeValue generates fake value for given column type
-func (b *Benchmark) GenFakeValue(workerID int, columnType string, columnName string, cardinality int, maxsize int, minsize int, preGenerated map[string]interface{}) interface{} {
-	rw := b.Randomizer.GetWorker(workerID)
+func (rz *Randomizer) GenFakeValue(columnType string, columnName string, cardinality int, maxsize int, minsize int, preGenerated map[string]interface{}) (interface{}, error) {
 
 	switch columnType {
 	case "autoinc":
 		// the best motonic autoincrement simulation
-		return time.Now().UnixNano()
+		return time.Now().UnixNano(), nil
 	case "now_sec":
-		return time.Now().Unix()
+		return time.Now().Unix(), nil
 	case "now_ms":
-		return time.Now().UnixMilli()
+		return time.Now().UnixMilli(), nil
 	case "now_mcs":
-		return time.Now().UnixMicro()
+		return time.Now().UnixMicro(), nil
 	case "now_ns":
-		return time.Now().UnixNano()
+		return time.Now().UnixNano(), nil
 	case "now":
-		return time.Now()
+		return time.Now(), nil
 	case "int":
-		return rw.Intn(cardinality)
+		return rz.Intn(cardinality), nil
 	case "bigint":
-		return rand.Int63()
+		return rand.Int63(), nil
 	case "string":
-		return b.RandStringBytes(workerID, columnName+"_", cardinality, maxsize, minsize, true)
+		return rz.RandStringBytes(columnName+"_", cardinality, maxsize, minsize, true), nil
 	case "rstring":
-		return b.RandStringBytes(workerID, columnName+"_", cardinality, maxsize, minsize, false)
+		return rz.RandStringBytes(columnName+"_", cardinality, maxsize, minsize, false), nil
 	case "uuid":
 		if cardinality == 0 {
-			return rw.UUID()
+			return rz.UUID(), nil
 		} else {
-			return rw.UUIDn(cardinality)
+			return rz.UUIDn(cardinality), nil
 		}
 	case "time":
 		if cardinality == 0 {
-			return time.Now()
+			return time.Now(), nil
 		} else {
-			return rw.RandTime(cardinality)
+			return rz.RandTime(cardinality), nil
 		}
 	case "time_string":
 		if cardinality == 0 {
-			return time.Now().String()
+			return time.Now().String(), nil
 		} else {
-			return rw.RandTime(cardinality).String()
+			return rz.RandTime(cardinality).String(), nil
 		}
 	case "time_ns":
 		// fmt.Printf("dt: %s\n", rw.RandTime(cardinality).UTC().Format("2006-01-02 15:04:05.000000"))
 		if cardinality == 0 {
-			return time.Now().Unix()
+			return time.Now().Unix(), nil
 		} else {
-			return rw.RandTime(cardinality).Unix()
+			return rz.RandTime(cardinality).Unix(), nil
 		}
 	case "timestamp":
 		if cardinality == 0 {
-			return time.Now().UTC().Format("2006-01-02 15:04:05.000000")
+			return time.Now().UTC().Format("2006-01-02 15:04:05.000000"), nil
 		} else {
-			return rw.RandTime(cardinality).UTC().Format("2006-01-02 15:04:05.000000")
+			return rz.RandTime(cardinality).UTC().Format("2006-01-02 15:04:05.000000"), nil
 		}
 	case "byte":
-		return []byte(b.RandStringBytes(workerID, "", cardinality, maxsize, minsize, true))
+		return []byte(rz.RandStringBytes("", cardinality, maxsize, minsize, true)), nil
 	case "rbyte":
-		return []byte(b.RandStringBytes(workerID, "", cardinality, maxsize, minsize, false))
+		return []byte(rz.RandStringBytes("", cardinality, maxsize, minsize, false)), nil
 	case "json":
-		return b.GenRandomJson(rw, 1024)
+		return rz.GenRandomJson(1024), nil
 	case "bool":
-		return rw.Intn(2) == 1
+		return rz.Intn(2) == 1, nil
 	case "blob":
-		size := rw.Intn(maxsize-minsize) + minsize
+		size := rz.Intn(maxsize-minsize) + minsize
 		blob := make([]byte, size)
-		err := rw.Read(blob)
+		err := rz.Read(blob)
 		if err != nil {
-			b.Exit(err.Error())
+			return nil, err
 		}
 
-		return blob
+		return blob, nil
 	default:
-		for _, plugin := range b.Randomizer.plugins {
-			if ok, value := plugin.GenFakeValue(columnType, rw, cardinality, preGenerated); ok {
-				return value
+		for _, plugin := range rz.plugins {
+			if ok, value := plugin.GenFakeValue(columnType, rz, cardinality, preGenerated); ok {
+				return value, nil
 			}
 		}
 
-		b.Exit("generateParameter: unsupported parameter '%s'", columnType)
-
-		return ""
+		return "", fmt.Errorf("generateParameter: unsupported parameter '%s'", columnType)
 	}
 }
 
@@ -367,15 +332,14 @@ func columnRequired(column string, columns []string) bool { //nolint:unused
 }
 
 // GenFakeData generates fake data for given column configuration
-func (b *Benchmark) GenFakeData(workerID int, colConfs *[]DBFakeColumnConf, WithAutoInc bool) ([]string, []interface{}) {
+func (rz *Randomizer) GenFakeData(colConfs *[]DBFakeColumnConf, WithAutoInc bool) ([]string, []interface{}, error) {
 	columns := make([]string, 0, len(*colConfs))
 	values := make([]interface{}, 0, len(*colConfs))
-	rw := b.Randomizer.GetWorker(workerID)
 
 	var preGenerated map[string]interface{}
-	for _, plugin := range b.Randomizer.plugins {
+	for _, plugin := range rz.plugins {
 		for _, c := range *colConfs {
-			if exists, value := plugin.GenCommonFakeValue(c.ColumnType, rw, c.Cardinality); exists {
+			if exists, value := plugin.GenCommonFakeValue(c.ColumnType, rz, c.Cardinality); exists {
 				if preGenerated == nil {
 					preGenerated = make(map[string]interface{})
 				}
@@ -389,21 +353,26 @@ func (b *Benchmark) GenFakeData(workerID int, colConfs *[]DBFakeColumnConf, With
 			continue
 		}
 		columns = append(columns, c.ColumnName)
-		values = append(values, b.GenFakeValue(workerID, c.ColumnType, c.ColumnName, c.Cardinality, c.MaxSize, c.MinSize, preGenerated))
+
+		value, err := rz.GenFakeValue(c.ColumnType, c.ColumnName, c.Cardinality, c.MaxSize, c.MinSize, preGenerated)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		values = append(values, value)
 	}
 
-	return columns, values
+	return columns, values, nil
 }
 
 // GenFakeDataAsMap generates fake data for given column configuration as map
-func (b *Benchmark) GenFakeDataAsMap(workerID int, colConfs *[]DBFakeColumnConf, WithAutoInc bool) *map[string]interface{} {
+func (rz *Randomizer) GenFakeDataAsMap(colConfs *[]DBFakeColumnConf, WithAutoInc bool) (*map[string]interface{}, error) {
 	ret := make(map[string]interface{}, len(*colConfs))
-	rw := b.Randomizer.GetWorker(workerID)
 
 	var preGenerated map[string]interface{}
-	for _, plugin := range b.Randomizer.plugins {
+	for _, plugin := range rz.plugins {
 		for _, c := range *colConfs {
-			if exists, value := plugin.GenCommonFakeValue(c.ColumnType, rw, c.Cardinality); exists {
+			if exists, value := plugin.GenCommonFakeValue(c.ColumnType, rz, c.Cardinality); exists {
 				if preGenerated == nil {
 					preGenerated = make(map[string]interface{})
 				}
@@ -416,8 +385,14 @@ func (b *Benchmark) GenFakeDataAsMap(workerID int, colConfs *[]DBFakeColumnConf,
 		if c.ColumnType == "autoinc" && !WithAutoInc {
 			continue
 		}
-		ret[c.ColumnName] = b.GenFakeValue(workerID, c.ColumnType, c.ColumnName, c.Cardinality, c.MaxSize, c.MinSize, preGenerated)
+
+		value, err := rz.GenFakeValue(c.ColumnType, c.ColumnName, c.Cardinality, c.MaxSize, c.MinSize, preGenerated)
+		if err != nil {
+			return nil, fmt.Errorf("genFakeDataAsMap: %s", err)
+		}
+
+		ret[c.ColumnName] = value
 	}
 
-	return &ret
+	return &ret, nil
 }

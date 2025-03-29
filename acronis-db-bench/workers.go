@@ -12,6 +12,7 @@ import (
 
 	"github.com/acronis/perfkit/benchmark"
 	"github.com/acronis/perfkit/db"
+	"github.com/acronis/perfkit/logger"
 
 	tenants "github.com/acronis/perfkit/acronis-db-bench/tenants-cache"
 )
@@ -20,12 +21,15 @@ import (
  * Worker initialization
  */
 
-func initWorker(b *benchmark.Benchmark, workerID int, testDesc *TestDesc, rowsRequired uint64) {
-	if b.WorkerData[workerID] == nil {
+func initWorker(worker *benchmark.BenchmarkWorker, testDesc *TestDesc, rowsRequired uint64) {
+	b := worker.Benchmark
+	workerID := worker.WorkerID
+
+	if worker.Data == nil {
 		var workerData DBWorkerData
 		var err error
 
-		if workerData.workingConn, err = NewDBConnector(&b.TestOpts.(*TestOpts).DBOpts, workerID, b.Logger, 1); err != nil {
+		if workerData.workingConn, err = NewDBConnector(&b.TestOpts.(*TestOpts).DBOpts, workerID, worker.Logger, 1); err != nil {
 			return
 		}
 
@@ -39,11 +43,11 @@ func initWorker(b *benchmark.Benchmark, workerID int, testDesc *TestDesc, rowsRe
 			}
 		}
 
-		b.WorkerData[workerID] = &workerData
+		worker.Data = &workerData
 	}
 
 	if workerID == 0 {
-		conn := b.WorkerData[0].(*DBWorkerData).workingConn
+		conn := worker.Data.(*DBWorkerData).workingConn
 		testData := b.Vault.(*DBTestData)
 		testData.TestDesc = testDesc
 
@@ -59,17 +63,17 @@ func initWorker(b *benchmark.Benchmark, workerID int, testDesc *TestDesc, rowsRe
 		if tableName == "" {
 			testDesc.table.RowsCount = 0
 		} else {
-			b.Log(benchmark.LogTrace, workerID, fmt.Sprintf("initializing table '%s'", tableName))
+			b.Logger.Debug("initializing table '%s'", tableName)
 			if testDesc.isReadonly {
 				t.Create(conn, b)
-				b.Log(benchmark.LogTrace, workerID, fmt.Sprintf("readonly test, skipping table '%s' initialization", tableName))
+				b.Logger.Debug("readonly test, skipping table '%s' initialization", tableName)
 				if exists, err := conn.database.TableExists(tableName); err != nil {
 					b.Exit(fmt.Sprintf("db: cannot check if table '%s' exists: %v", tableName, err))
 				} else if !exists {
 					b.Exit("The '%s' table doesn't exist, please create tables using -I option, or use individual insert test using the -t `insert-***`", tableName)
 				}
 			} else {
-				b.Log(benchmark.LogTrace, workerID, fmt.Sprintf("creating table '%s'", tableName))
+				b.Logger.Debug("creating table '%s'", tableName)
 				t.Create(conn, b)
 			}
 
@@ -87,7 +91,7 @@ func initWorker(b *benchmark.Benchmark, workerID int, testDesc *TestDesc, rowsRe
 			}
 
 			testDesc.table.RowsCount = uint64(rowNum)
-			b.Log(benchmark.LogInfo, workerID, fmt.Sprintf("table '%s' has %d rows", tableName, testDesc.table.RowsCount))
+			b.Logger.Debug("table '%s' has %d rows", tableName, testDesc.table.RowsCount)
 
 			if rowsRequired > 0 {
 				if testDesc.table.RowsCount < rowsRequired {
@@ -98,8 +102,8 @@ func initWorker(b *benchmark.Benchmark, workerID int, testDesc *TestDesc, rowsRe
 		}
 
 		var tenantCacheDatabase db.Database
-		if b.WorkerData[0].(*DBWorkerData).tenantsCache != nil {
-			tenantCacheDatabase = b.WorkerData[0].(*DBWorkerData).tenantsCache.database
+		if worker.Data.(*DBWorkerData).tenantsCache != nil {
+			tenantCacheDatabase = worker.Data.(*DBWorkerData).tenantsCache.database
 		} else {
 			tenantCacheDatabase = conn.database
 		}
@@ -108,20 +112,20 @@ func initWorker(b *benchmark.Benchmark, workerID int, testDesc *TestDesc, rowsRe
 			b.Exit("db: cannot initialize tenants cache: %v", err)
 		}
 	}
-	b.Log(benchmark.LogTrace, workerID, "worker is initialized")
+	worker.Logger.Trace("worker is initialized")
 }
 
 func initCommon(b *benchmark.Benchmark, testDesc *TestDesc, rowsRequired uint64) {
-	b.InitPerWorker = func(workerId int) {
-		initWorker(b, workerId, testDesc, rowsRequired)
+	b.WorkerInitFunc = func(worker *benchmark.BenchmarkWorker) {
+		initWorker(worker, testDesc, rowsRequired)
 	}
 
 	b.Metric = func() (metric string) {
 		return testDesc.metric
 	}
 
-	b.FinishPerWorker = func(workerId int) {
-		if workerData, ok := b.WorkerData[workerId].(*DBWorkerData); ok {
+	b.WorkerFinishFunc = func(worker *benchmark.BenchmarkWorker) {
+		if workerData, ok := worker.Data.(*DBWorkerData); ok {
 			workerData.release()
 		}
 	}
@@ -138,8 +142,8 @@ func initCommon(b *benchmark.Benchmark, testDesc *TestDesc, rowsRequired uint64)
 				connPool.shutdown()
 
 				// Then cleanup worker data
-				for workerId := range b.WorkerData {
-					if workerData, ok := b.WorkerData[workerId].(*DBWorkerData); ok {
+				for _, worker := range b.Workers {
+					if workerData, ok := worker.Data.(*DBWorkerData); ok {
 						if workerData.workingConn != nil {
 							workerData.workingConn.Close()
 						}
@@ -160,8 +164,8 @@ func initCommon(b *benchmark.Benchmark, testDesc *TestDesc, rowsRequired uint64)
 func testGeneric(b *benchmark.Benchmark, testDesc *TestDesc, workerFunc testWorkerFunc, rowsRequired uint64) {
 	initCommon(b, testDesc, rowsRequired)
 
-	b.Worker = func(workerId int) (loops int) {
-		c := b.WorkerData[workerId].(*DBWorkerData).workingConn
+	b.WorkerRunFunc = func(worker *benchmark.BenchmarkWorker) (loops int) {
+		c := worker.Data.(*DBWorkerData).workingConn
 		batch := b.Vault.(*DBTestData).EffectiveBatch
 
 		return workerFunc(b, c, testDesc, batch)
@@ -175,11 +179,11 @@ func testGeneric(b *benchmark.Benchmark, testDesc *TestDesc, workerFunc testWork
 func testSelect(
 	b *benchmark.Benchmark,
 	testDesc *TestDesc,
-	fromFunc func(b *benchmark.Benchmark, workerId int) string,
+	fromFunc func(worker *benchmark.BenchmarkWorker) string,
 	what []string,
 	variablesToRead []interface{},
-	whereFunc func(b *benchmark.Benchmark, workerId int) map[string][]string,
-	orderByFunc func(b *benchmark.Benchmark, workerId int) []string,
+	whereFunc func(worker *benchmark.BenchmarkWorker) map[string][]string,
+	orderByFunc func(worker *benchmark.BenchmarkWorker) []string,
 	rowsRequired uint64,
 ) {
 	initCommon(b, testDesc, rowsRequired)
@@ -196,22 +200,23 @@ func testSelect(
 		ID int64 `db:"id"`
 	}
 
-	b.Worker = func(workerId int) (loops int) {
-		c := b.WorkerData[workerId].(*DBWorkerData).workingConn
+	b.WorkerRunFunc = func(worker *benchmark.BenchmarkWorker) (loops int) {
+		b := worker.Benchmark
+		c := worker.Data.(*DBWorkerData).workingConn
 
 		from := testDesc.table.TableName
 		if fromFunc != nil {
-			from = fromFunc(b, workerId)
+			from = fromFunc(worker)
 		}
 
 		var whereCond map[string][]string
 		if whereFunc != nil {
-			whereCond = whereFunc(b, workerId)
+			whereCond = whereFunc(worker)
 		}
 
 		var orderBy []string
 		if orderByFunc != nil {
-			orderBy = orderByFunc(b, workerId)
+			orderBy = orderByFunc(worker)
 		}
 
 		if testDesc.isDBRTest {
@@ -275,29 +280,29 @@ func testSelect(
 func testSelectRawSQLQuery(
 	b *benchmark.Benchmark,
 	testDesc *TestDesc,
-	fromFunc func(b *benchmark.Benchmark, workerId int) string,
+	fromFunc func(worker *benchmark.BenchmarkWorker) string,
 	what string,
-	whereFunc func(b *benchmark.Benchmark, workerId int) string,
-	orderByFunc func(b *benchmark.Benchmark) string,
+	whereFunc func(worker *benchmark.BenchmarkWorker) string,
+	orderByFunc func(worker *benchmark.BenchmarkWorker) string,
 	rowsRequired uint64,
 ) {
 	initCommon(b, testDesc, rowsRequired)
 	batch := b.Vault.(*DBTestData).EffectiveBatch
 
-	b.Worker = func(workerId int) (loops int) {
-		c := b.WorkerData[workerId].(*DBWorkerData).workingConn
+	b.WorkerRunFunc = func(worker *benchmark.BenchmarkWorker) (loops int) {
+		c := worker.Data.(*DBWorkerData).workingConn
 
 		from := testDesc.table.TableName
 		if fromFunc != nil {
-			from = fromFunc(b, workerId)
+			from = fromFunc(worker)
 		}
 		where := ""
 		if whereFunc != nil {
-			where = whereFunc(b, workerId)
+			where = whereFunc(worker)
 		}
 		orderBy := ""
 		if orderByFunc != nil {
-			orderBy = orderByFunc(b)
+			orderBy = orderByFunc(worker)
 		}
 
 		var dialectName = c.database.DialectName()
@@ -393,8 +398,8 @@ func testInsertGeneric(b *benchmark.Benchmark, testDesc *TestDesc) {
 	if dialectName == db.CLICKHOUSE {
 		sql := fmt.Sprintf("INSERT INTO %s", table.TableName) //nolint:perfsprint
 
-		b.Worker = func(workerId int) (loops int) {
-			workerData := b.WorkerData[workerId].(*DBWorkerData)
+		b.WorkerRunFunc = func(worker *benchmark.BenchmarkWorker) (loops int) {
+			workerData := worker.Data.(*DBWorkerData)
 			rows := table.RowsCount
 
 			var c = workerData.workingConn
@@ -408,7 +413,10 @@ func testInsertGeneric(b *benchmark.Benchmark, testDesc *TestDesc) {
 
 				for i := 0; i < batch; i++ {
 					// clickhouse doesn't support autoincremented ID, so need to maintain it here
-					_, values := b.GenFakeData(workerId, colConfs, false)
+					_, values, err := worker.Randomizer.GenFakeData(colConfs, false)
+					if err != nil {
+						return err
+					}
 					atomic.AddUint64(&rows, 1)
 					args := append([]interface{}{rows}, values...)
 
@@ -422,8 +430,8 @@ func testInsertGeneric(b *benchmark.Benchmark, testDesc *TestDesc) {
 						return err
 					}
 
-					if c.Logger.LogLevel >= benchmark.LogDebug {
-						c.Log(benchmark.LogDebug, fmt.Sprintf("%s %v", sql, args))
+					if worker.Logger.GetLevel() >= logger.LevelDebug {
+						worker.Logger.Debug(fmt.Sprintf("%s %v", sql, args))
 					}
 				}
 
@@ -437,29 +445,32 @@ func testInsertGeneric(b *benchmark.Benchmark, testDesc *TestDesc) {
 			return batch
 		}
 	} else if testDesc.isDBRTest {
-		b.Worker = func(workerId int) (loops int) {
+		b.WorkerRunFunc = func(worker *benchmark.BenchmarkWorker) (loops int) {
 			var t time.Time
-			if b.Logger.LogLevel >= benchmark.LogDebug {
+			if worker.Logger.GetLevel() >= logger.LevelDebug {
 				t = time.Now()
 			}
 
-			c := b.WorkerData[workerId].(*DBWorkerData).workingConn
+			c := worker.Data.(*DBWorkerData).workingConn
 
 			var rawDbrSess = c.database.RawSession()
 			var dbrSess = rawDbrSess.(*dbr.Session)
 
 			tx, err := dbrSess.Begin()
-			b.Log(benchmark.LogDebug, workerId, "BEGIN")
+			worker.Logger.Debug("BEGIN")
 			if err != nil {
-				b.Exit(err.Error())
+				worker.Exit(err)
 			}
 			defer tx.RollbackUnlessCommitted() // Rollback in case of error
 
 			for i := 0; i < batch; i++ {
-				columns, values := b.GenFakeData(workerId, colConfs, false)
+				columns, values, err := worker.Randomizer.GenFakeData(colConfs, false)
+				if err != nil {
+					b.Exit(err)
+				}
 				_, err = tx.InsertInto(table.TableName).Columns(columns...).Values(values...).Exec()
 				if err != nil {
-					b.Exit("aborting")
+					b.Exit(err)
 				}
 			}
 
@@ -468,29 +479,32 @@ func testInsertGeneric(b *benchmark.Benchmark, testDesc *TestDesc) {
 				b.Exit("Commit() error: %s", err)
 			}
 
-			if b.Logger.LogLevel >= benchmark.LogDebug {
-				c.Log(benchmark.LogDebug, fmt.Sprintf("COMMIT # dur: %.6f", time.Since(t).Seconds()))
+			if worker.Logger.GetLevel() >= logger.LevelDebug {
+				worker.Logger.Debug(fmt.Sprintf("COMMIT # dur: %.6f", time.Since(t).Seconds()))
 			}
 
 			return batch
 		}
 	} else {
-		b.Worker = func(workerId int) (loops int) {
-			workerData := b.WorkerData[workerId].(*DBWorkerData)
+		b.WorkerRunFunc = func(worker *benchmark.BenchmarkWorker) (loops int) {
+			workerData := worker.Data.(*DBWorkerData)
 
 			var c = workerData.workingConn
 			var sess = c.database.Session(c.database.Context(context.Background(), false))
 
 			if txErr := sess.Transact(func(tx db.DatabaseAccessor) error {
 				for i := 0; i < batch; i++ {
-					columns, values := b.GenFakeData(workerId, colConfs, db.WithAutoInc(getDBDriver(b)))
+					columns, values, err := worker.Randomizer.GenFakeData(colConfs, false)
+					if err != nil {
+						return err
+					}
 
 					if err := tx.BulkInsert(table.TableName, [][]interface{}{values}, columns); err != nil {
 						return err
 					}
 
 					if b.TestOpts.(*TestOpts).BenchOpts.Events {
-						rw := b.Randomizer.GetWorker(workerId)
+						rw := worker.Randomizer
 						if err := b.Vault.(*DBTestData).EventBus.InsertEvent(rw, tx, rw.UUID()); err != nil {
 							return err
 						}
@@ -530,27 +544,30 @@ func testUpdateGeneric(b *benchmark.Benchmark, testDesc *TestDesc, updateRows ui
 	table := &testDesc.table
 
 	if testDesc.isDBRTest {
-		b.Worker = func(workerId int) (loops int) {
+		b.WorkerRunFunc = func(worker *benchmark.BenchmarkWorker) (loops int) {
 			var t time.Time
-			if b.Logger.LogLevel >= benchmark.LogDebug {
+			if worker.Logger.GetLevel() >= logger.LevelDebug {
 				t = time.Now()
 			}
 
-			c := b.WorkerData[workerId].(*DBWorkerData).workingConn
+			c := worker.Data.(*DBWorkerData).workingConn
 
 			var rawDbrSess = c.database.RawSession()
 			var dbrSess = rawDbrSess.(*dbr.Session)
 
 			tx, err := dbrSess.Begin()
-			b.Log(benchmark.LogDebug, workerId, "BEGIN")
+			worker.Logger.Debug("BEGIN")
 			if err != nil {
-				b.Exit(err.Error())
+				worker.Exit(err)
 			}
 			defer tx.RollbackUnlessCommitted() // Rollback in case of error
 
 			for i := 0; i < batch; i++ {
-				columns := b.GenFakeDataAsMap(workerId, colConfs, db.WithAutoInc(getDBDriver(b)))
-				id := int64(b.Randomizer.GetWorker(workerId).Uintn64(table.RowsCount - updateRows))
+				columns, err := worker.Randomizer.GenFakeDataAsMap(colConfs, false)
+				if err != nil {
+					worker.Exit(err)
+				}
+				id := int64(worker.Randomizer.Uintn64(table.RowsCount - updateRows))
 
 				if updateRows == 1 {
 					_, err = tx.Update(table.TableName).SetMap(*columns).Where(fmt.Sprintf("id > %d", id)).Exec()
@@ -567,8 +584,8 @@ func testUpdateGeneric(b *benchmark.Benchmark, testDesc *TestDesc, updateRows ui
 				b.Exit("Commit() error: %s", err)
 			}
 
-			if b.Logger.LogLevel >= benchmark.LogDebug {
-				c.Log(benchmark.LogDebug, fmt.Sprintf("COMMIT # dur: %.6f", time.Since(t).Seconds()))
+			if worker.Logger.GetLevel() >= logger.LevelDebug {
+				worker.Logger.Debug(fmt.Sprintf("COMMIT # dur: %.6f", time.Since(t).Seconds()))
 			}
 
 			return batch * int(updateRows)
@@ -598,13 +615,16 @@ func testUpdateGeneric(b *benchmark.Benchmark, testDesc *TestDesc, updateRows ui
 		}
 		updateSQL := formatSQL(updateSQLTemplate, dialectName)
 
-		b.Worker = func(workerId int) (loops int) {
-			var c = b.WorkerData[workerId].(*DBWorkerData).workingConn
+		b.WorkerRunFunc = func(worker *benchmark.BenchmarkWorker) (loops int) {
+			var c = worker.Data.(*DBWorkerData).workingConn
 			var session = c.database.Session(c.database.Context(context.Background(), false))
 			if txErr := session.Transact(func(tx db.DatabaseAccessor) error {
 				for i := 0; i < batch; i++ {
-					id := int64(b.Randomizer.GetWorker(workerId).Uintn64(table.RowsCount-updateRows) + updateRows)
-					_, fakeDataValues := b.GenFakeData(workerId, colConfs, false)
+					id := int64(worker.Randomizer.Uintn64(table.RowsCount-updateRows) + updateRows)
+					_, fakeDataValues, err := worker.Randomizer.GenFakeData(colConfs, false)
+					if err != nil {
+						return err
+					}
 
 					fakeDataValues = append(fakeDataValues, id)
 					if updateRows > 1 {
@@ -616,7 +636,7 @@ func testUpdateGeneric(b *benchmark.Benchmark, testDesc *TestDesc, updateRows ui
 					}
 
 					if b.TestOpts.(*TestOpts).BenchOpts.Events {
-						rw := b.Randomizer.GetWorker(workerId)
+						rw := worker.Randomizer
 						if err = b.Vault.(*DBTestData).EventBus.InsertEvent(rw, tx, rw.UUID()); err != nil {
 							return err
 						}
@@ -653,26 +673,26 @@ func testDeleteGeneric(b *benchmark.Benchmark, testDesc *TestDesc, deleteRows ui
 	}
 
 	if testDesc.isDBRTest {
-		b.Worker = func(workerId int) (loops int) {
+		b.WorkerRunFunc = func(worker *benchmark.BenchmarkWorker) (loops int) {
 			var t time.Time
-			if b.Logger.LogLevel >= benchmark.LogDebug {
+			if worker.Logger.GetLevel() >= logger.LevelDebug {
 				t = time.Now()
 			}
 
-			c := b.WorkerData[workerId].(*DBWorkerData).workingConn
+			c := worker.Data.(*DBWorkerData).workingConn
 
 			var rawDbrSess = c.database.RawSession()
 			var dbrSess = rawDbrSess.(*dbr.Session)
 
 			tx, err := dbrSess.Begin()
-			b.Log(benchmark.LogDebug, workerId, "BEGIN")
+			worker.Logger.Debug("BEGIN")
 			if err != nil {
-				b.Exit(err.Error())
+				b.Exit(err)
 			}
 			defer tx.RollbackUnlessCommitted() // Rollback in case of error
 
 			for i := 0; i < batch; i++ {
-				id := int64(b.Randomizer.GetWorker(workerId).Uintn64(table.RowsCount - deleteRows))
+				id := int64(worker.Randomizer.Uintn64(table.RowsCount - deleteRows))
 
 				if deleteRows == 1 {
 					_, err = tx.DeleteFrom(table.TableName).Where(fmt.Sprintf("id > %d", id)).Exec()
@@ -685,11 +705,11 @@ func testDeleteGeneric(b *benchmark.Benchmark, testDesc *TestDesc, deleteRows ui
 			}
 
 			if err = tx.Commit(); err != nil {
-				c.Exit(err.Error())
+				b.Exit(err)
 			}
 
-			if b.Logger.LogLevel >= benchmark.LogDebug {
-				c.Log(benchmark.LogDebug, fmt.Sprintf("COMMIT # dur: %.6f", time.Since(t).Seconds()))
+			if worker.Logger.GetLevel() >= logger.LevelDebug {
+				worker.Logger.Debug(fmt.Sprintf("COMMIT # dur: %.6f", time.Since(t).Seconds()))
 			}
 
 			return batch * int(deleteRows)
@@ -703,12 +723,12 @@ func testDeleteGeneric(b *benchmark.Benchmark, testDesc *TestDesc, deleteRows ui
 		}
 		deleteSQL := formatSQL(deleteSQLTemplate, dialectName)
 
-		b.Worker = func(workerId int) (loops int) {
-			var c = b.WorkerData[workerId].(*DBWorkerData).workingConn
+		b.WorkerRunFunc = func(worker *benchmark.BenchmarkWorker) (loops int) {
+			var c = worker.Data.(*DBWorkerData).workingConn
 			var session = c.database.Session(c.database.Context(context.Background(), false))
 			if txErr := session.Transact(func(tx db.DatabaseAccessor) error {
 				for i := 0; i < batch; i++ {
-					id := int64(b.Randomizer.GetWorker(workerId).Uintn64(table.RowsCount-deleteRows) + deleteRows)
+					id := int64(worker.Randomizer.Uintn64(table.RowsCount-deleteRows) + deleteRows)
 					var values []interface{}
 
 					values = append(values, id)
@@ -721,7 +741,7 @@ func testDeleteGeneric(b *benchmark.Benchmark, testDesc *TestDesc, deleteRows ui
 					}
 
 					if b.TestOpts.(*TestOpts).BenchOpts.Events {
-						rw := b.Randomizer.GetWorker(workerId)
+						rw := worker.Randomizer
 						if err := b.Vault.(*DBTestData).EventBus.InsertEvent(rw, tx, rw.UUID()); err != nil {
 							return err
 						}

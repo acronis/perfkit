@@ -385,7 +385,7 @@ func newBenchClient() *benchClient {
 }
 
 func main() {
-	var b = benchmark.New()
+	var b = benchmark.NewBenchmark()
 
 	b.AddOpts = func() benchmark.TestOpts {
 		var opts = Options{}
@@ -430,16 +430,19 @@ func main() {
 			logs: logsStore{},
 		}
 		b.Vault = &vault
-		b.WorkerData = make([]benchmark.WorkerData, b.CommonOpts.Workers)
+		b.Workers = []*benchmark.BenchmarkWorker{}
+		for i := 0; i < b.CommonOpts.Workers; i++ {
+			b.Workers = append(b.Workers, benchmark.NewBenchmarkWorker(b, i))
+		}
 	}
 
-	b.InitPerWorker = func(id int) {
-		b.WorkerData[id] = newBenchClient()
+	b.WorkerInitFunc = func(worker *benchmark.BenchmarkWorker) {
+		worker.Data = newBenchClient()
 	}
 
-	b.Worker = func(id int) (loops int) {
+	b.WorkerRunFunc = func(worker *benchmark.BenchmarkWorker) (loops int) {
 		dataStore := b.Vault.(*store)
-		client := b.WorkerData[id].(*benchClient)
+		client := worker.Data.(*benchClient)
 		disableKeepAlive := b.TestOpts.(*Options).DisableKeepAliveClient
 
 		req, err := http.NewRequest("GET", dataStore.url, nil)

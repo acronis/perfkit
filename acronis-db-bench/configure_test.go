@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"os"
+	"strings"
 	"testing"
 )
 
@@ -11,6 +13,8 @@ func TestConstructConnStringFromOpts(t *testing.T) {
 		expected    string
 		expectedErr error
 	}
+
+	os.Setenv("ACRONIS_DB_BENCH_CONNECTION_STRING", "")
 
 	tests := []testConstructConnString{
 		{
@@ -163,7 +167,7 @@ func TestConstructConnStringFromOpts(t *testing.T) {
 		{
 			opts:        DatabaseOpts{},
 			expected:    "",
-			expectedErr: fmt.Errorf("no valid connection configuration found"),
+			expectedErr: fmt.Errorf("specify the DB connection string using --connection-string"),
 		},
 	}
 
@@ -172,8 +176,8 @@ func TestConstructConnStringFromOpts(t *testing.T) {
 
 		if err != nil {
 			if test.expectedErr != nil {
-				if test.expectedErr.Error() != err.Error() {
-					t.Errorf("failure for opts: %+v", test.opts)
+				if !strings.Contains(err.Error(), test.expectedErr.Error()) {
+					t.Errorf("failure for opts: %+v, expected error: %v, got error: %v", test.opts, test.expectedErr, err)
 				}
 			} else {
 				t.Errorf("unexpected error for opts: %+v, err: %v", test.opts, err)
@@ -185,4 +189,71 @@ func TestConstructConnStringFromOpts(t *testing.T) {
 			t.Errorf("unexpected result for opts: %+v: %s", test.opts, result)
 		}
 	}
+}
+
+func TestConstructConnStringFromEnv(t *testing.T) {
+	type testConstructConnString struct {
+		envValue    string
+		opts        DatabaseOpts
+		expected    string
+		expectedErr error
+	}
+
+	tests := []testConstructConnString{
+		{
+			envValue:    "postgres://user:pass@localhost:5432/testdb?sslmode=disable",
+			opts:        DatabaseOpts{},
+			expected:    "postgres://user:pass@localhost:5432/testdb?sslmode=disable",
+			expectedErr: nil,
+		},
+		{
+			envValue: "mysql://user:pass@localhost:3306/testdb",
+			opts: DatabaseOpts{
+				ConnString: "postgres://override:me@localhost:5432/testdb",
+			},
+			expected:    "postgres://override:me@localhost:5432/testdb",
+			expectedErr: nil,
+		},
+		{
+			envValue: "mysql://user:pass@localhost:3306/testdb",
+			opts: DatabaseOpts{
+				Driver: "postgres",
+				Dsn:    "host=localhost port=5432 user=test password=test dbname=testdb sslmode=disable",
+			},
+			expected:    "postgres://test:test@localhost:5432/testdb?sslmode=disable",
+			expectedErr: nil,
+		},
+		{
+			envValue:    "",
+			opts:        DatabaseOpts{},
+			expected:    "",
+			expectedErr: fmt.Errorf("specify the DB connection string using --connection-string"),
+		},
+	}
+
+	for _, test := range tests {
+		os.Setenv("ACRONIS_DB_BENCH_CONNECTION_STRING", test.envValue)
+		result, err := constructConnStringFromOpts(test.opts)
+
+		if err != nil {
+			if test.expectedErr != nil {
+				if !strings.Contains(err.Error(), test.expectedErr.Error()) {
+					t.Errorf("failure for env: %s, opts: %+v, expected error: %v, got error: %v",
+						test.envValue, test.opts, test.expectedErr, err)
+				}
+			} else {
+				t.Errorf("unexpected error for env: %s, opts: %+v, err: %v",
+					test.envValue, test.opts, err)
+			}
+			continue
+		}
+
+		if test.expected != result {
+			t.Errorf("unexpected result for env: %s, opts: %+v, expected: %s, got: %s",
+				test.envValue, test.opts, test.expected, result)
+		}
+	}
+
+	// Reset environment variable after tests
+	os.Setenv("ACRONIS_DB_BENCH_CONNECTION_STRING", "")
 }

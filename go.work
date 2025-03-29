@@ -7,4 +7,5 @@ use (
 	./acronis-restrelay-bench
 	./benchmark
 	./db
+	./logger
 )

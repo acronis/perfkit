@@ -160,7 +160,7 @@ func (t *TestTable) Create(c *DBConnector, b *benchmark.Benchmark) {
 		}
 	} else {
 		if t.CreateQuery == "" {
-			b.Log(benchmark.LogTrace, 0, fmt.Sprintf("no create query for '%s'", t.TableName))
+			b.Logger.Error("no create query for '%s'", t.TableName)
 			// b.Exit("internal error: no migration provided for table %s creation", t.TableName)
 			return
 		}
@@ -812,15 +812,15 @@ var TestTableAdvmResources = TestTable{
 			resource_uuid CHAR(36)          NOT NULL,
 			tenant_id     CHAR(36),
 			customer_id   CHAR(36),
-		
+
 			type          INTEGER          NOT NULL,
 			name          VARCHAR(256),
-		
+
 			created_at    BIGINT           NOT NULL,
 			deleted_at    BIGINT,
-		
+
 			os            VARCHAR(256),
-		
+
 			PRIMARY KEY (origin, resource_uuid, tenant_id)
 			) {$engine};`,
 	Indexes: [][]string{{"origin"}, {"type"}, {"name"}},
@@ -843,13 +843,13 @@ var TestTableAdvmResourcesStatuses = TestTable{
 	CreateQuery: `CREATE TABLE acronis_db_bench_advm_resources_statuses(
 			origin                 CHAR(36),
 			resource_id            {$bigint_autoinc} NOT NULL,
-		
+
 			state                  INTEGER  DEFAULT 0,
 			severity               SMALLINT DEFAULT 0,
 			applied_policy_names   VARCHAR(256),
 			last_successful_backup BIGINT,
 			next_backup            BIGINT,
-		
+
 			PRIMARY KEY (origin, resource_id)
 			) {$engine};`,
 	Indexes: [][]string{{"origin"}, {"state"}},
@@ -872,7 +872,7 @@ var TestTableAdvmAgentsResources = TestTable{
 			agent_uuid  CHAR(36) NOT NULL,
 			resource_id BIGINT   NOT NULL,
 			tenant_id   CHAR(36) NOT NULL,
-		
+
 			PRIMARY KEY (origin, agent_uuid, resource_id, tenant_id)
 			) {$engine};`,
 	Indexes: [][]string{{"origin"}},
@@ -902,19 +902,19 @@ var TestTableAdvmAgents = TestTable{
 	CreateQuery: `CREATE TABLE acronis_db_bench_advm_agents(
 			origin     CHAR(36),
 			uuid       CHAR(36) NOT NULL,
-		
+
 			tenant_id  CHAR(36),
 			type       VARCHAR(64)      NOT NULL,
 			name       VARCHAR(128),
-		
+
 			created_at BIGINT           NOT NULL,
 			deleted_at BIGINT,
-		
+
 			is_active  BIT,
 			os_family  VARCHAR(64),
 			os_name    VARCHAR(255),
 			version    VARCHAR(36),
-		
+
 			PRIMARY KEY (origin, uuid)
 			) {$engine};`,
 	Indexes: [][]string{{"origin"}, {"type"}, {"name"}},
@@ -935,7 +935,7 @@ var TestTableAdvmBackupResources = TestTable{
 			origin        CHAR(36),
 			backup_id     BIGINT   NOT NULL,
 			resource_uuid CHAR(36) NOT NULL DEFAULT '',
-		
+
 			PRIMARY KEY (origin, backup_id, resource_uuid)
 			) {$engine};`,
 	Indexes: [][]string{{"origin"}},
@@ -957,12 +957,12 @@ var TestTableAdvmBackups = TestTable{
 	CreateQuery: `CREATE TABLE acronis_db_bench_advm_backups(
 			origin     CHAR(36),
 			id         {$bigint_autoinc} NOT NULL,
-		
+
 			created_at BIGINT  NOT NULL,
 			deleted_at BIGINT,
-		
+
 			archive_id BIGINT  NOT NULL,
-		
+
 			PRIMARY KEY (origin, id)
 			) {$engine};`,
 	Indexes: [][]string{{"origin"}, {"created_at"}, {"archive_id"}},
@@ -985,13 +985,13 @@ var TestTableAdvmArchives = TestTable{
 	CreateQuery: `CREATE TABLE acronis_db_bench_advm_archives(
 			origin     CHAR(36),
 			id         {$bigint_autoinc} NOT NULL,
-		
+
 			created_at BIGINT NOT NULL,
 			deleted_at BIGINT,
-		
+
 			vault_id   BIGINT NOT NULL,
 			size       BIGINT NOT NULL,
-		
+
 			PRIMARY KEY (origin, id)
 			) {$engine};`,
 	Indexes: [][]string{{"origin"}, {"created_at"}, {"vault_id"}},
@@ -1012,10 +1012,10 @@ var TestTableAdvmVaults = TestTable{
 	CreateQuery: `CREATE TABLE acronis_db_bench_advm_vaults(
 			origin       CHAR(36),
 			id           {$bigint_autoinc} NOT NULL,
-		
+
 			name         VARCHAR(128) NOT NULL,
 			storage_type VARCHAR(64)  NOT NULL,
-		
+
 			PRIMARY KEY (origin, id)
 			) {$engine};`,
 	Indexes: [][]string{{"origin"}, {"name"}},
@@ -1070,18 +1070,18 @@ var TestTableAdvmDevices = TestTable{
 			group_name             VARCHAR(64) NOT NULL,
 			resource_os            VARCHAR(64) NOT NULL,
 			registered_at          BIGINT,
-			
+
 			agent_name             VARCHAR(64) NOT NULL,
 			agent_is_active        {$boolean},
 			agent_version          VARCHAR(64) NOT NULL,
-			
+
 			customer_name          VARCHAR(64) NOT NULL,
 			unit_name              VARCHAR(64) NOT NULL,
-			
+
 			applied_policy         VARCHAR(64) NOT NULL,
 			state                  VARCHAR(64) NOT NULL,
 			last_result            VARCHAR(64) NOT NULL,
-			
+
 			last_backup            BIGINT,
 			next_backup            BIGINT,
 			archives_count         BIGINT,
@@ -1091,9 +1091,9 @@ var TestTableAdvmDevices = TestTable{
 			used_total             BIGINT,
 			used_cloud             BIGINT,
 			used_local             BIGINT,
-		
+
 			alerts_count           BIGINT,
-			
+
 			PRIMARY KEY (origin, id)
 			) {$engine};`,
 	Indexes: [][]string{{"origin"}, {"name"}, {"type"}, {"group_name"}, {"registered_at"}, {"agent_name"}, {"agent_is_active"}},

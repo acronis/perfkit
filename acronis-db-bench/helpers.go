@@ -66,7 +66,7 @@ func createTables(b *benchmark.Benchmark) {
 }
 
 func dbConnector(b *benchmark.Benchmark) *DBConnector {
-	var conn, err = NewDBConnector(&b.TestOpts.(*TestOpts).DBOpts, 0, b.Logger, 1)
+	var conn, err = NewDBConnector(&b.TestOpts.(*TestOpts).DBOpts, -1, b.Logger, 1)
 	if err != nil {
 		FatalError(err.Error())
 	}
@@ -172,7 +172,11 @@ func NewParquetFileDataSourceForRandomizer(bench *benchmark.Benchmark, filePath 
 		source:  source,
 		columns: registeredColumns,
 	}
+
 	bench.Randomizer.RegisterPlugin("dataset", dataSourcePlugin)
+	for _, worker := range bench.Workers {
+		worker.Randomizer.RegisterPlugin("dataset", dataSourcePlugin)
+	}
 
 	return nil
 }
@@ -184,7 +188,7 @@ type DataSetSourcePlugin struct {
 	currentValues map[string]interface{}
 }
 
-func (p *DataSetSourcePlugin) GenCommonFakeValue(columnType string, rw *benchmark.RandomizerWorker, cardinality int) (bool, interface{}) {
+func (p *DataSetSourcePlugin) GenCommonFakeValue(columnType string, rz *benchmark.Randomizer, cardinality int) (bool, interface{}) {
 	if len(p.columns) == 0 {
 		return false, nil
 	}
@@ -211,7 +215,7 @@ func (p *DataSetSourcePlugin) GenCommonFakeValue(columnType string, rw *benchmar
 	return true, p.currentValues[columnType]
 }
 
-func (p *DataSetSourcePlugin) GenFakeValue(columnType string, rw *benchmark.RandomizerWorker, cardinality int, preGenerated map[string]interface{}) (bool, interface{}) {
+func (p *DataSetSourcePlugin) GenFakeValue(columnType string, rz *benchmark.Randomizer, cardinality int, preGenerated map[string]interface{}) (bool, interface{}) {
 	if len(p.columns) == 0 {
 		return false, nil
 	}
