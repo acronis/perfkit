@@ -12,6 +12,7 @@ import (
 
 	"github.com/acronis/perfkit/benchmark"
 	"github.com/acronis/perfkit/db"
+	"github.com/acronis/perfkit/logger"
 )
 
 // EventTopic is a helper structure to simulate event topics
@@ -58,11 +59,11 @@ type EventBus struct {
 	batchSize       int
 	sleepMsec       int
 	workerIteration uint64
-	logger          *benchmark.Logger
+	logger          logger.Logger
 }
 
 // NewEventBus creates a new event bus worker instance
-func NewEventBus(conn db.Database, logger *benchmark.Logger) *EventBus {
+func NewEventBus(conn db.Database, logger logger.Logger) *EventBus {
 	return &EventBus{
 		workerConn:    conn,
 		workerStarted: false,
@@ -74,9 +75,9 @@ func NewEventBus(conn db.Database, logger *benchmark.Logger) *EventBus {
 }
 
 // Log is a helper function to log event bus messages
-func (e *EventBus) Log(LogLevel int, format string, args ...interface{}) {
+func (e *EventBus) Log(LogLevel logger.LogLevel, format string, args ...interface{}) {
 	msg := "eventbus: " + fmt.Sprintf(format, args...)
-	e.logger.Log(LogLevel, -1, msg)
+	e.logger.Log(LogLevel, msg)
 }
 
 // MainLoop is the main worker loop for the event bus
@@ -85,13 +86,13 @@ func (e *EventBus) MainLoop() {
 
 	for {
 		if empty, err := e.QueueIsEmpty(); err != nil {
-			e.Log(benchmark.LogError, "cannot check if queue is empty: %v", err)
+			e.logger.Error("cannot check if queue is empty: %v", err)
 
 			return
 		} else if empty {
 			select {
 			case <-e.stopCh:
-				e.Log(benchmark.LogTrace, "stopping main worker loop")
+				e.logger.Info("stopping main worker loop")
 
 				return
 			default:
@@ -131,7 +132,7 @@ func (e *EventBus) Start() error {
 	}
 	e.workerStarted = true
 
-	e.Log(benchmark.LogTrace, "worker start")
+	e.logger.Debug("worker start")
 
 	e.wg.Add(1)
 	go e.MainLoop()
@@ -146,7 +147,7 @@ func (e *EventBus) Stop() {
 	}
 	e.stopCh <- true
 	e.wg.Wait()
-	e.Log(benchmark.LogTrace, "worker stop")
+	e.logger.Debug("worker stop")
 }
 
 // CreateTables creates all the tables required for the event bus
@@ -203,7 +204,7 @@ func (e *EventBus) CreateTables() error {
 		return fmt.Errorf("eventbus: cannot create tables: %v", txErr)
 	}
 
-	e.Log(benchmark.LogDebug, "created EventBus tables and indexes")
+	e.logger.Debug("created EventBus tables and indexes")
 
 	return nil
 }
@@ -252,8 +253,8 @@ func (e *EventBus) DropTables() error {
 }
 
 // InsertEvent inserts a single event into the event bus
-func (e *EventBus) InsertEvent(rw *benchmark.RandomizerWorker, databaseAccessor db.DatabaseAccessor, subjectUUID string) error {
-	topicID := 1 + rw.Intn(MaxTopics)
+func (e *EventBus) InsertEvent(rz *benchmark.Randomizer, databaseAccessor db.DatabaseAccessor, subjectUUID string) error {
+	topicID := 1 + rz.Intn(MaxTopics)
 	typeID := topicID
 	eventUUID := guuid.New().String()
 	tenantUUID := guuid.New().String()
@@ -288,7 +289,7 @@ type stepType func() //nolint:unused
 // Work performs a single iteration of the worker
 func (e *EventBus) Work() {
 	e.workerIteration++
-	e.Log(benchmark.LogTrace, fmt.Sprintf("worker iteration #%d start", e.workerIteration))
+	e.logger.Trace(fmt.Sprintf("worker iteration #%d start", e.workerIteration))
 	if e.Step("phase #1 (aligner)", e.DoAlign) { // perf model: per event
 		e.Step("phase #2 (max seq shifter)", e.DoMaxSeqShifter) // perf model: per batch
 		e.Step("phase #3 (fetcher)", e.DoFetch)                 // perf model: per event, but in a batch
@@ -298,17 +299,17 @@ func (e *EventBus) Work() {
 		e.Step("phase #4 (archive)", e.DoArchive) // perf model: per event, but in a batch
 		// e.Step("phase #5 (delete)", e.DoDelete)               // perf model: per event, but in a larger batch
 	}
-	e.Log(benchmark.LogTrace, fmt.Sprintf("worker iteration #%d end", e.workerIteration))
+	e.logger.Trace(fmt.Sprintf("worker iteration #%d end", e.workerIteration))
 }
 
 // Step is a helper function to log step start/end
 func (e *EventBus) Step(msg string, dofunc func() (bool, error)) bool {
-	e.Log(benchmark.LogTrace, msg+" start")
+	e.logger.Trace(msg + " start")
 	ret, err := dofunc()
 	if err != nil {
-		e.Log(benchmark.LogError, fmt.Sprintf("%s: %v", msg, err))
+		e.logger.Error(fmt.Sprintf("%s: %v", msg, err))
 	}
-	e.Log(benchmark.LogTrace, msg+" end")
+	e.logger.Trace(msg + " end")
 
 	return ret
 }
@@ -377,13 +378,13 @@ func (e *EventBus) DoAlign() (bool, error) {
 		}
 
 		if len(ids) == 0 {
-			e.Log(benchmark.LogTrace, "no new events found, exiting")
+			e.logger.Trace("no new events found, exiting")
 			newEventsFound = false
 
 			return nil
 		}
 
-		e.Log(benchmark.LogTrace, fmt.Sprintf("%d new events found", len(ids)))
+		e.logger.Trace(fmt.Sprintf("%d new events found", len(ids)))
 		newEventsFound = true
 
 		/*

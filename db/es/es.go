@@ -9,6 +9,7 @@ import (
 	"go.uber.org/atomic"
 
 	"github.com/acronis/perfkit/db"
+	"github.com/acronis/perfkit/logger"
 )
 
 type querier interface {
@@ -44,7 +45,7 @@ type esDatabase struct {
 	mig     migrator
 	dialect dialect
 
-	queryLogger db.Logger
+	queryLogger logger.Logger
 }
 
 // Ping pings the DB
@@ -173,7 +174,7 @@ type timedQuerier struct {
 	execTime  *atomic.Int64 // *time.Duration
 	queryTime *atomic.Int64 // *time.Duration
 
-	queryLogger db.Logger
+	queryLogger logger.Logger
 }
 
 func accountTime(t *atomic.Int64, since time.Time) {
@@ -184,7 +185,7 @@ func (tq timedQuerier) insert(ctx context.Context, idxName indexName, query *Bul
 	defer accountTime(tq.execTime, time.Now())
 
 	if tq.queryLogger != nil {
-		tq.queryLogger.Log("bulk insert:\n%v", query.Reader())
+		tq.queryLogger.Info("bulk insert:\n%v", query.Reader())
 	}
 
 	return tq.q.insert(ctx, idxName, query)
@@ -194,7 +195,7 @@ func (tq timedQuerier) search(ctx context.Context, idxName indexName, request *S
 	defer accountTime(tq.queryTime, time.Now())
 
 	if tq.queryLogger != nil {
-		tq.queryLogger.Log("search:\n%s", request.String())
+		tq.queryLogger.Info("search:\n%s", request.String())
 	}
 
 	return tq.q.search(ctx, idxName, request)
@@ -204,7 +205,7 @@ func (tq timedQuerier) count(ctx context.Context, idxName indexName, request *Co
 	defer accountTime(tq.queryTime, time.Now())
 
 	if tq.queryLogger != nil {
-		tq.queryLogger.Log("count:\n%s", request.String())
+		tq.queryLogger.Info("count:\n%s", request.String())
 	}
 
 	return tq.q.count(ctx, idxName, request)

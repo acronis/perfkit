@@ -9,6 +9,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/acronis/perfkit/logger"
 )
 
 // TestOpts represents all user specified flags
@@ -57,38 +59,50 @@ func (s *Score) FormatRate(n int) string { //nolint:revive
 // FinishPerWorker is called Benchmark.CommonOpts.Workers times and should deinit all WorkerData structs
 // Finish is called once after FinishPerWorker and should call some logic(e.g. analyze data) and deinit used data structs
 type Benchmark struct {
-	AddOpts         func() TestOpts
-	Init            func()
-	InitPerWorker   func(id int)
-	PreWorker       func(id int)
-	Worker          func(id int) (loops int)
-	FinishPerWorker func(id int)
-	Finish          func()
-	PreExit         func()
-	Metric          func() (metric string)
-	GetRate         func(loops uint64, seconds float64) float64
-	PrintScore      func(score Score)
-	CommonOpts      CommonOpts
-	Cli             CLI
-	TestOpts        TestOpts
-	OptsInitialized bool
-	ReadOnly        bool
-	Logger          *Logger
-	Randomizer      *Randomizer
+	AddOpts          func() TestOpts
+	Init             func()
+	WorkerInitFunc   func(worker *BenchmarkWorker)
+	WorkerPreRunFunc func(worker *BenchmarkWorker)
+	WorkerRunFunc    func(worker *BenchmarkWorker) (loops int)
+	WorkerFinishFunc func(worker *BenchmarkWorker)
+	Finish           func()
+	PreExit          func()
+	Metric           func() (metric string)
+	GetRate          func(loops uint64, seconds float64) float64
+	PrintScore       func(score Score)
+	CommonOpts       CommonOpts
+	Cli              CLI
+	TestOpts         TestOpts
+	OptsInitialized  bool
+	ReadOnly         bool
+	Logger           logger.Logger
 
 	NeedToExit bool
 	Score      Score
 
-	CliArgs    []string
-	WorkerData []WorkerData
-	Vault      AnyData
+	CliArgs []string
+	Vault   AnyData
+
+	Randomizer *Randomizer
+
+	Workers []*BenchmarkWorker
 
 	ShutdownCh chan struct{}
 	signalDone chan struct{}
 }
 
-// New creates a new Benchmark instance with default values
-func New() *Benchmark {
+func (b *Benchmark) Log(level logger.LogLevel, workerID int, format string, args ...interface{}) {
+	if workerID == -1 {
+		format = fmt.Sprintf("main worker: %s", format)
+	} else {
+		format = fmt.Sprintf("worker #%03d: %s", workerID, format)
+	}
+
+	b.Logger.Log(level, format, args...)
+}
+
+// NewBenchmark creates a new Benchmark instance with default values
+func NewBenchmark() *Benchmark {
 	b := Benchmark{
 		AddOpts: func() TestOpts {
 			var testOpts TestOpts
@@ -97,16 +111,16 @@ func New() *Benchmark {
 		},
 		Init: func() {
 		},
-		InitPerWorker: func(id int) { //nolint:revive
+		WorkerInitFunc: func(worker *BenchmarkWorker) {
 		},
-		PreWorker: func(id int) { //nolint:revive
+		WorkerPreRunFunc: func(worker *BenchmarkWorker) {
 		},
-		Worker: func(id int) (loops int) { //nolint:revive
+		WorkerRunFunc: func(worker *BenchmarkWorker) (loops int) {
 			return 0
 		},
 		PreExit: func() {
 		},
-		FinishPerWorker: func(id int) { //nolint:revive
+		WorkerFinishFunc: func(worker *BenchmarkWorker) {
 		},
 		Finish: func() {
 		},
@@ -123,22 +137,14 @@ func New() *Benchmark {
 		ShutdownCh:      make(chan struct{}),
 		signalDone:      make(chan struct{}),
 	}
-	b.Logger = NewLogger(LogWarn)
+
+	b.Logger = logger.NewPlaneLogger(logger.LevelWarn, false)
 	b.Cli.Init(os.Args[0], &b.CommonOpts)
 
 	return &b
 }
 
-// Logn logs a formatted log message to stdout if the log level is high enough
-func (b *Benchmark) Logn(LogLevel int, workerID int, format string, args ...interface{}) {
-	b.Logger.Logn(LogLevel, workerID, format, args...)
-}
-
-// Log logs a formatted log message to stdout if the log level is high enough
-func (b *Benchmark) Log(LogLevel int, workerID int, format string, args ...interface{}) {
-	b.Logger.Log(LogLevel, workerID, format, args...)
-}
-
+// InitOpts initializes CLI options and logger
 // InitOpts initializes CLI options and logger
 func (b *Benchmark) InitOpts() {
 	if b.OptsInitialized {
@@ -150,9 +156,9 @@ func (b *Benchmark) InitOpts() {
 	b.OptsInitialized = true
 
 	if b.CommonOpts.Quiet {
-		b.Logger = NewLogger(LogError)
+		b.Logger = logger.NewPlaneLogger(logger.LevelError, false)
 	} else {
-		b.Logger = NewLogger(len(b.CommonOpts.Verbose) + 1)
+		b.Logger = logger.NewPlaneLogger(logger.LogLevel(len(b.CommonOpts.Verbose))+logger.LevelWarn, false)
 	}
 	b.adjustFilenoUlimit()
 }
@@ -164,15 +170,14 @@ func (b *Benchmark) SetUsage(usage string) {
 
 // RunOnce runs the test once and prints the score
 func (b *Benchmark) RunOnce(printScore bool) {
-	var requiredLoops = make([]int, b.CommonOpts.Workers)
 
 	if b.CommonOpts.Loops != 0 {
 		l := b.CommonOpts.Loops / b.CommonOpts.Workers
 		rest := b.CommonOpts.Loops % b.CommonOpts.Workers
 		for i := 0; i < b.CommonOpts.Workers; i++ {
-			requiredLoops[i] = l
+			b.Workers[i].PlannedLoops = l
 			if i < rest {
-				requiredLoops[i]++
+				b.Workers[i].PlannedLoops++
 			}
 		}
 	}
@@ -180,19 +185,24 @@ func (b *Benchmark) RunOnce(printScore bool) {
 	var wg sync.WaitGroup
 	wg.Add(b.CommonOpts.Workers)
 
-	loops := make([]int, b.CommonOpts.Workers)
+	if len(b.Workers) == 0 {
+		b.Exit("internal error: Workers not initialized")
+	}
 
 	startTime := time.Now().UnixNano()
 	for i := 0; i < b.CommonOpts.Workers; i++ {
-		go runner(i, b, &loops[i], requiredLoops[i], &wg)
+		if b.Workers[i] == nil {
+			b.Exit("internal error: Worker %d not initialized", i)
+		}
+		go runner(b.Workers[i], &wg)
 	}
 	wg.Wait()
 
 	endTime := time.Now().UnixNano()
 
 	var totalLoops uint64
-	for _, loop := range loops {
-		totalLoops += uint64(loop)
+	for _, worker := range b.Workers {
+		totalLoops += uint64(worker.ExecutedLoops)
 	}
 
 	if totalLoops == 0 {
@@ -229,7 +239,7 @@ func (b *Benchmark) Run() {
 	go func() {
 		select {
 		case sig := <-sigChan:
-			b.Log(LogInfo, -1, "Received signal %v, initiating graceful shutdown...", sig)
+			b.Logger.Info("Received signal %v, initiating graceful shutdown...", sig)
 			b.Shutdown()
 		case <-ctx.Done():
 			// Clean up signal handling
@@ -240,13 +250,17 @@ func (b *Benchmark) Run() {
 	}()
 
 	b.Randomizer = NewRandomizer(b.CommonOpts.RandSeed, b.CommonOpts.Workers)
+	b.Workers = make([]*BenchmarkWorker, b.CommonOpts.Workers)
+
+	for i := 0; i < b.CommonOpts.Workers; i++ {
+		b.Workers[i] = NewBenchmarkWorker(b, i)
+	}
+
 	b.Init()
 
-	b.WorkerData = make([]WorkerData, b.CommonOpts.Workers)
-
-	b.Log(LogDebug, 0, "per-worker initialization")
+	b.Logger.Debug("per-worker initialization")
 	for i := 0; i < b.CommonOpts.Workers; i++ {
-		b.InitPerWorker(i)
+		b.WorkerInitFunc(b.Workers[i])
 		if b.NeedToExit {
 			break
 		}
@@ -271,10 +285,10 @@ func (b *Benchmark) Run() {
 		}
 	}
 
-	b.Log(LogDebug, 0, "per-worker termination")
+	b.Logger.Debug("per-worker termination")
 
 	for i := 0; i < b.CommonOpts.Workers; i++ {
-		b.FinishPerWorker(i)
+		b.WorkerFinishFunc(b.Workers[i])
 	}
 
 	b.Finish()
@@ -289,11 +303,11 @@ func (b *Benchmark) Run() {
 }
 
 // runner is a helper function for running tests in parallel
-func runner(id int, b *Benchmark, loops *int, requiredLoops int, wg *sync.WaitGroup) {
+func runner(w *BenchmarkWorker, wg *sync.WaitGroup) {
 	var doneLoops = 0
 
 	defer func() {
-		*loops = doneLoops
+		w.ExecutedLoops = doneLoops
 		wg.Done()
 	}()
 
@@ -301,33 +315,33 @@ func runner(id int, b *Benchmark, loops *int, requiredLoops int, wg *sync.WaitGr
 	var startTime = time.Now().UnixNano()
 	for {
 		select {
-		case <-b.ShutdownCh:
-			b.Log(LogInfo, id, "Worker %d shutting down...", id)
+		case <-w.Benchmark.ShutdownCh:
+			w.Logger.Info("Worker %d shutting down...", w.WorkerID)
 			return
 		default:
-			if b.CommonOpts.Loops != 0 {
-				if doneLoops >= requiredLoops {
+			if w.Benchmark.CommonOpts.Loops != 0 {
+				if doneLoops >= w.PlannedLoops {
 					return
 				}
 			} else {
-				if time.Now().UnixNano()-startTime >= int64(b.CommonOpts.Duration*1000000000) {
+				if time.Now().UnixNano()-startTime >= int64(w.Benchmark.CommonOpts.Duration*1000000000) {
 					return
 				}
 			}
 
-			b.PreWorker(id)
-			l = b.Worker(id)
+			w.Benchmark.WorkerPreRunFunc(w)
+			l = w.Benchmark.WorkerRunFunc(w)
 			if l == 0 {
 				return
 			}
 			doneLoops += l
 
-			if b.NeedToExit {
+			if w.Benchmark.NeedToExit {
 				return
 			}
 
-			if b.CommonOpts.Sleep > 0 {
-				time.Sleep(time.Millisecond * time.Duration(b.CommonOpts.Sleep))
+			if w.Benchmark.CommonOpts.Sleep > 0 {
+				time.Sleep(time.Millisecond * time.Duration(w.Benchmark.CommonOpts.Sleep))
 			}
 		}
 	}

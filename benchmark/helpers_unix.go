@@ -41,7 +41,7 @@ func (b *Benchmark) adjustFilenoUlimit() int {
 		return -1
 	}
 
-	b.Log(LogDebug, 0, fmt.Sprintf("Changing file descriptor limits to: %v", rLimit))
+	b.Logger.Debug(fmt.Sprintf("Changing file descriptor limits to: %v", rLimit))
 
 	return 0
 }
