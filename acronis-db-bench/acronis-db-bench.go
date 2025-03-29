@@ -294,11 +294,11 @@ func Main() {
 
 	if testOpts.DBOpts.Reconnect {
 		switch runtime.GOOS {
-		case "darwin", "linux":
+		case "darwin":
 			val, err := benchmark.GetSysctlValueInt("net.inet.tcp.msl")
 			if err == nil {
 				if val > int64(1) {
-					b.Log(benchmark.LogWarn, 0, "The --reconnect test requires low TCP TIME_WAIT delay (e.g. 1 msec), "+
+					b.Logger.Warn("The --reconnect test requires low TCP TIME_WAIT delay (e.g. 1 msec), " +
 						fmt.Sprintf("current value is %d msec, do `sysctl -w net.inet.tcp.msl=1`", val))
 				}
 			}
@@ -307,8 +307,25 @@ func Main() {
 			if err == nil {
 				required := b.CommonOpts.Workers * 2
 				if val < int64(required) {
-					b.Log(benchmark.LogWarn, 0, fmt.Sprintf("The --reconnect test requires `kern.ipc.somaxconn` to be at least %d, ", required)+
+					b.Logger.Warn("The --reconnect test requires `kern.ipc.somaxconn` to be at least %d, " +
 						fmt.Sprintf("current value is %d msec, do `sysctl -w kern.ipc.somaxconn=%d`", val, required))
+				}
+			}
+		case "linux":
+			val, err := benchmark.GetSysctlValueInt("net.ipv4.tcp_fin_timeout")
+			if err == nil {
+				if val > int64(1) {
+					b.Logger.Warn("The --reconnect test requires low TCP TIME_WAIT delay (e.g. 1 sec), " +
+						fmt.Sprintf("current value is %d sec, do `sysctl -w net.ipv4.tcp_fin_timeout=1`", val))
+				}
+			}
+
+			val, err = benchmark.GetSysctlValueInt("net.core.somaxconn")
+			if err == nil {
+				required := b.CommonOpts.Workers * 2
+				if val < int64(required) {
+					b.Logger.Warn("The --reconnect test requires `net.core.somaxconn` to be at least %d, " +
+						fmt.Sprintf("current value is %d msec, do `sysctl -w net.core.somaxconn=%d`", val, required))
 				}
 			}
 		default:
