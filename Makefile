@@ -11,7 +11,7 @@ MODULE_DIRS = benchmark acronis-db-bench acronis-restrelay-bench
 GO_INSTALLABLE_DIRS = acronis-db-bench
 
 # Directories that we want to test and track coverage for.
-TEST_DIRS = benchmark acronis-restrelay-bench acronis-db-bench
+TEST_DIRS = benchmark acronis-restrelay-bench acronis-db-bench logger
 
 include acronis-restrelay-bench/restrelay-bench.Makefile
 
