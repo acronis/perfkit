@@ -9,20 +9,12 @@ import (
 )
 
 func init() {
-	tests := []*engine.TestDesc{
-		// Sequence operation tests
-		&TestSelectNextVal,
-	}
+	var tg = engine.NewTestGroup("Sequence operations tests group")
 
-	tables := map[string]engine.TestTable{}
+	// Sequence operation tests
+	tg.Add(&TestSelectNextVal)
 
-	scenario := &engine.TestScenario{
-		Name:   "sequence-operations",
-		Tests:  tests,
-		Tables: tables,
-	}
-
-	if err := engine.RegisterTestScenario(scenario); err != nil {
+	if err := engine.RegisterTestGroup(tg); err != nil {
 		panic(err)
 	}
 }

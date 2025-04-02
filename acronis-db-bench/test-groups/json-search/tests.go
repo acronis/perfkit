@@ -12,31 +12,21 @@ import (
 )
 
 func init() {
-	tests := []*engine.TestDesc{
-		// JSON insert tests
-		&TestInsertJSON,
-		&TestInsertJSONDBR,
+	var tg = engine.NewTestGroup("JSON search tests group")
 
-		// JSON select tests with indexed values
-		&TestSelectJSONByIndexedValue,
-		&TestSearchJSONByIndexedValue,
+	// JSON insert tests
+	tg.Add(&TestInsertJSON)
+	tg.Add(&TestInsertJSONDBR)
 
-		// JSON select tests with non-indexed values
-		&TestSelectJSONByNonIndexedValue,
-		&TestSearchJSONByNonIndexedValue,
-	}
+	// JSON select tests with indexed values
+	tg.Add(&TestSelectJSONByIndexedValue)
+	tg.Add(&TestSearchJSONByIndexedValue)
 
-	tables := map[string]engine.TestTable{
-		TestTableJSON.TableName: TestTableJSON,
-	}
+	// JSON select tests with non-indexed values
+	tg.Add(&TestSelectJSONByNonIndexedValue)
+	tg.Add(&TestSearchJSONByNonIndexedValue)
 
-	scenario := &engine.TestScenario{
-		Name:   "json-search",
-		Tests:  tests,
-		Tables: tables,
-	}
-
-	if err := engine.RegisterTestScenario(scenario); err != nil {
+	if err := engine.RegisterTestGroup(tg); err != nil {
 		panic(err)
 	}
 }

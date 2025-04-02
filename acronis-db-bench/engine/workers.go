@@ -525,6 +525,33 @@ func TestInsertGeneric(b *benchmark.Benchmark, testDesc *TestDesc) {
 	b.Vault.(*DBTestData).scores[testDesc.Category] = append(b.Vault.(*DBTestData).scores[testDesc.Category], b.Score)
 }
 
+// InsertMultiValueDataWorker inserts a row into the 'light' table using INSERT INTO t (x, y, z) VALUES (..., ..., ...)
+func InsertMultiValueDataWorker(b *benchmark.Benchmark, c *DBConnector, testDesc *TestDesc, batch int) (loops int) {
+	colConfs := testDesc.Table.GetColumnsForInsert(db.WithAutoInc(c.Database.DialectName()))
+
+	var columns []string
+	var values [][]interface{}
+	for i := 0; i < batch; i++ {
+		var genColumns, vals, err = b.Randomizer.GenFakeData(colConfs, db.WithAutoInc(c.Database.DialectName()))
+		if err != nil {
+			b.Exit(err)
+		}
+		values = append(values, vals)
+		if i == 0 {
+			columns = genColumns
+		}
+	}
+
+	var session = c.Database.Session(c.Database.Context(context.Background(), false))
+	if txErr := session.Transact(func(tx db.DatabaseAccessor) error {
+		return tx.BulkInsert(testDesc.Table.TableName, values, columns)
+	}); txErr != nil {
+		b.Exit(txErr.Error())
+	}
+
+	return batch
+}
+
 /*
  * UPDATE worker
  */

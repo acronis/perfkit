@@ -12,22 +12,12 @@ import (
 )
 
 func init() {
-	tests := []*engine.TestDesc{
-		// Large object operations tests
-		&TestInsertLargeObj,
-	}
+	var tg = engine.NewTestGroup("Large objects operations tests group")
 
-	tables := map[string]engine.TestTable{
-		TestTableLargeObj.TableName: TestTableLargeObj,
-	}
+	// Large object operations tests
+	tg.Add(&TestInsertLargeObj)
 
-	scenario := &engine.TestScenario{
-		Name:   "large-objects-operations",
-		Tests:  tests,
-		Tables: tables,
-	}
-
-	if err := engine.RegisterTestScenario(scenario); err != nil {
+	if err := engine.RegisterTestGroup(tg); err != nil {
 		panic(err)
 	}
 }

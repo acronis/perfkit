@@ -1,4 +1,4 @@
-package composite_retreival
+package composite_retrieval
 
 import (
 	"fmt"
@@ -11,23 +11,12 @@ import (
 )
 
 func init() {
-	tests := []*engine.TestDesc{
-		// Email security tests
-		&TestInsertEmailSecurityMultiValue,
-		&TestSelectEmailByEmbeddingNearestL2,
-	}
+	var tg = engine.NewTestGroup("Composite retrieval tests group")
 
-	tables := map[string]engine.TestTable{
-		TestTableEmailSecurity.TableName: TestTableEmailSecurity,
-	}
+	tg.Add(&TestInsertEmailSecurityMultiValue)
+	tg.Add(&TestSelectEmailByEmbeddingNearestL2)
 
-	scenario := &engine.TestScenario{
-		Name:   "composite-retreival",
-		Tests:  tests,
-		Tables: tables,
-	}
-
-	if err := engine.RegisterTestScenario(scenario); err != nil {
+	if err := engine.RegisterTestGroup(tg); err != nil {
 		panic(err)
 	}
 }

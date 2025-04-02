@@ -1,8 +1,8 @@
 package engine
 
 import (
-	"context"
 	"fmt"
+	"sync"
 
 	"github.com/acronis/perfkit/benchmark"
 	"github.com/acronis/perfkit/db"
@@ -22,24 +22,17 @@ const MinChunk = 5000
 
 // TestGroup is a group of tests
 type TestGroup struct {
-	name  string
+	Name  string
 	tests map[string]*TestDesc
 }
 
 // NewTestGroup creates a new test group
 func NewTestGroup(name string) *TestGroup {
-	return &TestGroup{name: name, tests: make(map[string]*TestDesc)}
+	return &TestGroup{Name: name, tests: make(map[string]*TestDesc)}
 }
 
-var allTests *TestGroup
-
-func (g *TestGroup) add(t *TestDesc) {
+func (g *TestGroup) Add(t *TestDesc) {
 	g.tests[t.Name] = t
-	_, exists := allTests.tests[t.Name]
-	if exists {
-		FatalError("Internal error: test %s already defined")
-	}
-	allTests.tests[t.Name] = t
 }
 
 // TestCategories is a list of all test categories
@@ -108,31 +101,140 @@ var TestBaseAll = TestDesc{
 	//	launcherFunc: ...  # causes 'initialization cycle' go-lang compiler error
 }
 
-// InsertMultiValueDataWorker inserts a row into the 'light' table using INSERT INTO t (x, y, z) VALUES (..., ..., ...)
-func InsertMultiValueDataWorker(b *benchmark.Benchmark, c *DBConnector, testDesc *TestDesc, batch int) (loops int) {
-	colConfs := testDesc.Table.GetColumnsForInsert(db.WithAutoInc(c.Database.DialectName()))
+// TestGroupRegistry is an interface for registering test groups
+type TestGroupRegistry interface {
+	// RegisterTestGroup registers a new test groups
+	RegisterTestGroup(testGroup *TestGroup) error
+	// GetTestGroups returns all registered test groups
+	GetTestGroups() []*TestGroup
+	// GetTestByName returns all registered test groups
+	GetTestByName(testName string) *TestDesc
+	// GetTables returns all registered tables
+	GetTables() map[string]TestTable
+	// GetTableByName returns a table by its name
+	GetTableByName(tableName string) TestTable
+}
 
-	var columns []string
-	var values [][]interface{}
-	for i := 0; i < batch; i++ {
-		var genColumns, vals, err = b.Randomizer.GenFakeData(colConfs, db.WithAutoInc(c.Database.DialectName()))
-		if err != nil {
-			b.Exit(err)
+// testGroupRegistry implements TestGroupRegistry interface
+type testGroupRegistry struct {
+	groups map[string]*TestGroup
+	tests  map[string]*TestDesc
+	tables map[string]TestTable
+	mu     sync.Mutex
+}
+
+// NewTestGroupRegistry creates a new test group registry
+func NewTestGroupRegistry() TestGroupRegistry {
+	return &testGroupRegistry{
+		groups: make(map[string]*TestGroup),
+		tests:  make(map[string]*TestDesc),
+		tables: make(map[string]TestTable),
+	}
+}
+
+// RegisterTestGroup registers a new test group
+func (r *testGroupRegistry) RegisterTestGroup(group *TestGroup) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if _, exists := r.groups[group.Name]; exists {
+		return fmt.Errorf("test group %s already exists", group.Name)
+	}
+
+	var tables = make(map[string]TestTable)
+	for _, test := range group.tests {
+		if _, exists := r.tests[test.Name]; exists {
+			return fmt.Errorf("test %s already exists", test.Name)
 		}
-		values = append(values, vals)
-		if i == 0 {
-			columns = genColumns
+
+		r.tests[test.Name] = test
+
+		if test.Table.TableName != "" {
+			tables[test.Table.TableName] = test.Table
 		}
 	}
 
-	var session = c.Database.Session(c.Database.Context(context.Background(), false))
-	if txErr := session.Transact(func(tx db.DatabaseAccessor) error {
-		return tx.BulkInsert(testDesc.Table.TableName, values, columns)
-	}); txErr != nil {
-		b.Exit(txErr.Error())
+	for name, table := range tables {
+		if _, exists := r.tables[name]; exists {
+			return fmt.Errorf("table %s already exists", name)
+		}
+		r.tables[name] = table
 	}
 
-	return batch
+	r.groups[group.Name] = group
+
+	return nil
+}
+
+// GetTestGroups returns all registered test groups
+func (r *testGroupRegistry) GetTestGroups() []*TestGroup {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	var groups []*TestGroup
+	for _, group := range r.groups {
+		groups = append(groups, group)
+	}
+
+	return groups
+}
+
+// GetTestByName returns a test by its name
+func (r *testGroupRegistry) GetTestByName(testName string) *TestDesc {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if test, exists := r.tests[testName]; exists {
+		return test
+	}
+	return nil
+}
+
+// GetTables returns all registered tables
+func (r *testGroupRegistry) GetTables() map[string]TestTable {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	tables := make(map[string]TestTable)
+	for name, table := range r.tables {
+		tables[name] = table
+	}
+	return tables
+}
+
+// GetTableByName returns a table by its name
+func (r *testGroupRegistry) GetTableByName(tableName string) TestTable {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if table, exists := r.tables[tableName]; exists {
+		return table
+	}
+	return TestTable{}
+}
+
+var (
+	// testRegistry is the global test registry
+	testRegistry TestGroupRegistry = NewTestGroupRegistry()
+)
+
+// GetTests returns all registered test groups and tests
+func GetTests() ([]*TestGroup, map[string]*TestDesc) {
+	groups := testRegistry.GetTestGroups()
+	tests := make(map[string]*TestDesc)
+
+	for _, group := range groups {
+		for name, test := range group.tests {
+			tests[name] = test
+		}
+	}
+
+	return groups, tests
+}
+
+// RegisterTestGroup registers a new test group globally
+func RegisterTestGroup(testGroup *TestGroup) error {
+	return testRegistry.RegisterTestGroup(testGroup)
 }
 
 func executeAllTests(b *benchmark.Benchmark, testOpts *TestOpts) {
@@ -152,8 +254,10 @@ func executeAllTests(b *benchmark.Benchmark, testOpts *TestOpts) {
 		workers = 16
 	}
 
+	var allBasicSuite = suitesRegistry.GetPerfSuite("all")
+
 	for i := 0; i < testOpts.BenchOpts.Limit; i += testOpts.BenchOpts.Chunk {
-		executeAllTestsOnce(b, testOpts, workers)
+		allBasicSuite.Execute(b, testOpts, workers)
 	}
 
 	testData := b.Vault.(*DBTestData)

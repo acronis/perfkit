@@ -9,18 +9,12 @@ import (
 )
 
 func init() {
-	tests := []*engine.TestDesc{
-		// Ping tests
-		&TestPing,
-	}
+	var tg = engine.NewTestGroup("Ping tests group")
 
-	scenario := &engine.TestScenario{
-		Name:   "ping",
-		Tests:  tests,
-		Tables: make(map[string]engine.TestTable), // Empty map since ping test doesn't use tables
-	}
+	// Ping tests
+	tg.Add(&TestPing)
 
-	if err := engine.RegisterTestScenario(scenario); err != nil {
+	if err := engine.RegisterTestGroup(tg); err != nil {
 		panic(err)
 	}
 }

@@ -15,20 +15,12 @@ import (
 )
 
 func init() {
-	tests := []*engine.TestDesc{
-		// Basic connectivity tests
-		&TestSelectOne,
-	}
+	var tg = engine.NewTestGroup("Select one tests group")
 
-	tables := map[string]engine.TestTable{}
+	// Basic connectivity tests
+	tg.Add(&TestSelectOne)
 
-	scenario := &engine.TestScenario{
-		Name:   "select-one",
-		Tests:  tests,
-		Tables: tables,
-	}
-
-	if err := engine.RegisterTestScenario(scenario); err != nil {
+	if err := engine.RegisterTestGroup(tg); err != nil {
 		panic(err)
 	}
 }

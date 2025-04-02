@@ -11,23 +11,13 @@ import (
 )
 
 func init() {
-	tests := []*engine.TestDesc{
-		// Vector search tests
-		&TestInsertVector768MultiValue,
-		&TestSelectVector768NearestL2,
-	}
+	var tg = engine.NewTestGroup("Vector search tests group")
 
-	tables := map[string]engine.TestTable{
-		TestTableVector768.TableName: TestTableVector768,
-	}
+	// Vector search tests
+	tg.Add(&TestInsertVector768MultiValue)
+	tg.Add(&TestSelectVector768NearestL2)
 
-	scenario := &engine.TestScenario{
-		Name:   "vector-search",
-		Tests:  tests,
-		Tables: tables,
-	}
-
-	if err := engine.RegisterTestScenario(scenario); err != nil {
+	if err := engine.RegisterTestGroup(tg); err != nil {
 		panic(err)
 	}
 }

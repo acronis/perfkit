@@ -157,7 +157,7 @@ func Main() {
 		fmt.Printf(header) //nolint:staticcheck
 		for _, g := range groups {
 
-			str := fmt.Sprintf("  -- %s", g.name) //nolint:perfsprint
+			str := fmt.Sprintf("  -- %s", g.Name) //nolint:perfsprint
 			fmt.Printf("\n%s %s\n\n", str, strings.Repeat("-", 130-len(str)))
 
 			var testsOutput []string

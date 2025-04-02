@@ -11,23 +11,13 @@ import (
 )
 
 func init() {
-	tests := []*engine.TestDesc{
-		// Time series SQL tests
-		&TestInsertTimeSeriesSQL,
-		&TestSelectTimeSeriesSQL,
-	}
+	var tg = engine.NewTestGroup("Time series operations tests group")
 
-	tables := map[string]engine.TestTable{
-		TestTableTimeSeriesSQL.TableName: TestTableTimeSeriesSQL,
-	}
+	// Time series SQL tests
+	tg.Add(&TestInsertTimeSeriesSQL)
+	tg.Add(&TestSelectTimeSeriesSQL)
 
-	scenario := &engine.TestScenario{
-		Name:   "time-series-operations",
-		Tests:  tests,
-		Tables: tables,
-	}
-
-	if err := engine.RegisterTestScenario(scenario); err != nil {
+	if err := engine.RegisterTestGroup(tg); err != nil {
 		panic(err)
 	}
 }

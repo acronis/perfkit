@@ -10,25 +10,13 @@ import (
 )
 
 func init() {
-	tests := []*engine.TestDesc{
-		// Tenant and CTI tests
-		&TestInsertTenant,
-		&TestInsertCTI,
-	}
+	var tg = engine.NewTestGroup("Tenant and CTI tests group")
 
-	tables := map[string]engine.TestTable{
-		TestTableTenants.TableName:        TestTableTenants,
-		TestTableTenantsClosure.TableName: TestTableTenantsClosure,
-		TestTableCTIEntities.TableName:    TestTableCTIEntities,
-	}
+	// Tenant and CTI tests
+	tg.Add(&TestInsertTenant)
+	tg.Add(&TestInsertCTI)
 
-	scenario := &engine.TestScenario{
-		Name:   "tenant-and-cti",
-		Tests:  tests,
-		Tables: tables,
-	}
-
-	if err := engine.RegisterTestScenario(scenario); err != nil {
+	if err := engine.RegisterTestGroup(tg); err != nil {
 		panic(err)
 	}
 }

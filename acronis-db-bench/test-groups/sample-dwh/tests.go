@@ -8,48 +8,29 @@ import (
 )
 
 func init() {
-	tests := []*engine.TestDesc{
-		// ADVM Tasks tests
-		&TestInsertAdvmTasks,
-		&TestSelectAdvmTasksLast,
-		&TestSelectAdvmTasksCodePerWeek,
+	var tg = engine.NewTestGroup("Sample DWH tests group")
 
-		// ADVM Resources tests
-		&TestInsertAdvmResources,
-		&TestInsertAdvmResourcesStatuses,
-		&TestInsertAdvmAgentResources,
+	// ADVM Tasks tests
+	tg.Add(&TestInsertAdvmTasks)
+	tg.Add(&TestSelectAdvmTasksLast)
+	tg.Add(&TestSelectAdvmTasksCodePerWeek)
 
-		// ADVM Agents and Devices tests
-		&TestInsertAdvmAgents,
-		&TestInsertAdvmDevices,
+	// ADVM Resources tests
+	tg.Add(&TestInsertAdvmResources)
+	tg.Add(&TestInsertAdvmResourcesStatuses)
+	tg.Add(&TestInsertAdvmAgentResources)
 
-		// ADVM Backup and Archive tests
-		&TestInsertAdvmBackupResources,
-		&TestInsertAdvmBackups,
-		&TestInsertAdvmArchives,
-		&TestInsertAdvmVaults,
-	}
+	// ADVM Agents and Devices tests
+	tg.Add(&TestInsertAdvmAgents)
+	tg.Add(&TestInsertAdvmDevices)
 
-	tables := map[string]engine.TestTable{
-		TestTableAdvmTasks.TableName:             TestTableAdvmTasks,
-		TestTableAdvmResources.TableName:         TestTableAdvmResources,
-		TestTableAdvmResourcesStatuses.TableName: TestTableAdvmResourcesStatuses,
-		TestTableAdvmAgentsResources.TableName:   TestTableAdvmAgentsResources,
-		TestTableAdvmAgents.TableName:            TestTableAdvmAgents,
-		TestTableAdvmBackupResources.TableName:   TestTableAdvmBackupResources,
-		TestTableAdvmBackups.TableName:           TestTableAdvmBackups,
-		TestTableAdvmArchives.TableName:          TestTableAdvmArchives,
-		TestTableAdvmVaults.TableName:            TestTableAdvmVaults,
-		TestTableAdvmDevices.TableName:           TestTableAdvmDevices,
-	}
+	// ADVM Backup and Archive tests
+	tg.Add(&TestInsertAdvmBackupResources)
+	tg.Add(&TestInsertAdvmBackups)
+	tg.Add(&TestInsertAdvmArchives)
+	tg.Add(&TestInsertAdvmVaults)
 
-	scenario := &engine.TestScenario{
-		Name:   "sample-dwh",
-		Tests:  tests,
-		Tables: tables,
-	}
-
-	if err := engine.RegisterTestScenario(scenario); err != nil {
+	if err := engine.RegisterTestGroup(tg); err != nil {
 		panic(err)
 	}
 }
