@@ -11,7 +11,7 @@ MODULE_DIRS = benchmark acronis-db-bench acronis-restrelay-bench
 GO_INSTALLABLE_DIRS = acronis-db-bench
 
 # Directories that we want to test and track coverage for.
-TEST_DIRS = benchmark acronis-restrelay-bench acronis-db-bench
+TEST_DIRS = benchmark acronis-restrelay-bench acronis-db-bench logger
 
 include acronis-restrelay-bench/restrelay-bench.Makefile
 
@@ -51,14 +51,14 @@ cover:
 		tail -n +2 coverage/$(dir).out >> coverage/total.out &&) true
 	@go tool cover -html=coverage/total.out -o coverage/total.html
 	@echo "Generating coverage summary table..."
-	@echo "+-------------------------+----------+---------------------------+"
-	@echo "| Directory               | Coverage | HTML Report               |"
-	@echo "+-------------------------+----------+---------------------------+"
+	@echo "+-------------------------+----------+------------------------------------------+"
+	@echo "| Directory               | Coverage | HTML Report                              |"
+	@echo "+-------------------------+----------+------------------------------------------+"
 	@$(foreach dir,$(TEST_DIRS), \
-		printf "| %-23s | %-8s | %-25s |\n" "$(dir)" "$$(go tool cover -func=coverage/$(dir).out | grep 'total:' | awk '{print $$3}')" "coverage/$(dir).html" &&) true
-	@echo "+-------------------------+----------+---------------------------+"
-	@printf "| %-23s | %-8s | %-25s |\n" "Total" "$$(go tool cover -func=coverage/total.out | grep 'total:' | awk '{print $$3}')" "coverage/total.html"
-	@echo "+-------------------------+----------+---------------------------+"
+		printf "| %-23s | %-8s | %-40s |\n" "$(dir)" "$$(go tool cover -func=coverage/$(dir).out | grep 'total:' | awk '{print $$3}')" "coverage/$(dir).html" &&) true
+	@echo "+-------------------------+----------+------------------------------------------+"
+	@printf "| %-23s | %-8s | %-40s |\n" "Total" "$$(go tool cover -func=coverage/total.out | grep 'total:' | awk '{print $$3}')" "coverage/total.html"
+	@echo "+-------------------------+----------+------------------------------------------+"
 
 .PHONY: install
 install: go-install sign-binaries

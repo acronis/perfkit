@@ -46,9 +46,21 @@ To use the benchmarking tool, use the following command structure:
 ```bash
 go install acronis-db-bench
 acronis-db-bench --connection-string "<connection_string>" ...
-``` 
+```
 
 Replace <connection_string> with the data source for your database.
+
+### Environment Variables
+
+You can use environment variables instead of command-line options for certain parameters:
+
+```bash
+# Set the connection string via environment variable
+export ACRONIS_DB_BENCH_CONNECTION_STRING="postgresql://user:password@localhost:5432/database?sslmode=disable"
+acronis-db-bench -t all
+```
+
+Note: If both the `--connection-string` command-line option and the `ACRONIS_DB_BENCH_CONNECTION_STRING` environment variable are set, the command-line option takes precedence.
 
 ### Options
 
@@ -204,13 +216,13 @@ Acronis Database Benchmark: version v1-main-dev
   all                                     : [PMWSCAEO] : execute all tests in the 'base' group
   insert-cti                              : [PMWSCAEO] : insert a CTI entity into the 'cti' table
   insert-heavy                            : [PMWSCAEO] : insert a row into the 'heavy' table
-  insert-heavy-multivalue                 : [PMWSCAEO] : insert a row into the 'heavy' table using INSERT INTO t (x, y, z) VALUES (..., ..., ...) 
+  insert-heavy-multivalue                 : [PMWSCAEO] : insert a row into the 'heavy' table using INSERT INTO t (x, y, z) VALUES (..., ..., ...)
   insert-heavy-prepared                   : [PMWS----] : insert a row into the 'heavy' table using prepared statement for the batch
   insert-light                            : [PMWSCAEO] : insert a row into the 'light' table
-  insert-light-multivalue                 : [PMWSCAEO] : insert a row into the 'light' table using INSERT INTO t (x, y, z) VALUES (..., ..., ...) 
+  insert-light-multivalue                 : [PMWSCAEO] : insert a row into the 'light' table using INSERT INTO t (x, y, z) VALUES (..., ..., ...)
   insert-light-prepared                   : [PMWS----] : insert a row into the 'light' table using prepared statement for the batch
   insert-medium                           : [PMWSCAEO] : insert a row into the 'medium' table
-  insert-medium-multivalue                : [PMWS-A--] : insert a row into the 'medium' table using INSERT INTO t (x, y, z) VALUES (..., ..., ...) 
+  insert-medium-multivalue                : [PMWS-A--] : insert a row into the 'medium' table using INSERT INTO t (x, y, z) VALUES (..., ..., ...)
   insert-medium-prepared                  : [PMWS----] : insert a row into the 'medium' table using prepared statement for the batch
   insert-tenant                           : [PMWSCAEO] : insert a tenant into the 'tenants' table
   select-1                                : [PMWSCAEO] : just do 'SELECT 1'
@@ -315,7 +327,7 @@ To run it with the Parquet data source, use the following command:
 acronis-db-bench --connection-string <conn_string> -t insert-vector-768-multivalue --parquet-data-source datasource.parquet
 ```
 
-The recommended library for constructing Parquet data sources is Apache Arrow. 
+The recommended library for constructing Parquet data sources is Apache Arrow.
 It is widely used, language-agnostic, and provides bindings for many programming languages.
 
 For command-line operations with Parquet files, you can use the `parquet-cli` tool provided by Apache.
@@ -326,7 +338,7 @@ These tests are aimed to measure the performance of vector ingest and search ope
 
 * `insert-vector-768-multivalue` - insert a 768-dim vectors with ids into the 'vector' table by batches
 * `select-vector-768-nearest-l2` - selects k nearest vectors by L2 norm from the 'vector' table to the given 768-dim vector
-  
+
 Both tests require a vector data source to run the tests.
 Parquet file should have the following format:
 ```bash

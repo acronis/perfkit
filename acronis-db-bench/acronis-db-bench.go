@@ -13,6 +13,7 @@ import (
 
 	"github.com/acronis/perfkit/benchmark"
 	"github.com/acronis/perfkit/db"
+	"github.com/acronis/perfkit/logger"
 
 	_ "github.com/acronis/perfkit/db/es"  // es drivers
 	_ "github.com/acronis/perfkit/db/sql" // sql drivers
@@ -93,7 +94,7 @@ func Main() {
 
 	printVersion()
 
-	b := benchmark.New()
+	b := benchmark.NewBenchmark()
 
 	b.AddOpts = func() benchmark.TestOpts {
 		var testOpts TestOpts
@@ -203,8 +204,8 @@ func Main() {
 	}
 
 	if testOpts.DBOpts.Reconnect {
-		b.PreWorker = func(workerId int) {
-			var workerData = b.WorkerData[workerId].(*DBWorkerData)
+		b.WorkerPreRunFunc = func(worker *benchmark.BenchmarkWorker) {
+			var workerData = worker.Data.(*DBWorkerData)
 
 			if workerData.workingConn != nil {
 				workerData.workingConn.Close()
@@ -214,7 +215,7 @@ func Main() {
 				workerData.tenantsCache.Close()
 			}
 
-			b.WorkerData[workerId] = nil
+			worker.Data = nil
 		}
 	}
 
@@ -236,7 +237,7 @@ func Main() {
 	// Has to be returned back to connection pool because it is not used anywhere else
 	c.Release()
 
-	if testOpts.BenchOpts.Info || b.Logger.LogLevel > benchmark.LogInfo {
+	if testOpts.BenchOpts.Info || b.Logger.GetLevel() > logger.LevelInfo {
 		if testOpts.BenchOpts.Info {
 			fmt.Printf(getDBInfo(b, content)) //nolint:staticcheck
 		}
@@ -265,8 +266,8 @@ func Main() {
 		b.Vault.(*DBTestData).TenantsCache.SetTenantsWorkingSet(b.TestOpts.(*TestOpts).BenchOpts.TenantsWorkingSet)
 		b.Vault.(*DBTestData).TenantsCache.SetCTIsWorkingSet(b.TestOpts.(*TestOpts).BenchOpts.CTIsWorkingSet)
 
-		if b.Logger.LogLevel > benchmark.LogInfo && !testOpts.BenchOpts.Info {
-			b.Log(benchmark.LogTrace, 0, getDBInfo(b, content))
+		if b.Logger.GetLevel() > logger.LevelInfo && !testOpts.BenchOpts.Info {
+			b.Log(logger.LevelTrace, 0, getDBInfo(b, content))
 		}
 
 		if b.TestOpts.(*TestOpts).BenchOpts.Events {
@@ -287,6 +288,7 @@ func Main() {
 	}
 
 	b.Finish = func() {
+		b.Logger.Debug("finishing")
 		if b.TestOpts.(*TestOpts).BenchOpts.Events {
 			b.Vault.(*DBTestData).EventBus.Stop()
 		}
@@ -294,11 +296,11 @@ func Main() {
 
 	if testOpts.DBOpts.Reconnect {
 		switch runtime.GOOS {
-		case "darwin", "linux":
+		case "darwin":
 			val, err := benchmark.GetSysctlValueInt("net.inet.tcp.msl")
 			if err == nil {
 				if val > int64(1) {
-					b.Log(benchmark.LogWarn, 0, "The --reconnect test requires low TCP TIME_WAIT delay (e.g. 1 msec), "+
+					b.Logger.Warn("The --reconnect test requires low TCP TIME_WAIT delay (e.g. 1 msec), " +
 						fmt.Sprintf("current value is %d msec, do `sysctl -w net.inet.tcp.msl=1`", val))
 				}
 			}
@@ -307,12 +309,29 @@ func Main() {
 			if err == nil {
 				required := b.CommonOpts.Workers * 2
 				if val < int64(required) {
-					b.Log(benchmark.LogWarn, 0, fmt.Sprintf("The --reconnect test requires `kern.ipc.somaxconn` to be at least %d, ", required)+
+					b.Logger.Warn("The --reconnect test requires `kern.ipc.somaxconn` to be at least %d, " +
 						fmt.Sprintf("current value is %d msec, do `sysctl -w kern.ipc.somaxconn=%d`", val, required))
 				}
 			}
+		case "linux":
+			val, err := benchmark.GetSysctlValueInt("net.ipv4.tcp_fin_timeout")
+			if err == nil {
+				if val > int64(1) {
+					b.Logger.Warn("The --reconnect test requires low TCP TIME_WAIT delay (e.g. 1 sec), " +
+						fmt.Sprintf("current value is %d sec, do `sysctl -w net.ipv4.tcp_fin_timeout=1`", val))
+				}
+			}
+
+			val, err = benchmark.GetSysctlValueInt("net.core.somaxconn")
+			if err == nil {
+				required := b.CommonOpts.Workers * 2
+				if val < int64(required) {
+					b.Logger.Warn("The --reconnect test requires `net.core.somaxconn` to be at least %d, " +
+						fmt.Sprintf("current value is %d msec, do `sysctl -w net.core.somaxconn=%d`", val, required))
+				}
+			}
 		default:
-			b.Log(benchmark.LogWarn, 0, "Reconnect test is not supported on this platform: %s", runtime.GOOS)
+			b.Logger.Warn("Reconnect test is not supported on this platform: %s", runtime.GOOS)
 		}
 
 		c.DbOpts.MaxOpenConns = 1
@@ -355,8 +374,8 @@ func executeTests(b *benchmark.Benchmark, testOpts *TestOpts) {
 func describeOne(b *benchmark.Benchmark, testDesc *TestDesc) {
 	b.CommonOpts.Workers = 1
 	b.CommonOpts.Loops = 1
-	if b.Logger.LogLevel <= benchmark.LogInfo {
-		b.Logger.LogLevel = benchmark.LogInfo
+	if b.Logger.GetLevel() <= logger.LevelInfo {
+		b.Logger.SetLevel(logger.LevelInfo)
 	}
 
 	fmt.Printf("\n")

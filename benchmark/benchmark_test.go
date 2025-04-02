@@ -7,19 +7,22 @@ import (
 )
 
 func TestNewBenchmark(t *testing.T) {
-	b := New()
+	b := NewBenchmark()
 	if b == nil {
 		t.Errorf("New() error, benchmark not created")
 	}
 }
 
 func TestRunOnce(t *testing.T) {
-	b := New()
+	b := NewBenchmark()
 	b.CommonOpts.Workers = 1
 	b.CommonOpts.Loops = 1
-	b.Worker = func(id int) (loops int) { //nolint:revive
+	b.WorkerRunFunc = func(worker *BenchmarkWorker) (loops int) { //nolint:revive
 		return 1
 	}
+	b.Workers = make([]*BenchmarkWorker, 1)
+	b.Workers[0] = NewBenchmarkWorker(b, 0)
+
 	b.RunOnce(false)
 	if b.Score.Workers != 1 {
 		t.Errorf("RunOnce() error, workers = %v, want %v", b.Score.Workers, 1)
@@ -51,7 +54,7 @@ func TestFormatRateWithLargeRate(t *testing.T) {
 }
 
 func TestInitOpts(t *testing.T) {
-	b := New()
+	b := NewBenchmark()
 	os.Args = []string{"test", "--duration=1", "--loops=1", "-c=1"}
 	b.InitOpts()
 
@@ -63,17 +66,13 @@ func TestInitOpts(t *testing.T) {
 		t.Errorf("InitOpts() error, expected Logger to be initialized, got nil")
 	}
 
-	if b.Cli.parser == nil {
-		t.Errorf("InitOpts() error, expected Cli.parser to be initialized, got nil")
-	}
-
 	if b.CommonOpts.Workers != 1 {
 		t.Errorf("InitOpts() error, expected CommonOpts.Workers to be 1, got %d", b.CommonOpts.Workers)
 	}
 }
 
 func TestGeomean(t *testing.T) {
-	b := New()
+	b := NewBenchmark()
 	scores := []Score{
 		{Rate: 2.0},
 		{Rate: 8.0},
@@ -88,8 +87,8 @@ func TestGeomean(t *testing.T) {
 
 func TestRun(t *testing.T) {
 	os.Args = []string{"test", "--duration=1", "--loops=1", "-c=1"}
-	b := New()
-	b.Worker = func(id int) (loops int) { //nolint:revive
+	b := NewBenchmark()
+	b.WorkerRunFunc = func(worker *BenchmarkWorker) (loops int) { //nolint:revive
 		return 1
 	}
 	b.Run()

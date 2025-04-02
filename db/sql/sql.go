@@ -13,6 +13,7 @@ import (
 	"go.uber.org/atomic"
 
 	"github.com/acronis/perfkit/db"
+	"github.com/acronis/perfkit/logger"
 )
 
 /*
@@ -106,8 +107,8 @@ type sqlGateway struct {
 
 	explain bool // Whether to explain queries
 
-	readRowsLogger db.Logger // Logger for read operations
-	explainLogger  db.Logger // Logger for query explanations
+	readRowsLogger logger.Logger // Logger for read operations
+	explainLogger  logger.Logger // Logger for query explanations
 }
 
 // sqlSession represents a database session
@@ -156,16 +157,16 @@ type sqlDatabase struct {
 	queryStringInterpolation bool
 	dryRun                   bool
 
-	queryLogger    db.Logger
-	readRowsLogger db.Logger
-	explainLogger  db.Logger
+	queryLogger    logger.Logger
+	readRowsLogger logger.Logger
+	explainLogger  logger.Logger
 }
 
 // Ping pings the DB
 func (d *sqlDatabase) Ping(ctx context.Context) error {
 	var err = d.rw.ping(ctx)
 	if err != nil && d.queryLogger != nil {
-		d.queryLogger.Log("ping failed: %v", err)
+		d.queryLogger.Error("ping failed: %v", err)
 	}
 
 	return err
@@ -313,7 +314,7 @@ func (d *sqlDatabase) RawSession() interface{} {
 	if d.queryLogger != nil && d.rw != nil {
 		stats := d.rw.stats()
 		if stats.OpenConnections > 1 {
-			d.queryLogger.Log("potential connections leak detected, ensure the previous DB query closed the connection")
+			d.queryLogger.Warn("potential connections leak detected, ensure the previous DB query closed the connection")
 		}
 	}
 
