@@ -71,7 +71,18 @@ func (d *mysqlDialect) encodeUUID(s uuid.UUID) string {
 }
 
 func (d *mysqlDialect) encodeVector(vs []float32) string {
-	return ""
+	var sb strings.Builder
+	for _, f := range vs {
+		if sb.Len() != 0 {
+			sb.WriteByte(',')
+		}
+		sb.WriteString(strconv.FormatFloat(float64(f), 'f', -1, 64))
+	}
+	return fmt.Sprintf("VEC_FromText('[%s]')", sb.String())
+}
+
+func (d *mysqlDialect) encodeOrderByVector(field, operator, vector string) string {
+	return fmt.Sprintf("VEC_DISTANCE_EUCLIDEAN(%s, VEC_FromText('%s'))", field, vector)
 }
 
 func (d *mysqlDialect) encodeBool(b bool) string {
@@ -174,6 +185,10 @@ func (d *mysqlDialect) getType(id db.DataType) string {
 	// Special Types
 	case db.DataTypeJSON:
 		return "JSON"
+	case db.DataTypeVector3Float32:
+		return "VECTOR(3)"
+	case db.DataTypeVector768Float32:
+		return "VECTOR(768)"
 
 	// Constraints and Modifiers
 	case db.DataTypeUnique:

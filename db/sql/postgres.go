@@ -59,6 +59,10 @@ func (d *pgDialect) encodeVector(vs []float32) string {
 	return fmt.Sprintf("'[%s]'", sb.String())
 }
 
+func (d *pgDialect) encodeOrderByVector(field, operator, vector string) string {
+	return fmt.Sprintf("%s <-> '%s'", field, vector)
+}
+
 func (d *pgDialect) encodeBool(b bool) string {
 	// borrowed from dbr
 	if b {
