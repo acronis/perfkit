@@ -266,7 +266,7 @@ func executeAllTests(b *benchmark.Benchmark, testOpts *TestOpts) {
 
 	scores := []string{TestSelect, TestInsert, TestUpdate}
 	for _, s := range scores {
-		fmt.Printf("%s geomean: %.0f\n", s, b.Geomean(testData.scores[s]))
+		fmt.Printf("%s geomean: %.0f\n", s, b.Geomean(testData.Scores[s]))
 	}
 
 	cleanupTables(b)

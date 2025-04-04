@@ -173,7 +173,7 @@ func TestGeneric(b *benchmark.Benchmark, testDesc *TestDesc, workerFunc TestWork
 
 	b.Run()
 
-	b.Vault.(*DBTestData).scores[testDesc.Category] = append(b.Vault.(*DBTestData).scores[testDesc.Category], b.Score)
+	b.Vault.(*DBTestData).Scores[testDesc.Category] = append(b.Vault.(*DBTestData).Scores[testDesc.Category], b.Score)
 }
 
 func TestSelectRun(
@@ -274,7 +274,7 @@ func TestSelectRun(
 
 	b.Run()
 
-	b.Vault.(*DBTestData).scores[testDesc.Category] = append(b.Vault.(*DBTestData).scores[testDesc.Category], b.Score)
+	b.Vault.(*DBTestData).Scores[testDesc.Category] = append(b.Vault.(*DBTestData).Scores[testDesc.Category], b.Score)
 }
 
 func TestSelectRawSQLQuery(
@@ -362,7 +362,7 @@ func TestSelectRawSQLQuery(
 
 	b.Run()
 
-	b.Vault.(*DBTestData).scores[testDesc.Category] = append(b.Vault.(*DBTestData).scores[testDesc.Category], b.Score)
+	b.Vault.(*DBTestData).Scores[testDesc.Category] = append(b.Vault.(*DBTestData).Scores[testDesc.Category], b.Score)
 }
 
 /*
@@ -522,7 +522,7 @@ func TestInsertGeneric(b *benchmark.Benchmark, testDesc *TestDesc) {
 
 	b.Run()
 
-	b.Vault.(*DBTestData).scores[testDesc.Category] = append(b.Vault.(*DBTestData).scores[testDesc.Category], b.Score)
+	b.Vault.(*DBTestData).Scores[testDesc.Category] = append(b.Vault.(*DBTestData).Scores[testDesc.Category], b.Score)
 }
 
 // InsertMultiValueDataWorker inserts a row into the 'light' table using INSERT INTO t (x, y, z) VALUES (..., ..., ...)
@@ -681,7 +681,7 @@ func TestUpdateGeneric(b *benchmark.Benchmark, testDesc *TestDesc, updateRows ui
 
 	b.Run()
 
-	b.Vault.(*DBTestData).scores[testDesc.Category] = append(b.Vault.(*DBTestData).scores[testDesc.Category], b.Score)
+	b.Vault.(*DBTestData).Scores[testDesc.Category] = append(b.Vault.(*DBTestData).Scores[testDesc.Category], b.Score)
 }
 
 /*
@@ -786,5 +786,5 @@ func testDeleteGeneric(b *benchmark.Benchmark, testDesc *TestDesc, deleteRows ui
 
 	b.Run()
 
-	b.Vault.(*DBTestData).scores[testDesc.Category] = append(b.Vault.(*DBTestData).scores[testDesc.Category], b.Score)
+	b.Vault.(*DBTestData).Scores[testDesc.Category] = append(b.Vault.(*DBTestData).Scores[testDesc.Category], b.Score)
 }
