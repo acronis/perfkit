@@ -74,7 +74,7 @@ type suiteStepTestExecute struct {
 
 func (s suiteStepTestExecute) Execute(b *benchmark.Benchmark, testOpts *TestOpts, workers int) error {
 	var testDesc *TestDesc
-	if testDesc = testRegistry.GetTestByName(s.TestName); testDesc != nil {
+	if testDesc = testRegistry.GetTestByName(s.TestName); testDesc == nil {
 		return fmt.Errorf("test %s not found", s.TestName)
 	}
 
@@ -125,10 +125,6 @@ func (s suiteStepParameterSetter) Execute(b *benchmark.Benchmark, testOpts *Test
 
 // PerfSuite provides common implementation for test suites
 type PerfSuite struct {
-	Benchmark *benchmark.Benchmark
-	TestOpts  *TestOpts
-	Workers   int
-
 	Pipeline []SuiteStep
 }
 
@@ -153,7 +149,7 @@ func (s *PerfSuite) ScheduleTest(testName string) *PerfSuite {
 
 func (s *PerfSuite) Execute(b *benchmark.Benchmark, testOpts *TestOpts, workers int) {
 	for _, step := range s.Pipeline {
-		if err := step.Execute(s.Benchmark, s.TestOpts, s.Workers); err != nil {
+		if err := step.Execute(b, testOpts, workers); err != nil {
 			return
 		}
 	}

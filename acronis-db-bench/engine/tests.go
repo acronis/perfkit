@@ -246,7 +246,27 @@ func executeAllTests(b *benchmark.Benchmark, testOpts *TestOpts) {
 		b.Exit("--chunk option must not be less then %d", MinChunk)
 	}
 
-	cleanupTables(b)
+	// Initialize Randomizer before CleanupTables
+	b.Randomizer = benchmark.NewRandomizer(b.CommonOpts.RandSeed, b.CommonOpts.Workers)
+
+	// Initialize DBTestData if not already initialized
+	if b.Vault == nil {
+		b.Vault = &DBTestData{
+			Scores: make(map[string][]benchmark.Score),
+		}
+	}
+
+	testData := b.Vault.(*DBTestData)
+	if testData.Scores == nil {
+		testData.Scores = make(map[string][]benchmark.Score)
+	}
+
+	// Initialize scores for each category
+	for _, category := range TestCategories {
+		testData.Scores[category] = make([]benchmark.Score, 0)
+	}
+
+	CleanupTables(b)
 	createTables(b)
 
 	workers := b.CommonOpts.Workers
@@ -260,14 +280,16 @@ func executeAllTests(b *benchmark.Benchmark, testOpts *TestOpts) {
 		allBasicSuite.Execute(b, testOpts, workers)
 	}
 
-	testData := b.Vault.(*DBTestData)
-
 	fmt.Printf("--------------------------------------------------------------------\n")
 
 	scores := []string{TestSelect, TestInsert, TestUpdate}
 	for _, s := range scores {
-		fmt.Printf("%s geomean: %.0f\n", s, b.Geomean(testData.scores[s]))
+		if len(testData.Scores[s]) > 0 {
+			fmt.Printf("%s geomean: %.0f\n", s, b.Geomean(testData.Scores[s]))
+		} else {
+			fmt.Printf("%s geomean: no data\n", s)
+		}
 	}
 
-	cleanupTables(b)
+	CleanupTables(b)
 }

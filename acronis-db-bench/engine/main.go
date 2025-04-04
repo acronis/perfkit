@@ -79,7 +79,7 @@ type DBTestData struct {
 	TenantsCache   *tenants.TenantsCache
 	EffectiveBatch int // EffectiveBatch reflects the default value if the --batch option is not set, it can be different for different tests
 
-	scores map[string][]benchmark.Score
+	Scores map[string][]benchmark.Score
 }
 
 var header = strings.Repeat("=", 120) + "\n"
@@ -135,10 +135,10 @@ func Main() {
 	d := DBTestData{}
 	b.Vault = &d
 
-	d.scores = make(map[string][]benchmark.Score)
+	d.Scores = make(map[string][]benchmark.Score)
 
 	for _, s := range TestCategories {
-		d.scores[s] = []benchmark.Score{}
+		d.Scores[s] = []benchmark.Score{}
 	}
 
 	if b.TestOpts.(*TestOpts).BenchOpts.Batch > 0 {
@@ -190,7 +190,7 @@ func Main() {
 	}
 
 	if testOpts.BenchOpts.Cleanup {
-		cleanupTables(b)
+		CleanupTables(b)
 		b.Exit()
 	}
 
@@ -349,6 +349,16 @@ func main() {
 }
 
 func executeTests(b *benchmark.Benchmark, testOpts *TestOpts) {
+	// Special case for "all" suite
+	if testOpts.BenchOpts.Test == "all" {
+		var allBasicSuite = suitesRegistry.GetPerfSuite("all")
+		if allBasicSuite == nil {
+			b.Exit(fmt.Sprintf("Suite: '%s' doesn't exist, see the list of available tests using --list option\n", testOpts.BenchOpts.Test))
+		}
+		executeAllTests(b, testOpts)
+		return
+	}
+
 	_, tests := GetTests()
 	_, exists := tests[testOpts.BenchOpts.Test]
 	if !exists {

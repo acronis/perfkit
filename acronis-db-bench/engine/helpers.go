@@ -76,7 +76,7 @@ func DbConnector(b *benchmark.Benchmark) *DBConnector {
 	return conn
 }
 
-func cleanupTables(b *benchmark.Benchmark) {
+func CleanupTables(b *benchmark.Benchmark) {
 	dbOpts := b.TestOpts.(*TestOpts).DBOpts
 
 	if dbOpts.DontCleanup {

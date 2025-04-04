@@ -13,7 +13,7 @@ func init() {
 			b.CommonOpts.Workers = 1
 			b.CommonOpts.Loops = 0
 		}).
-		ScheduleTest("select-one").
+		ScheduleTest("select-1").
 
 		/* Prepare tenants and cti entities */
 
@@ -61,8 +61,8 @@ func init() {
 		}).
 		ScheduleTest("update-medium").
 		ScheduleTest("update-heavy").
-		ScheduleTest("update-heavy-partial-same-val").
-		ScheduleTest("update-heavy-same-val").
+		ScheduleTest("update-heavy-partial-sameval").
+		ScheduleTest("update-heavy-sameval").
 		SetParameters(func(b *benchmark.Benchmark, testOpts *engine.TestOpts, workers int) {
 			b.CommonOpts.Duration = 0
 			b.CommonOpts.Workers = workers
@@ -70,8 +70,8 @@ func init() {
 		}).
 		ScheduleTest("update-medium").
 		ScheduleTest("update-heavy").
-		ScheduleTest("update-heavy-partial-same-val").
-		ScheduleTest("update-heavy-same-val").
+		ScheduleTest("update-heavy-partial-sameval").
+		ScheduleTest("update-heavy-sameval").
 
 		/* Select */
 
@@ -111,27 +111,27 @@ func init() {
 			b.CommonOpts.Workers = 1
 			b.CommonOpts.Loops = 0
 		}).
-		ScheduleTest("select-heavy-last-tenant").
-		ScheduleTest("select-heavy-rand-tenant-like").
-		ScheduleTest("select-heavy-last-tenant-cti").
+		ScheduleTest("select-heavy-last-in-tenant").
+		ScheduleTest("select-heavy-rand-in-tenant-like").
+		ScheduleTest("select-heavy-last-in-tenant-and-cti").
 		ScheduleTest("select-json-by-indexed-value").
-		ScheduleTest("select-json-by-non-indexed-value").
+		ScheduleTest("select-json-by-nonindexed-value").
 		ScheduleTest("select-ts-sql").
-		ScheduleTest("select-heavy-min-max-tenant").
-		ScheduleTest("select-heavy-min-max-tenant-and-state").
+		ScheduleTest("select-heavy-minmax-in-tenant").
+		ScheduleTest("select-heavy-minmax-in-tenant-and-state").
 		SetParameters(func(b *benchmark.Benchmark, testOpts *engine.TestOpts, workers int) {
 			b.CommonOpts.Duration = 10
 			b.CommonOpts.Workers = workers
 			b.CommonOpts.Loops = 0
 		}).
-		ScheduleTest("select-heavy-last-tenant").
-		ScheduleTest("select-heavy-rand-tenant-like").
-		ScheduleTest("select-heavy-last-tenant-cti").
+		ScheduleTest("select-heavy-last-in-tenant").
+		ScheduleTest("select-heavy-rand-in-tenant-like").
+		ScheduleTest("select-heavy-last-in-tenant-and-cti").
 		ScheduleTest("select-json-by-indexed-value").
-		ScheduleTest("select-json-by-non-indexed-value").
+		ScheduleTest("select-json-by-nonindexed-value").
 		ScheduleTest("select-ts-sql").
-		ScheduleTest("select-heavy-min-max-tenant").
-		ScheduleTest("select-heavy-min-max-tenant-and-state")
+		ScheduleTest("select-heavy-minmax-in-tenant").
+		ScheduleTest("select-heavy-minmax-in-tenant-and-state")
 
 	if err := engine.RegisterPerfSuite("all", perfSuiteAllBasic); err != nil {
 		panic(err)

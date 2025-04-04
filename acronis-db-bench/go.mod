@@ -13,13 +13,14 @@ replace github.com/acronis/perfkit/logger => ../logger
 require (
 	github.com/acronis/perfkit/benchmark v0.0.0-20240611181402-c39abde90e6f
 	github.com/acronis/perfkit/db v0.0.0-00010101000000-000000000000
-	github.com/acronis/perfkit/logger v0.0.0-00010101000000-000000000000
+	github.com/acronis/perfkit/logger v0.0.0-20250402063049-20a8306d6a02
 	github.com/apache/arrow-go/v18 v18.0.0
 	github.com/denisenkom/go-mssqldb v0.12.3
 	github.com/elastic/go-elasticsearch/v8 v8.15.0
 	github.com/gocraft/dbr/v2 v2.7.6
 	github.com/google/uuid v1.6.0
 	github.com/lib/pq v1.10.9
+	github.com/stretchr/testify v1.9.0
 )
 
 require (
@@ -30,6 +31,7 @@ require (
 	github.com/MichaelS11/go-cql-driver v0.1.1 // indirect
 	github.com/andybalholm/brotli v1.1.1 // indirect
 	github.com/apache/thrift v0.21.0 // indirect
+	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/elastic/elastic-transport-go/v8 v8.6.0 // indirect
 	github.com/fergusstrange/embedded-postgres v1.27.0 // indirect
 	github.com/go-faster/city v1.0.1 // indirect
@@ -55,6 +57,7 @@ require (
 	github.com/paulmach/orb v0.11.1 // indirect
 	github.com/pierrec/lz4/v4 v4.1.21 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
+	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/segmentio/asm v1.2.0 // indirect
 	github.com/shopspring/decimal v1.4.0 // indirect
 	github.com/xi2/xz v0.0.0-20171230120015-48954b6210f8 // indirect
