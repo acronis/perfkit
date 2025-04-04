@@ -1,4 +1,4 @@
-package main
+package engine
 
 import (
 	"fmt"
@@ -9,8 +9,6 @@ import (
 	"github.com/acronis/perfkit/db"
 	"github.com/acronis/perfkit/logger"
 )
-
-const SequenceName = "acronis_db_bench_sequence" // SequenceName is the name of the sequence used for generating IDs
 
 // DatabaseOpts represents common flags for every test
 type DatabaseOpts struct {
@@ -83,9 +81,9 @@ func (p *dbConnectorsPool) put(conn *DBConnector) {
 
 	// If we're shutting down, close the connection instead of returning it to the pool
 	if p.isClosing {
-		if conn.database != nil {
-			conn.database.Close()
-			conn.database = nil
+		if conn.Database != nil {
+			conn.Database.Close()
+			conn.Database = nil
 		}
 		return
 	}
@@ -94,9 +92,9 @@ func (p *dbConnectorsPool) put(conn *DBConnector) {
 	_, exists := p.pool[k]
 	if exists {
 		// If there is, close the new connection instead of panicking
-		if conn.database != nil {
-			conn.database.Close()
-			conn.database = nil
+		if conn.Database != nil {
+			conn.Database.Close()
+			conn.Database = nil
 		}
 		conn.Logger.Warn("connection already exists in pool, closing new connection")
 		return
@@ -115,9 +113,9 @@ func (p *dbConnectorsPool) shutdown() {
 
 	// Close all connections in the pool
 	for k, conn := range p.pool {
-		if conn.database != nil {
-			conn.database.Close()
-			conn.database = nil
+		if conn.Database != nil {
+			conn.Database.Close()
+			conn.Database = nil
 		}
 		delete(p.pool, k)
 	}
@@ -137,12 +135,12 @@ var connPool = newDBConnectorsPool()
 // connectionsChecker checks for potential connections leak
 func connectionsChecker(conn *DBConnector) {
 	for {
-		if conn.database != nil {
+		if conn.Database != nil {
 			openConnections := 0
 
 			conn.lock.Lock()
-			if conn.database != nil {
-				stats := conn.database.Stats()
+			if conn.Database != nil {
+				stats := conn.Database.Stats()
 				openConnections = stats.OpenConnections
 			}
 			conn.lock.Unlock()
@@ -182,7 +180,7 @@ type DBConnector struct {
 	WorkerID      int
 
 	lock     sync.Mutex
-	database db.Database
+	Database db.Database
 }
 
 // NewDBConnector creates a new DBConnector
@@ -234,7 +232,7 @@ func NewDBConnector(dbOpts *DatabaseOpts, workerID int, l logger.Logger, retryAt
 		DbOpts:        dbOpts,
 		RetryAttempts: retryAttempts,
 		WorkerID:      workerID,
-		database:      dbConn,
+		Database:      dbConn,
 	}
 
 	// go connectionsChecker(c)
@@ -247,7 +245,7 @@ func (c *DBConnector) Release() {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
-	if c.database != nil {
+	if c.Database != nil {
 		connPool.put(c)
 	}
 }
@@ -257,9 +255,9 @@ func (c *DBConnector) Close() {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
-	if c.database != nil {
-		c.database.Close()
-		c.database = nil
+	if c.Database != nil {
+		c.Database.Close()
+		c.Database = nil
 	}
 }
 

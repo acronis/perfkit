@@ -1,4 +1,4 @@
-package main
+package engine
 
 import (
 	"fmt"
@@ -7,30 +7,31 @@ import (
 	"strings"
 )
 
-func constructConnStringFromOpts(opts DatabaseOpts) (string, error) {
+func constructConnStringFromOpts(connString, driver, dsn string) (string, error) {
 	// Check if both ConnString and (Driver or Dsn) are configured
-	if opts.ConnString != "" && (opts.Driver != "" || opts.Dsn != "") {
+	if connString != "" && (driver != "" || dsn != "") {
 		return "", fmt.Errorf("both connection-string and (driver or dsn) are configured, please use only one")
 	}
 
-	var connString string
-	if opts.ConnString != "" {
+	if connString != "" {
 		// Use the provided connection string from command line (highest priority)
-		connString = opts.ConnString
-	} else if opts.Driver != "" || opts.Dsn != "" {
+		return connString, nil
+	} else if driver != "" || dsn != "" {
 		// Construct the connection string from Driver and Dsn if they are provided
-		if opts.Driver == "" || opts.Dsn == "" {
+		if driver == "" || dsn == "" {
 			return "", fmt.Errorf("both driver and dsn must be provided to construct the connection string")
 		}
 		var err error
-		if connString, err = convertDsnToUri(opts.Driver, opts.Dsn); err != nil {
+		if connString, err = convertDsnToUri(driver, dsn); err != nil {
 			return "", err
 		}
+
+		return connString, nil
 	} else {
 		// Check for connection string in environment variable
 		envConnString := os.Getenv("ACRONIS_DB_BENCH_CONNECTION_STRING")
 		if envConnString != "" {
-			connString = envConnString
+			return envConnString, nil
 		} else {
 			// No valid connection configuration provided
 			return "", fmt.Errorf("specify the DB connection string using --connection-string or ACRONIS_DB_BENCH_CONNECTION_STRING environment variable\n" +
@@ -45,8 +46,6 @@ func constructConnStringFromOpts(opts DatabaseOpts) (string, error) {
 				"  OpenSearch:    opensearch://user::password@localhost:9200")
 		}
 	}
-
-	return connString, nil
 }
 
 // Helper function to convert DSN to URI format
