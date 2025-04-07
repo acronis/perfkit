@@ -60,7 +60,7 @@ func initWorker(worker *benchmark.BenchmarkWorker, testDesc *TestDesc, rowsRequi
 
 		t := TestTables[tableName]
 
-		if tableName == "" {
+		if tableName == "" || tableName == TestTableEmailNested.TableName || tableName == TestTableEmailParentChild.TableName {
 			testDesc.table.RowsCount = 0
 		} else {
 			b.Logger.Debug("initializing table '%s'", tableName)
