@@ -344,10 +344,6 @@ func Main() {
 	b.Exit()
 }
 
-func main() {
-	Main()
-}
-
 func executeTests(b *benchmark.Benchmark, testOpts *TestOpts) {
 	// Special case for "all" suite
 	if testOpts.BenchOpts.Test == "all" {
