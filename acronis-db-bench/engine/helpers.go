@@ -1,4 +1,4 @@
-package main
+package engine
 
 import (
 	"fmt"
@@ -14,6 +14,8 @@ import (
 	events "github.com/acronis/perfkit/acronis-db-bench/event-bus"
 	tenants "github.com/acronis/perfkit/acronis-db-bench/tenants-cache"
 )
+
+const SequenceName = "acronis_db_bench_sequence" // SequenceName is the name of the sequence used for generating IDs
 
 // FatalError prints error message and exits with code 127
 func FatalError(err string) {
@@ -36,15 +38,15 @@ func createTables(b *benchmark.Benchmark) {
 
 	_, tests := GetTests()
 	for _, t := range tests {
-		if t.table.TableName != "" && t.dbIsSupported(dialectName) {
-			usedTables.Add(t.table.TableName)
+		if t.Table.TableName != "" && t.dbIsSupported(dialectName) {
+			usedTables.Add(t.Table.TableName)
 		}
 	}
 
 	fmt.Printf("creating the tables ... ")
 
-	c := dbConnector(b)
-	for _, tableDesc := range TestTables {
+	c := DbConnector(b)
+	for _, tableDesc := range testRegistry.GetTables() {
 		if usedTables.Contains(tableDesc.TableName) && tableDesc.dbIsSupported(dialectName) {
 			tableDesc.Create(c, b)
 		}
@@ -55,17 +57,17 @@ func createTables(b *benchmark.Benchmark) {
 		tc = tenants.NewTenantsCache(b)
 		b.Vault.(*DBTestData).TenantsCache = tc
 	}
-	tc.CreateTables(c.database)
-	c.database.CreateSequence(SequenceName)
+	tc.CreateTables(c.Database)
+	c.Database.CreateSequence(SequenceName)
 	c.Release()
 
-	eb := events.NewEventBus(c.database, b.Logger)
+	eb := events.NewEventBus(c.Database, b.Logger)
 	eb.CreateTables()
 
 	fmt.Printf("done\n")
 }
 
-func dbConnector(b *benchmark.Benchmark) *DBConnector {
+func DbConnector(b *benchmark.Benchmark) *DBConnector {
 	var conn, err = NewDBConnector(&b.TestOpts.(*TestOpts).DBOpts, -1, b.Logger, 1)
 	if err != nil {
 		FatalError(err.Error())
@@ -74,7 +76,7 @@ func dbConnector(b *benchmark.Benchmark) *DBConnector {
 	return conn
 }
 
-func cleanupTables(b *benchmark.Benchmark) {
+func CleanupTables(b *benchmark.Benchmark) {
 	dbOpts := b.TestOpts.(*TestOpts).DBOpts
 
 	if dbOpts.DontCleanup {
@@ -85,31 +87,31 @@ func cleanupTables(b *benchmark.Benchmark) {
 
 	fmt.Printf("cleaning up the test tables ... ")
 
-	c := dbConnector(b)
+	c := DbConnector(b)
 
-	for tableName := range TestTables {
-		c.database.DropTable(tableName)
+	for tableName := range testRegistry.GetTables() {
+		c.Database.DropTable(tableName)
 	}
 
 	if b.Vault.(*DBTestData).TenantsCache == nil {
 		b.Vault.(*DBTestData).TenantsCache = tenants.NewTenantsCache(b)
 	}
 
-	b.Vault.(*DBTestData).TenantsCache.DropTables(c.database)
-	c.database.DropSequence(SequenceName)
+	b.Vault.(*DBTestData).TenantsCache.DropTables(c.Database)
+	c.Database.DropSequence(SequenceName)
 	c.Release()
 
-	eb := events.NewEventBus(c.database, b.Logger)
+	eb := events.NewEventBus(c.Database, b.Logger)
 	eb.DropTables()
 
 	fmt.Printf("done\n")
 }
 
 func getDBInfo(b *benchmark.Benchmark, content []string) (ret string) {
-	c := dbConnector(b)
+	c := DbConnector(b)
 
-	tableNames := make([]string, 0, len(TestTables))
-	for k := range TestTables {
+	tableNames := make([]string, 0, len(testRegistry.GetTables()))
+	for k := range testRegistry.GetTables() {
 		tableNames = append(tableNames, k)
 	}
 	sort.Strings(tableNames)
@@ -117,12 +119,12 @@ func getDBInfo(b *benchmark.Benchmark, content []string) (ret string) {
 	var tableSchemaInfo, tablesVolumeInfo []string
 	var err error
 
-	tableSchemaInfo, err = c.database.GetTablesSchemaInfo(tableNames)
+	tableSchemaInfo, err = c.Database.GetTablesSchemaInfo(tableNames)
 	if err != nil {
 		FatalError(err.Error())
 	}
 
-	tablesVolumeInfo, err = c.database.GetTablesVolumeInfo(tableNames)
+	tablesVolumeInfo, err = c.Database.GetTablesVolumeInfo(tableNames)
 	if err != nil {
 		FatalError(err.Error())
 	}
@@ -140,7 +142,7 @@ func getDBInfo(b *benchmark.Benchmark, content []string) (ret string) {
 	return ret
 }
 
-func formatSQL(sqlTemlate string, dialectName db.DialectName) string {
+func FormatSQL(sqlTemlate string, dialectName db.DialectName) string {
 	if dialectName == db.POSTGRES {
 		return sqlTemlate
 	}

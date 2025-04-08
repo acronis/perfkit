@@ -7,6 +7,7 @@ toolchain go1.21.4
 require (
 	github.com/ClickHouse/clickhouse-go/v2 v2.26.0
 	github.com/MichaelS11/go-cql-driver v0.1.1
+	github.com/acronis/perfkit/logger v0.0.0-20250402063049-20a8306d6a02
 	github.com/denisenkom/go-mssqldb v0.12.3
 	github.com/elastic/go-elasticsearch/v8 v8.15.0
 	github.com/fergusstrange/embedded-postgres v1.27.0
