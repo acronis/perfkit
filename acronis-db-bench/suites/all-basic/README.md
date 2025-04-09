@@ -15,7 +15,7 @@ This test suite is designed to:
 
 The suite is particularly useful for:
 
-- Initial database cluster setup verification
+- Initial database setup verification
 - Infrastructure performance testing
 - Database configuration validation
 
