@@ -334,7 +334,7 @@ The acronis-db-bench loader is running in a dedicated VM on the same host as the
 > acronis-db-bench --connection-string="mysql://bench_user:bench_pass@tcp(<ip-address>:3306)/perf_db" -t all --limit 200000 --chunk 200000
 ========================================================================================================================
 Acronis Database Benchmark: version v1-main-dev
-Connected to 'mysql' database: 10.11.11-79-MariaDB-Acronis-log (MariaDB Server)
+Connected to 'mysql' database: 10.11.11-MariaDB (MariaDB Server)
 ========================================================================================================================
 
 database settings checks:
