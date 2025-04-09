@@ -120,36 +120,36 @@ Memory:
 Disk Performance
 
 ``` bash
-> fio --name=randwrite --ioengine=sync --rw=randwrite --bs=4k --size=1G --numjobs=1 --runtime=60 --group_reporting
+> fio --name=randwrite --ioengine=sync --rw=randwrite --bs=4k --size=32G --numjobs=1 --runtime=60 --group_reporting
 randwrite: (g=0): rw=randwrite, bs=(R) 4096B-4096B, (W) 4096B-4096B, (T) 4096B-4096B, ioengine=sync, iodepth=1
 fio-3.39
 Starting 1 process
-randwrite: Laying out IO file (1 file / 1024MiB)
-Jobs: 1 (f=1): [w(1)][100.0%][w=176MiB/s][w=45.0k IOPS][eta 00m:00s]
-randwrite: (groupid=0, jobs=1): err= 0: pid=8085: Tue Apr  8 17:43:21 2025
-  write: IOPS=23.5k, BW=91.8MiB/s (96.2MB/s)(1024MiB/11159msec); 0 zone resets
-    clat (nsec): min=1000, max=6916.0k, avg=41992.78, stdev=98676.87
-     lat (nsec): min=1000, max=6916.0k, avg=42023.95, stdev=98677.95
+randwrite: Laying out IO file (1 file / 32768MiB)
+Jobs: 1 (f=1): [w(1)][100.0%][w=13.9MiB/s][w=3549 IOPS][eta 00m:00s]
+randwrite: (groupid=0, jobs=1): err= 0: pid=18394: Wed Apr  9 12:49:11 2025
+  write: IOPS=3612, BW=14.1MiB/s (14.8MB/s)(847MiB/60001msec); 0 zone resets
+    clat (nsec): min=2000, max=11488k, avg=275944.96, stdev=234095.85
+     lat (nsec): min=2000, max=11488k, avg=275975.78, stdev=234096.82
     clat percentiles (usec):
-     |  1.00th=[    3],  5.00th=[    3], 10.00th=[    3], 20.00th=[    3],
-     | 30.00th=[    5], 40.00th=[    5], 50.00th=[    5], 60.00th=[    6],
-     | 70.00th=[   85], 80.00th=[   95], 90.00th=[  112], 95.00th=[  124],
-     | 99.00th=[  149], 99.50th=[  186], 99.90th=[ 1827], 99.95th=[ 1926],
-     | 99.99th=[ 2057]
-   bw (  KiB/s): min=23069, max=212134, per=98.84%, avg=92874.00, stdev=42040.30, samples=22
-   iops        : min= 5767, max=53031, avg=23218.05, stdev=10509.83, samples=22
-  lat (usec)   : 2=0.06%, 4=27.77%, 10=37.04%, 20=0.49%, 50=0.34%
-  lat (usec)   : 100=18.07%, 250=15.93%, 500=0.07%, 750=0.01%, 1000=0.01%
-  lat (msec)   : 2=0.22%, 4=0.02%, 10=0.01%
-  cpu          : usr=1.29%, sys=15.39%, ctx=91861, majf=0, minf=6
+     |  1.00th=[   78],  5.00th=[   86], 10.00th=[   95], 20.00th=[  247],
+     | 30.00th=[  262], 40.00th=[  269], 50.00th=[  273], 60.00th=[  281],
+     | 70.00th=[  285], 80.00th=[  297], 90.00th=[  314], 95.00th=[  326],
+     | 99.00th=[ 1860], 99.50th=[ 2057], 99.90th=[ 2540], 99.95th=[ 2835],
+     | 99.99th=[ 3163]
+   bw (  KiB/s): min=12048, max=37093, per=100.00%, avg=14452.92, stdev=4197.41, samples=119
+   iops        : min= 3012, max= 9273, avg=3613.02, stdev=1049.34, samples=119
+  lat (usec)   : 4=0.32%, 10=0.37%, 20=0.04%, 50=0.01%, 100=11.30%
+  lat (usec)   : 250=8.92%, 500=77.23%, 750=0.18%, 1000=0.05%
+  lat (msec)   : 2=0.93%, 4=0.65%, 10=0.01%, 20=0.01%
+  cpu          : usr=0.31%, sys=60.54%, ctx=211314, majf=0, minf=6
   IO depths    : 1=100.0%, 2=0.0%, 4=0.0%, 8=0.0%, 16=0.0%, 32=0.0%, >=64=0.0%
      submit    : 0=0.0%, 4=100.0%, 8=0.0%, 16=0.0%, 32=0.0%, 64=0.0%, >=64=0.0%
      complete  : 0=0.0%, 4=100.0%, 8=0.0%, 16=0.0%, 32=0.0%, 64=0.0%, >=64=0.0%
-     issued rwts: total=0,262144,0,0 short=0,0,0,0 dropped=0,0,0,0
+     issued rwts: total=0,216766,0,0 short=0,0,0,0 dropped=0,0,0,0
      latency   : target=0, window=0, percentile=100.00%, depth=1
 
 Run status group 0 (all jobs):
-  WRITE: bw=91.8MiB/s (96.2MB/s), 91.8MiB/s-91.8MiB/s (96.2MB/s-96.2MB/s), io=1024MiB (1074MB), run=11159-11159msec
+  WRITE: bw=14.1MiB/s (14.8MB/s), 14.1MiB/s-14.1MiB/s (14.8MB/s-14.8MB/s), io=847MiB (888MB), run=60001-60001msec
 ```
 
 #### Production-like Server
@@ -181,40 +181,41 @@ RAM info:
 Disk Performance
 
 ``` bash
-fio --name=randwrite --ioengine=libaio --rw=randwrite --bs=4k --size=1G --numjobs=1 --runtime=60 --group_reporting
+> fio --name=randwrite --ioengine=libaio --rw=randwrite --bs=4k --size=32G --numjobs=1 --runtime=60 --group_reporting
 randwrite: (g=0): rw=randwrite, bs=(R) 4096B-4096B, (W) 4096B-4096B, (T) 4096B-4096B, ioengine=libaio, iodepth=1
 fio-3.14
 Starting 1 process
-randwrite: Laying out IO file (1 file / 1024MiB)
-Jobs: 1 (f=1)
-randwrite: (groupid=0, jobs=1): err= 0: pid=858673: Tue Apr  8 14:46:08 2025
-  write: IOPS=287k, BW=1123MiB/s (1177MB/s)(1024MiB/912msec)
-    slat (nsec): min=2086, max=221800, avg=2802.53, stdev=872.01
-    clat (nsec): min=342, max=18237, avg=381.95, stdev=153.83
-     lat (nsec): min=2513, max=222773, avg=3236.08, stdev=890.26
+Jobs: 1 (f=1): [w(1)][98.0%][w=780MiB/s][w=200k IOPS][eta 00m:01s]
+randwrite: (groupid=0, jobs=1): err= 0: pid=830265: Wed Apr  9 09:18:40 2025
+  write: IOPS=171k, BW=667MiB/s (700MB/s)(32.0GiB/49100msec)
+    slat (nsec): min=1956, max=61399k, avg=4227.80, stdev=23150.15
+    clat (nsec): min=333, max=1014.4k, avg=386.73, stdev=389.15
+     lat (usec): min=2, max=61404, avg= 4.67, stdev=23.16
     clat percentiles (nsec):
-     |  1.00th=[  354],  5.00th=[  358], 10.00th=[  362], 20.00th=[  362],
-     | 30.00th=[  366], 40.00th=[  370], 50.00th=[  374], 60.00th=[  374],
-     | 70.00th=[  378], 80.00th=[  382], 90.00th=[  426], 95.00th=[  430],
-     | 99.00th=[  442], 99.50th=[  490], 99.90th=[  828], 99.95th=[ 2480],
-     | 99.99th=[ 7776]
-   bw (  MiB/s): min= 1123, max= 1123, per=100.00%, avg=1123.27, stdev= 0.00, samples=1
-   iops        : min=287556, max=287556, avg=287556.00, stdev= 0.00, samples=1
-  lat (nsec)   : 500=99.55%, 750=0.33%, 1000=0.05%
-  lat (usec)   : 2=0.02%, 4=0.01%, 10=0.04%, 20=0.01%
-  cpu          : usr=25.69%, sys=74.20%, ctx=6, majf=0, minf=10
+     |  1.00th=[  362],  5.00th=[  362], 10.00th=[  366], 20.00th=[  370],
+     | 30.00th=[  374], 40.00th=[  378], 50.00th=[  378], 60.00th=[  382],
+     | 70.00th=[  386], 80.00th=[  390], 90.00th=[  430], 95.00th=[  434],
+     | 99.00th=[  446], 99.50th=[  450], 99.90th=[  510], 99.95th=[  788],
+     | 99.99th=[ 6496]
+   bw (  KiB/s): min=604584, max=937680, per=100.00%, avg=796334.96, stdev=70227.47, samples=84
+   iops        : min=151146, max=234420, avg=199083.71, stdev=17556.87, samples=84
+  lat (nsec)   : 500=99.89%, 750=0.06%, 1000=0.01%
+  lat (usec)   : 2=0.01%, 4=0.01%, 10=0.03%, 20=0.01%, 50=0.01%
+  lat (usec)   : 100=0.01%, 250=0.01%
+  lat (msec)   : 2=0.01%
+  cpu          : usr=15.77%, sys=83.99%, ctx=149, majf=0, minf=11
   IO depths    : 1=100.0%, 2=0.0%, 4=0.0%, 8=0.0%, 16=0.0%, 32=0.0%, >=64=0.0%
      submit    : 0=0.0%, 4=100.0%, 8=0.0%, 16=0.0%, 32=0.0%, 64=0.0%, >=64=0.0%
      complete  : 0=0.0%, 4=100.0%, 8=0.0%, 16=0.0%, 32=0.0%, 64=0.0%, >=64=0.0%
-     issued rwts: total=0,262144,0,0 short=0,0,0,0 dropped=0,0,0,0
+     issued rwts: total=0,8388608,0,0 short=0,0,0,0 dropped=0,0,0,0
      latency   : target=0, window=0, percentile=100.00%, depth=1
 
 Run status group 0 (all jobs):
-  WRITE: bw=1123MiB/s (1177MB/s), 1123MiB/s-1123MiB/s (1177MB/s-1177MB/s), io=1024MiB (1074MB), run=912-912msec
+  WRITE: bw=667MiB/s (700MB/s), 667MiB/s-667MiB/s (700MB/s-700MB/s), io=32.0GiB (34.4GB), run=49100-49100msec
 
 Disk stats (read/write):
-    dm-0: ios=0/0, merge=0/0, ticks=0/0, in_queue=0, util=0.00%, aggrios=0/190, aggrmerge=0/29, aggrticks=0/28, aggrin_queue=28, aggrutil=0.48%
-  sda: ios=0/190, merge=0/29, ticks=0/28, in_queue=28, util=0.48%
+    dm-0: ios=0/1563694, merge=0/0, ticks=0/4289503, in_queue=4295970, util=54.97%, aggrios=2/1495805, aggrmerge=0/93154, aggrticks=2/3699640, aggrin_queue=3701523, aggrutil=55.47%
+  sda: ios=2/1495805, merge=0/93154, ticks=2/3699640, in_queue=3701523, util=55.47%
 ```
 
 ### Databases configurations
