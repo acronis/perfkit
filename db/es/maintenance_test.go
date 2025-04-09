@@ -10,7 +10,7 @@ func (suite *TestingSuite) TestElasticSearchSchemaInit() {
 	dbo, err := db.Open(db.Config{
 		ConnString:      suite.ConnString,
 		MaxOpenConns:    16,
-		MaxConnLifetime: 100 * time.Millisecond,
+		MaxConnLifetime: 1000 * time.Millisecond,
 	})
 
 	if err != nil {

@@ -8,21 +8,18 @@ x-logging:
 
 services:
   opensearch:
-    image: opensearchproject/opensearch:2.17.0
+    image: opensearchproject/opensearch:2.18.0
     environment:
       - node.name=os-test
       - discovery.type=single-node # uses only for test clusters
       - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m" # Set min and max JVM heap sizes to at least 50% of system RAM
-      - OPENSEARCH_INITIAL_ADMIN_PASSWORD="ScoRpi0n$" # example value of a secret compliant with OpenSearch password policy
-    ulimits:
-      memlock:
-        soft: -1
-        hard: -1
+      - OPENSEARCH_INITIAL_ADMIN_PASSWORD=bgnYFGR2RhN3SCX # example value of a secret compliant with OpenSearch password policy
+      - plugins.security.ssl.http.enabled=false
     logging: *logging
     volumes:
       - opensearch-data:/usr/share/opensearch/data
     ports:
-      - 9200:9200
+      - 9201:9200
       - 9600:9600
 
 volumes:

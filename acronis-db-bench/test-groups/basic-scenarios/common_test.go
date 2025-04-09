@@ -15,7 +15,7 @@ import (
 const (
 	sqliteConnString     = "sqlite://:memory:"
 	mariaDBConnString    = "mysql://user:password@tcp(localhost:3306)/perfkit_db_ci"
-	postgresqlConnString = "postgresql://root:password@localhost:5432/perfkit_db_ci?sslmode=disable"
+	postgresqlConnString = "postgresql://root:password@localhost:5432/perfkit_pg_vector_db_ci?sslmode=disable"
 )
 
 type TestingSuite struct {

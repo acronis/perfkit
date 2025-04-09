@@ -47,6 +47,18 @@ func (g *sqlGateway) bulkInsertParameterized(tableName string, rows [][]interfac
 			var parametersPlaceholder = strings.Join(ret, ",")
 			valuesReference = append(valuesReference, fmt.Sprintf("(%s)", parametersPlaceholder))
 		}
+	} else if g.dialect.name() == db.MSSQL {
+		// SQL Server uses @p1, @p2, etc. for parameter placeholders
+		var i = 0
+		for j := 0; j < len(rows); j++ {
+			var ret = make([]string, len(columnNames))
+			for k := 0; k < len(columnNames); k++ {
+				ret[k] = fmt.Sprintf("@p%d", i+1)
+				i++
+			}
+			var parametersPlaceholder = strings.Join(ret, ",")
+			valuesReference = append(valuesReference, fmt.Sprintf("(%s)", parametersPlaceholder))
+		}
 	} else {
 		// Other SQL databases use ? for parameter placeholders
 		for j := 0; j < len(rows); j++ {

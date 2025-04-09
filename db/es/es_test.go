@@ -2,6 +2,7 @@ package es
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -13,8 +14,8 @@ import (
 )
 
 const (
-	esConnString         = "es://0.0.0.0:9200"
-	openSearchConnString = "opensearch://admin:%22ScoRpi0n$%22@0.0.0.0:9200" // example value of a secret compliant with OpenSearch password requirements
+	esConnString         = "es://localhost:9200"
+	openSearchConnString = "opensearch://admin:bgnYFGR2RhN3SCX@localhost:9201" // example value of a secret compliant with OpenSearch password requirements
 )
 
 type TestingSuite struct {
@@ -26,12 +27,9 @@ func TestDatabaseSuiteElasticSearch(t *testing.T) {
 	suite.Run(t, &TestingSuite{ConnString: esConnString})
 }
 
-/*
 func TestDatabaseSuiteOpenSearch(t *testing.T) {
 	suite.Run(t, &TestingSuite{ConnString: openSearchConnString})
 }
-
-*/
 
 type testLogger struct {
 	t *testing.T
@@ -62,13 +60,15 @@ func (suite *TestingSuite) makeTestSession() (db.Database, db.Session, *db.Conte
 	dbo, err := db.Open(db.Config{
 		ConnString:      suite.ConnString,
 		MaxOpenConns:    16,
-		MaxConnLifetime: 100 * time.Millisecond,
+		MaxConnLifetime: 1000 * time.Millisecond,
 		QueryLogger:     logger,
 	})
 
 	require.NoError(suite.T(), err, "making test esSession")
 
 	var tableSpec = testTableDefinition()
+
+	time.Sleep(1 * time.Second)
 
 	if err = dbo.CreateTable("perf_table", tableSpec, ""); err != nil {
 		require.NoError(suite.T(), err, "init scheme")
@@ -95,8 +95,34 @@ func logDbTime(t *testing.T, c *db.Context) {
 func cleanup(t *testing.T, dbo db.Database) {
 	t.Helper()
 
+	exists, err := dbo.TableExists("perf_table")
+	if err != nil {
+		t.Error("check table exists", err)
+		return
+	}
+
+	if !exists {
+		return
+	}
+
 	if err := dbo.DropTable("perf_table"); err != nil {
 		t.Error("drop table", err)
 		return
+	}
+}
+
+func dbDialect(connString string) (dialect, error) {
+	scheme, _, err := db.ParseScheme(connString)
+	if err != nil {
+		return nil, fmt.Errorf("cannot parse connection string scheme '%v', error: %v", connString, err)
+	}
+
+	switch scheme {
+	case "es", "elastic", "elasticsearch":
+		return &elasticSearchDialect{}, nil
+	case "os", "opensearch":
+		return &openSearchDialect{}, nil
+	default:
+		return nil, fmt.Errorf("db: unsupported backend '%v'", scheme)
 	}
 }

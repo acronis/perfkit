@@ -8,7 +8,7 @@ import (
 
 func TestDefaultCreateQueryPatchFuncWithMySQL(t *testing.T) {
 	var table = "test_table"
-	var query = "CREATE TABLE {table} (id {$bigint_autoinc_pk}, name {$ascii})"
+	var query = "CREATE TABLE {table} (id {$bigint_autoinc_pk}, name {$varchar})"
 
 	var dia = &sqlDialect{dia: &mysqlDialect{
 		sqlEngine: "xpand-allnodes",
@@ -22,7 +22,7 @@ func TestDefaultCreateQueryPatchFuncWithMySQL(t *testing.T) {
 		return
 	}
 
-	var expected = "CREATE TABLE test_table (id BIGINT AUTO_INCREMENT PRIMARY KEY, name character set ascii)"
+	var expected = "CREATE TABLE test_table (id BIGINT AUTO_INCREMENT PRIMARY KEY, name VARCHAR)"
 	if result != expected {
 		t.Errorf("DefaultCreateQueryPatchFunc() got = %v, want %v", result, expected)
 	}
@@ -30,7 +30,7 @@ func TestDefaultCreateQueryPatchFuncWithMySQL(t *testing.T) {
 
 func TestDefaultCreateQueryPatchFuncWithSQLite(t *testing.T) {
 	var table = "test_table"
-	var query = "CREATE TABLE {table} (id {$bigint_autoinc_pk}, name {$ascii})"
+	var query = "CREATE TABLE {table} (id {$bigint_autoinc_pk}, name {$varchar})"
 
 	var dia = &sqlDialect{dia: &sqliteDialect{}}
 
@@ -42,7 +42,7 @@ func TestDefaultCreateQueryPatchFuncWithSQLite(t *testing.T) {
 		return
 	}
 
-	var expected = "CREATE TABLE test_table (id INTEGER PRIMARY KEY AUTOINCREMENT, name )"
+	var expected = "CREATE TABLE test_table (id INTEGER PRIMARY KEY AUTOINCREMENT, name VARCHAR)"
 	if result != expected {
 		t.Errorf("DefaultCreateQueryPatchFunc() got = %v, want %v", result, expected)
 	}
@@ -50,7 +50,7 @@ func TestDefaultCreateQueryPatchFuncWithSQLite(t *testing.T) {
 
 func TestDefaultCreateQueryPatchFuncWithPostgres(t *testing.T) {
 	var table = "test_table"
-	var query = "CREATE TABLE {table} (id {$bigint_autoinc_pk}, name {$ascii})"
+	var query = "CREATE TABLE {table} (id {$bigint_autoinc_pk}, name {$varchar})"
 
 	var dia = &sqlDialect{dia: &pgDialect{}}
 
@@ -62,7 +62,7 @@ func TestDefaultCreateQueryPatchFuncWithPostgres(t *testing.T) {
 		return
 	}
 
-	var expected = "CREATE TABLE test_table (id BIGSERIAL PRIMARY KEY, name )"
+	var expected = "CREATE TABLE test_table (id BIGSERIAL PRIMARY KEY, name VARCHAR)"
 	if result != expected {
 		t.Errorf("DefaultCreateQueryPatchFunc() got = %v, want %v", result, expected)
 	}
@@ -70,7 +70,7 @@ func TestDefaultCreateQueryPatchFuncWithPostgres(t *testing.T) {
 
 func TestDefaultCreateQueryPatchFuncWithMSSQL(t *testing.T) {
 	var table = "test_table"
-	var query = "CREATE TABLE {table} (id {$bigint_autoinc_pk}, name {$ascii})"
+	var query = "CREATE TABLE {table} (id {$bigint_autoinc_pk}, name {$varchar})"
 
 	var dia = &sqlDialect{dia: &msDialect{}}
 
@@ -82,7 +82,7 @@ func TestDefaultCreateQueryPatchFuncWithMSSQL(t *testing.T) {
 		return
 	}
 
-	var expected = "CREATE TABLE test_table (id BIGINT IDENTITY(1,1) PRIMARY KEY, name )"
+	var expected = "CREATE TABLE test_table (id BIGINT IDENTITY(1,1) PRIMARY KEY, name VARCHAR)"
 	if result != expected {
 		t.Errorf("DefaultCreateQueryPatchFunc() got = %v, want %v", result, expected)
 	}
@@ -90,7 +90,7 @@ func TestDefaultCreateQueryPatchFuncWithMSSQL(t *testing.T) {
 
 func TestDefaultCreateQueryPatchFuncWithCassandra(t *testing.T) {
 	var table = "test_table"
-	var query = "CREATE TABLE {table} (id {$bigint_autoinc_pk}, name {$ascii})"
+	var query = "CREATE TABLE {table} (id {$bigint_autoinc_pk}, name {$varchar})"
 
 	var dia = &sqlDialect{dia: &cassandraDialect{}}
 
@@ -102,7 +102,7 @@ func TestDefaultCreateQueryPatchFuncWithCassandra(t *testing.T) {
 		return
 	}
 
-	var expected = "CREATE TABLE test_table (id bigint PRIMARY KEY, name )"
+	var expected = "CREATE TABLE test_table (id bigint primary key, name varchar)"
 	if result != expected {
 		t.Errorf("DefaultCreateQueryPatchFunc() got = %v, want %v", result, expected)
 	}

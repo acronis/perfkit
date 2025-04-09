@@ -1,6 +1,8 @@
 package sql
 
-import "github.com/acronis/perfkit/db"
+import (
+	"github.com/acronis/perfkit/db"
+)
 
 func (suite *TestingSuite) TestInsert() {
 	d, s, c := suite.makeTestSession()

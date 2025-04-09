@@ -13,6 +13,7 @@ import (
 	"github.com/gocql/gocql"
 
 	"github.com/acronis/perfkit/db"
+	"github.com/acronis/perfkit/logger"
 )
 
 const (
@@ -20,7 +21,6 @@ const (
 
 	mariaDBConnString    = "mysql://user:password@tcp(localhost:3306)/perfkit_db_ci"                             // example value of a secret
 	sqlServerConnString  = "sqlserver://perfkit_db_runner:MyP%40ssw0rd123@localhost:1433?database=perfkit_db_ci" // example value of a secret
-	postgresqlConnString = "postgresql://root:password@localhost:5432/perfkit_db_ci?sslmode=disable"             // example value of a secret
 	pgVectorConnString   = "postgresql://root:password@localhost:5432/perfkit_pg_vector_db_ci?sslmode=disable"   // example value of a secret
 	clickHouseConnString = "clickhouse://username:password@localhost:9000/perfkit_db_ci"                         // example value of a secret
 	cassandraConnString  = "cql://admin:password@localhost:9042?keyspace=perfkit_db_ci"                          // example value of a secret
@@ -31,7 +31,6 @@ type TestingSuite struct {
 	ConnString string
 }
 
-/*
 func TestDatabaseSuiteSQLite(t *testing.T) {
 	suite.Run(t, &TestingSuite{ConnString: sqliteConnString})
 }
@@ -44,16 +43,10 @@ func TestDatabaseSuiteSQLServer(t *testing.T) {
 	suite.Run(t, &TestingSuite{ConnString: sqlServerConnString})
 }
 
-func TestDatabaseSuitePG(t *testing.T) {
-	suite.Run(t, &TestingSuite{ConnString: postgresqlConnString})
-}
-*/
-
 func TestDatabaseSuitePGVector(t *testing.T) {
 	suite.Run(t, &TestingSuite{ConnString: pgVectorConnString})
 }
 
-/*
 func TestDatabaseSuiteClickHouse(t *testing.T) {
 	suite.Run(t, &TestingSuite{ConnString: clickHouseConnString})
 }
@@ -62,14 +55,55 @@ func TestDatabaseSuiteCassandra(t *testing.T) {
 	suite.Run(t, &TestingSuite{ConnString: cassandraConnString})
 }
 
-*/
-
 type testLogger struct {
-	t *testing.T
+	t           *testing.T
+	level       logger.LogLevel
+	lastMessage *logger.LogMessage
 }
 
-func (l *testLogger) Log(format string, args ...interface{}) {
-	l.t.Logf(format, args...)
+func newTestLogger(t *testing.T, level logger.LogLevel) logger.Logger {
+	return &testLogger{t: t, level: level}
+}
+
+func (l *testLogger) Log(level logger.LogLevel, message string, args ...interface{}) {
+	l.lastMessage = &logger.LogMessage{Level: level, Message: fmt.Sprintf(message, args...)}
+	l.t.Logf(message, args...)
+}
+
+func (l *testLogger) Error(format string, args ...interface{}) {
+	l.Log(logger.LevelError, format, args...)
+}
+
+func (l *testLogger) Warn(format string, args ...interface{}) {
+	l.Log(logger.LevelWarn, format, args...)
+}
+
+func (l *testLogger) Info(format string, args ...interface{}) {
+	l.Log(logger.LevelInfo, format, args...)
+}
+
+func (l *testLogger) Debug(format string, args ...interface{}) {
+	l.Log(logger.LevelDebug, format, args...)
+}
+
+func (l *testLogger) Trace(format string, args ...interface{}) {
+	l.Log(logger.LevelTrace, format, args...)
+}
+
+func (l *testLogger) GetLevel() logger.LogLevel {
+	return l.level
+}
+
+func (l *testLogger) SetLevel(level logger.LogLevel) {
+	l.level = level
+}
+
+func (l *testLogger) GetLastMessage() *logger.LogMessage {
+	return l.lastMessage
+}
+
+func (l *testLogger) Clone() logger.Logger {
+	return &testLogger{level: l.level}
 }
 
 func testTableDefinition(dia db.DialectName) *db.TableDefinition {
@@ -103,7 +137,7 @@ func testTableDefinition(dia db.DialectName) *db.TableDefinition {
 }
 
 func (suite *TestingSuite) makeTestSession() (db.Database, db.Session, *db.Context) {
-	var logger = &testLogger{t: suite.T()}
+	var logger = &testLogger{t: suite.T(), level: logger.LevelDebug}
 
 	dbo, err := db.Open(db.Config{
 		ConnString:      suite.ConnString,

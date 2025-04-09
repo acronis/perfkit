@@ -13,6 +13,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	es8 "github.com/elastic/go-elasticsearch/v8"
 	"github.com/elastic/go-elasticsearch/v8/esapi"
@@ -37,6 +38,10 @@ type elasticSearchDialect struct{}
 
 func (d *elasticSearchDialect) name() db.DialectName {
 	return db.ELASTICSEARCH
+}
+
+func (d *elasticSearchDialect) getVectorType() fieldType {
+	return "dense_vector"
 }
 
 // nolint:gocritic //TODO refactor unnamed returns
@@ -261,7 +266,8 @@ func (q *esQuerier) insert(ctx context.Context, idxName indexName, query *BulkIn
 	var res, err = q.es.Bulk(query.Reader(),
 		q.es.Bulk.WithContext(ctx),
 		q.es.Bulk.WithIndex(string(idxName)),
-		q.es.Bulk.WithRefresh("wait_for"))
+		q.es.Bulk.WithRefresh("wait_for"),
+		q.es.Bulk.WithTimeout(30*time.Second))
 	if err != nil {
 		return nil, 0, fmt.Errorf("error from elasticsearch while performing bulk insert: %v", err)
 	} else if res.IsError() {
