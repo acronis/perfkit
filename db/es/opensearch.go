@@ -33,6 +33,10 @@ func (d *openSearchDialect) name() db.DialectName {
 	return db.OPENSEARCH
 }
 
+func (d *openSearchDialect) getVectorType() fieldType {
+	return "knn_vector"
+}
+
 type openSearchConnector struct{}
 
 func (c *openSearchConnector) ConnectionPool(cfg db.Config) (db.Database, error) {

@@ -39,6 +39,10 @@ func (d *elasticSearchDialect) name() db.DialectName {
 	return db.ELASTICSEARCH
 }
 
+func (d *elasticSearchDialect) getVectorType() fieldType {
+	return "dense_vector"
+}
+
 // nolint:gocritic //TODO refactor unnamed returns
 func elasticCredentialsAndConnString(cs string, tlsEnabled bool) (string, string, string, error) {
 	var u, err = url.Parse(cs)
