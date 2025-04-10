@@ -38,6 +38,12 @@ jobs:
       uses: actions/setup-go@v4
       with:
         go-version: '1.22'
+        
+    - name: Install PostgreSQL client
+      run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      
+    - name: Create vector extension
+      run: PGPASSWORD=password psql -h localhost -U root -d perfkit_pg_vector_db_ci -c "CREATE EXTENSION vector;"
 
     - name: Test
       run: go test -v ./db/sql/...
