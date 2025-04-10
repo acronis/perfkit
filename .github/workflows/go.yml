@@ -47,13 +47,6 @@ jobs:
 
     - name: Test with Coverage
       run: go test -v -coverprofile=coverage.txt -covermode=atomic ./db/sql/...
-      env:
-        # Pass database connection details to tests (using pgvector config)
-        DB_HOST: localhost
-        DB_PORT: 5432
-        DB_USER: root
-        DB_PASSWORD: password
-        DB_NAME: perfkit_pg_vector_db_ci
 
     - name: Upload results to Codecov
       uses: codecov/codecov-action@v5
