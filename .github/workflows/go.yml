@@ -45,8 +45,8 @@ jobs:
     - name: Create vector extension
       run: PGPASSWORD=password psql -h localhost -U root -d perfkit_pg_vector_db_ci -c "CREATE EXTENSION vector;"
 
-    - name: Test
-      run: go test -v ./db/sql/...
+    - name: Test with Coverage
+      run: go test -v -coverprofile=coverage.txt -covermode=atomic ./db/sql/...
       env:
         # Pass database connection details to tests (using pgvector config)
         DB_HOST: localhost
@@ -54,3 +54,8 @@ jobs:
         DB_USER: root
         DB_PASSWORD: password
         DB_NAME: perfkit_pg_vector_db_ci
+
+    - name: Upload results to Codecov
+      uses: codecov/codecov-action@v5
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
