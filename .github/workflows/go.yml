@@ -83,7 +83,7 @@ jobs:
           --health-retries 5
 
       mariadb-vector:
-        image: mariadb:11.7.2-ubu2404
+        image: mariadb:11.7.2
         env:
           MYSQL_ROOT_PASSWORD: password
           MYSQL_DATABASE: perfkit_db_ci
