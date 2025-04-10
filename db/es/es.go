@@ -78,7 +78,7 @@ func (d *esDatabase) TableExists(tableName string) (bool, error) {
 }
 
 func (d *esDatabase) CreateTable(tableName string, tableDefinition *db.TableDefinition, tableMigrationDDL string) error {
-	return createIndex(d.mig, tableName, tableDefinition, tableMigrationDDL)
+	return createIndex(d.dialect, d.mig, tableName, tableDefinition, tableMigrationDDL)
 }
 
 func (d *esDatabase) DropTable(name string) error {
@@ -213,4 +213,5 @@ func (tq timedQuerier) count(ctx context.Context, idxName indexName, request *Co
 
 type dialect interface {
 	name() db.DialectName
+	getVectorType() fieldType
 }

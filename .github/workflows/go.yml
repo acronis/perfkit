@@ -13,6 +13,113 @@ jobs:
 
   build:
     runs-on: ubuntu-latest
+
+    services:
+      # Database service containers
+      postgres:
+        image: ankane/pgvector:v0.5.1
+        env:
+          POSTGRES_USER: root
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: perfkit_pg_vector_db_ci
+        ports:
+          - 5432:5432
+        # Health check to wait until postgres is ready
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      cassandra:
+        image: cassandra:4.0
+        env:
+          CASSANDRA_USER: admin
+          CASSANDRA_PASSWORD: password
+        ports:
+          - 9042:9042
+        # Health check for Cassandra
+        options: >-
+          --health-cmd "cqlsh --debug -e 'select * from system.local' || exit 1"
+          --health-interval 30s
+          --health-timeout 10s
+          --health-retries 5
+
+      clickhouse:
+        image: clickhouse/clickhouse-server:23.9.1.1854-alpine
+        env:
+          CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+          CLICKHOUSE_DB: perfkit_db_ci
+          CLICKHOUSE_USER: username
+          CLICKHOUSE_PASSWORD: password
+        ports:
+          - 8123:8123
+          - 9000:9000
+        # Health check for ClickHouse
+        options: >-
+          --health-cmd "wget --no-verbose --tries=1 --spider http://localhost:8123/ping || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      elasticsearch:
+        image: docker.elastic.co/elasticsearch/elasticsearch:8.15.1
+        env:
+          node.name: es-test
+          cluster.name: es-docker-cluster
+          bootstrap.memory_lock: true
+          discovery.type: single-node
+          ES_JAVA_OPTS: -Xms512m -Xmx512m
+          xpack.security.enabled: false
+          xpack.security.http.ssl.enabled: false
+          xpack.security.transport.ssl.enabled: false
+        ports:
+          - 9200:9200
+        # Health check for Elasticsearch
+        options: >-
+          --health-cmd "curl -s http://localhost:9200/_cluster/health || exit 1"
+          --health-interval 20s
+          --health-timeout 10s
+          --health-retries 5
+
+      mariadb-vector:
+        image: mariadb:11.7.2
+        env:
+          MYSQL_ROOT_PASSWORD: password
+          MYSQL_DATABASE: perfkit_db_ci
+          MYSQL_USER: user
+          MYSQL_PASSWORD: password
+          # Disable features that cause warnings in GitHub Actions
+          MARIADB_INNODB_USE_NATIVE_AIO: "0"
+        ports:
+          - 3306:3306
+        # Additional options to handle GitHub Actions environment limitations
+        options: >-
+          --health-cmd "mysqladmin ping -h localhost -u root -ppassword"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+          --health-start-period 40s
+          --tmpfs /tmp:rw
+          --tmpfs /run/mysqld:rw
+
+      opensearch:
+        image: opensearchproject/opensearch:2.17.0
+        env:
+          node.name: os-test
+          discovery.type: single-node
+          OPENSEARCH_JAVA_OPTS: -Xms512m -Xmx512m
+          OPENSEARCH_INITIAL_ADMIN_PASSWORD: ScoRpi0n$
+        ports:
+          - 9201:9200
+          - 9600:9600
+        # Health check for OpenSearch
+        options: >-
+          --health-cmd "curl -s http://localhost:9200/_cluster/health || exit 1"
+          --health-interval 20s
+          --health-timeout 10s
+          --health-retries 5
+          
     steps:
     - uses: actions/checkout@v4
 
@@ -20,6 +127,62 @@ jobs:
       uses: actions/setup-go@v4
       with:
         go-version: '1.22'
+        
+    - name: Install database clients
+      run: |
+        # Install PostgreSQL client
+        sudo apt-get update
+        sudo apt-get install -y postgresql-client
+        
+        # Install MySQL client for MariaDB
+        sudo apt-get install -y mysql-client
+        
+        # Install curl for Elasticsearch/OpenSearch health checks
+        sudo apt-get install -y curl
+      
+    - name: Create vector extension
+      run: PGPASSWORD=password psql -h localhost -U root -d perfkit_pg_vector_db_ci -c "CREATE EXTENSION vector;"
 
-    - name: Test
-      run: go test -v ./benchmark/...
+    - name: Wait for MariaDB
+      run: |
+        # Wait for MariaDB to be fully ready
+        for i in {1..45}; do
+          if mysqladmin ping -h 127.0.0.1 -u root -ppassword --silent; then
+            echo "MariaDB is ready"
+            break
+          fi
+          echo "Waiting for MariaDB to be ready... ($i/45)"
+          sleep 2
+        done
+        # Verify connection
+        if ! mysqladmin ping -h 127.0.0.1 -u root -ppassword --silent; then
+          echo "MariaDB failed to start properly"
+          exit 1
+        fi
+
+    - name: Verify all database services
+      run: |
+        echo "Verifying PostgreSQL connection..."
+        PGPASSWORD=password psql -h localhost -U root -d perfkit_pg_vector_db_ci -c "SELECT 1" || exit 1
+        
+        echo "Verifying MariaDB connection..."
+        mysql -h 127.0.0.1 -u root -ppassword -e "SHOW DATABASES;" || exit 1
+        
+        echo "Verifying Elasticsearch health..."
+        curl -s http://localhost:9200/_cluster/health | grep -q '"status":"green\|yellow"' || exit 1
+        
+        echo "Verifying OpenSearch health..."
+        curl -s http://localhost:9201/_cluster/health | grep -q '"status":"green\|yellow"' || exit 1
+        
+        echo "Verifying ClickHouse connection..."
+        curl -s http://localhost:8123/ping | grep -q "Ok" || exit 1
+        
+        echo "All database services are operational!"
+
+    - name: Test with Coverage
+      run: go test -v -coverprofile=coverage.txt -covermode=atomic ./db/sql/...
+
+    - name: Upload results to Codecov
+      uses: codecov/codecov-action@v5
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
