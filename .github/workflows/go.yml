@@ -13,6 +13,24 @@ jobs:
 
   build:
     runs-on: ubuntu-latest
+    
+    services:
+      # Database service container (pgvector)
+      postgres:
+        image: ankane/pgvector:v0.5.1
+        env:
+          POSTGRES_USER: root
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: perfkit_pg_vector_db_ci
+        ports:
+          - 5432:5432
+        # Health check to wait until postgres is ready
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+          
     steps:
     - uses: actions/checkout@v4
 
@@ -22,4 +40,11 @@ jobs:
         go-version: '1.22'
 
     - name: Test
-      run: go test -v ./benchmark/...
+      run: go test -v ./db/sql/...
+      env:
+        # Pass database connection details to tests (using pgvector config)
+        DB_HOST: localhost
+        DB_PORT: 5432
+        DB_USER: root
+        DB_PASSWORD: password
+        DB_NAME: perfkit_pg_vector_db_ci
