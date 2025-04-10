@@ -36,11 +36,13 @@ type TestingSuite struct {
 func TestDatabaseSuiteSQLite(t *testing.T) {
 	suite.Run(t, &TestingSuite{ConnString: sqliteConnString})
 }
+*/
 
 func TestDatabaseSuiteMySQL(t *testing.T) {
 	suite.Run(t, &TestingSuite{ConnString: mariaDBConnString})
 }
 
+/*
 func TestDatabaseSuiteSQLServer(t *testing.T) {
 	suite.Run(t, &TestingSuite{ConnString: sqlServerConnString})
 }
@@ -54,7 +56,6 @@ func TestDatabaseSuitePGVector(t *testing.T) {
 	suite.Run(t, &TestingSuite{ConnString: pgVectorConnString})
 }
 
-/*
 func TestDatabaseSuiteClickHouse(t *testing.T) {
 	suite.Run(t, &TestingSuite{ConnString: clickHouseConnString})
 }
@@ -62,7 +63,6 @@ func TestDatabaseSuiteClickHouse(t *testing.T) {
 func TestDatabaseSuiteCassandra(t *testing.T) {
 	suite.Run(t, &TestingSuite{ConnString: cassandraConnString})
 }
-*/
 
 type testLogger struct {
 	t           *testing.T
