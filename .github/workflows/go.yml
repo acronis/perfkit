@@ -13,7 +13,7 @@ jobs:
 
   build:
     runs-on: ubuntu-latest
-    
+
     services:
       # Database service containers
       postgres:
@@ -82,13 +82,15 @@ jobs:
           --health-timeout 10s
           --health-retries 5
 
-      mariadb:
-        image: mariadb:11.7
+      mariadb-vector:
+        image: mariadb:11.7.2-ubu2404
         env:
           MYSQL_ROOT_PASSWORD: password
           MYSQL_DATABASE: perfkit_db_ci
           MYSQL_USER: user
           MYSQL_PASSWORD: password
+          # Disable features that cause warnings in GitHub Actions
+          MARIADB_INNODB_USE_NATIVE_AIO: "0"
         ports:
           - 3306:3306
         # Health check for MariaDB
@@ -96,7 +98,8 @@ jobs:
           --health-cmd "mysqladmin ping -h localhost -u root -ppassword"
           --health-interval 10s
           --health-timeout 5s
-          --health-retries 5
+          --health-retries 10
+          --health-start-period 30s
 
       opensearch:
         image: opensearchproject/opensearch:2.17.0
@@ -128,6 +131,18 @@ jobs:
       
     - name: Create vector extension
       run: PGPASSWORD=password psql -h localhost -U root -d perfkit_pg_vector_db_ci -c "CREATE EXTENSION vector;"
+
+    - name: Wait for MariaDB
+      run: |
+        # Wait for MariaDB to be fully ready
+        for i in {1..30}; do
+          if mysqladmin ping -h 127.0.0.1 -u root -ppassword --silent; then
+            echo "MariaDB is ready"
+            break
+          fi
+          echo "Waiting for MariaDB to be ready... ($i/30)"
+          sleep 2
+        done
 
     - name: Test with Coverage
       run: go test -v -coverprofile=coverage.txt -covermode=atomic ./db/sql/...
