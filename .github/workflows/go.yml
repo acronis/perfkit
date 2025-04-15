@@ -13,6 +13,120 @@ jobs:
 
   build:
     runs-on: ubuntu-latest
+
+    services:
+      # Database service containers
+      mariadb-vector:
+        image: mariadb:11.7.2
+        env:
+          MARIADB_DATABASE: perfkit_db_ci
+          MARIADB_USER: user
+          MARIADB_PASSWORD: password # example value of a secret
+          MARIADB_ROOT_PASSWORD: password # example value of a secret
+        ports:
+          - 3306:3306
+        # Additional options to handle GitHub Actions environment limitations
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=3
+
+      postgres:
+        image: ankane/pgvector:v0.5.1
+        env:
+          POSTGRES_USER: root
+          POSTGRES_PASSWORD: password # example value of a secret
+          POSTGRES_DB: perfkit_pg_vector_db_ci
+        ports:
+          - 5432:5432
+        # Health check to wait until postgres is ready
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      mssql:
+        image: mcr.microsoft.com/mssql/server:2019-latest
+        env:
+          ACCEPT_EULA: 'Y'
+          MSSQL_SA_PASSWORD: MyP@ssw0rd123 # example value of a secret compliant with MS SQL Server password policy
+          MSSQL_PID: Developer
+          MSSQL_TCP_PORT: 1433
+          MSSQL_COLLATION: SQL_Latin1_General_CP1_CI_AS
+          MSSQL_DATA_DIR: /var/opt/mssql/data
+          MSSQL_LOG_DIR: /var/opt/mssql/log
+          MSSQL_BACKUP_DIR: /var/opt/mssql/backup
+          MSSQL_AGENT_ENABLED: true
+        ports:
+          - 1433:1433
+
+      cassandra:
+        image: cassandra:4.0
+        env:
+          CASSANDRA_USER: admin
+          CASSANDRA_PASSWORD: password # example value of a secret
+        ports:
+          - "9042:9042"
+        options: >-
+          --health-cmd="cqlsh -u cassandra -p cassandra 127.0.0.1 9042 --execute='describe keyspaces'"
+          --health-interval=20s
+          --health-timeout=10s
+          --health-retries=15
+          --health-start-period=60s
+
+      clickhouse:
+        image: clickhouse/clickhouse-server:24.10-alpine
+        env:
+          CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+          CLICKHOUSE_DB: perfkit_db_ci
+          CLICKHOUSE_USER: username
+          CLICKHOUSE_PASSWORD: password # example value of a secret
+        ports:
+          - "8123:8123"
+          - "9000:9000"
+
+      elasticsearch:
+        image: docker.elastic.co/elasticsearch/elasticsearch:8.15.1
+        env:
+          node.name: es-test
+          cluster.name: es-docker-cluster
+          bootstrap.memory_lock: true
+          discovery.type: single-node
+          ES_JAVA_OPTS: -Xms1g -Xmx1g
+          xpack.security.enabled: false
+          xpack.security.http.ssl.enabled: false
+          xpack.security.transport.ssl.enabled: false
+          action.auto_create_index: true
+        ports:
+          - 9200:9200
+        # Health check for Elasticsearch
+        options: >-
+          --health-cmd "curl -s http://127.0.0.1:9200/_cluster/health?wait_for_status=yellow&timeout=30s || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+      opensearch:
+        image: opensearchproject/opensearch:2.18.0
+        env:
+          node.name: os-test
+          discovery.type: single-node
+          OPENSEARCH_JAVA_OPTS: -Xms512m -Xmx512m
+          OPENSEARCH_INITIAL_ADMIN_PASSWORD: bgnYFGR2RhN3SCX # example value of a secret compliant with OpenSearch password policy
+          plugins.security.ssl.http.enabled: false
+        ports:
+          - 9201:9200
+          - 9600:9600
+        # Health check for OpenSearch
+        options: >-
+          --health-cmd "curl -s -u admin:bgnYFGR2RhN3SCX http://127.0.0.1:9201/_cluster/health?wait_for_status=yellow&timeout=30s || exit 1"
+          --health-interval 20s
+          --health-timeout 30s
+          --health-retries 15
+          --health-start-period 60s
+
     steps:
     - uses: actions/checkout@v4
 
@@ -20,6 +134,84 @@ jobs:
       uses: actions/setup-go@v4
       with:
         go-version: '1.22'
+  
+    - name: Install database clients
+      run: |
+        # Install PostgreSQL client
+        sudo apt-get update
+        sudo apt-get install -y postgresql-client
+        # Install SQL Server tools
+        curl https://packages.microsoft.com/keys/microsoft.asc | sudo apt-key add -
+        curl https://packages.microsoft.com/config/ubuntu/20.04/prod.list | sudo tee /etc/apt/sources.list.d/msprod.list
+        sudo apt-get update
+        sudo ACCEPT_EULA=Y apt-get install -y mssql-tools unixodbc-dev
 
-    - name: Test
-      run: go test -v ./benchmark/...
+    - name: Create SQL Server user and database
+      run: |
+        # Wait for SQL Server to be ready (max 30 attempts)
+        for i in {1..30}; do
+          if /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P MyP@ssw0rd123 -Q "SELECT 1" -b -o /dev/null; then
+            echo "SQL Server is ready!"
+            break
+          fi
+          echo "Waiting for SQL Server... (attempt $i/30)";
+          sleep 5;
+        done
+
+        # Create database and user
+        /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P MyP@ssw0rd123 -Q "
+          IF NOT EXISTS (SELECT * FROM sys.databases WHERE name = 'perfkit_db_ci')
+          BEGIN
+            CREATE DATABASE perfkit_db_ci;
+          END
+          GO
+          USE perfkit_db_ci;
+          GO
+          IF NOT EXISTS (SELECT * FROM sys.server_principals WHERE name = 'perfkit_db_runner')
+          BEGIN
+            CREATE LOGIN perfkit_db_runner WITH PASSWORD = 'MyP@ssw0rd123';
+          END
+          GO
+          IF NOT EXISTS (SELECT * FROM sys.database_principals WHERE name = 'perfkit_db_runner')
+          BEGIN
+            CREATE USER perfkit_db_runner FOR LOGIN perfkit_db_runner;
+          END
+          GO
+          ALTER ROLE db_owner ADD MEMBER perfkit_db_runner;
+          GO
+        "
+        echo "Database and user created successfully"
+
+    - name: Create vector extension
+      run: PGPASSWORD=password psql -h localhost -U root -d perfkit_pg_vector_db_ci -c "CREATE EXTENSION vector;"
+
+    - name: Create Cassandra keyspace
+      run: |
+        # Wait for Cassandra to be ready (max 30 attempts)
+        for i in {1..30}; do
+          if printf "" 2>>/dev/null >>/dev/tcp/127.0.0.1/9042; then
+            echo "Cassandra is ready!"
+            break
+          fi
+          echo "Waiting for cassandra... (attempt $i/30)";
+          sleep 5;
+        done
+
+        echo "Creating keyspace..."
+        docker exec ${{ job.services.cassandra.id }} cqlsh -u cassandra -p cassandra -e "CREATE KEYSPACE IF NOT EXISTS perfkit_db_ci WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1};"
+        echo "Keyspace created"
+
+    - name: Test with Coverage
+      run: |
+        go test -v -coverprofile=benchmark_coverage.txt -covermode=atomic ./benchmark/...
+        go test -v -coverprofile=logger_coverage.txt -covermode=atomic ./logger/...
+        go test -v -coverprofile=restrelay_coverage.txt -covermode=atomic ./acronis-restrelay-bench/...
+        go test -v -coverprofile=db_coverage.txt -covermode=atomic ./db/...
+        go test -v -coverprofile=db_bench_coverage.txt -covermode=atomic ./acronis-db-bench/...
+
+    - name: Upload results to Codecov
+      uses: codecov/codecov-action@v5
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
+        files: benchmark_coverage.txt,logger_coverage.txt,restrelay_coverage.txt,db_coverage.txt,db_bench_coverage.txt
+        fail_ci_if_error: true

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 
 	"github.com/opensearch-project/opensearch-go/v4"
@@ -33,6 +34,36 @@ func (d *openSearchDialect) name() db.DialectName {
 	return db.OPENSEARCH
 }
 
+func (d *openSearchDialect) getVectorType() fieldType {
+	return "knn_vector"
+}
+
+// nolint:gocritic //TODO refactor unnamed returns
+func openSearchCredentialsAndConnString(cs string, tlsEnabled bool) (string, string, string, error) {
+	var u, err = url.Parse(cs)
+	if err != nil {
+		return "", "", "", fmt.Errorf("cannot parse connection url %v, err: %v", cs, err)
+	}
+
+	var username = u.User.Username()
+	var password, _ = u.User.Password()
+
+	var scheme string
+	if tlsEnabled {
+		scheme = "https"
+	} else {
+		scheme = "http"
+	}
+
+	var finalURL = url.URL{
+		Scheme: scheme,
+		Host:   u.Host,
+	}
+	cs = finalURL.String()
+
+	return username, password, cs, nil
+}
+
 type openSearchConnector struct{}
 
 func (c *openSearchConnector) ConnectionPool(cfg db.Config) (db.Database, error) {
@@ -41,7 +72,7 @@ func (c *openSearchConnector) ConnectionPool(cfg db.Config) (db.Database, error)
 	var err error
 
 	if s := os.Getenv(magicEsEnvVar); s == "" {
-		username, password, cs, err = elasticCredentialsAndConnString(cfg.ConnString, cfg.TLSEnabled)
+		username, password, cs, err = openSearchCredentialsAndConnString(cfg.ConnString, cfg.TLSEnabled)
 		if err != nil {
 			return nil, fmt.Errorf("db: openSearch: %v", err)
 		}

@@ -72,7 +72,7 @@ type fieldSpec struct {
 	Indexed bool
 }
 
-func convertToEsType(t db.TableRow) fieldSpec {
+func convertToEsType(d dialect, t db.TableRow) fieldSpec {
 	var spec = fieldSpec{
 		Indexed: t.Indexed,
 	}
@@ -91,10 +91,10 @@ func convertToEsType(t db.TableRow) fieldSpec {
 	case db.DataTypeBoolean:
 		spec.Type = fieldTypeBoolean
 	case db.DataTypeVector3Float32:
-		spec.Type = fieldTypeDenseVector
+		spec.Type = d.getVectorType()
 		spec.Dims = 3
 	case db.DataTypeVector768Float32:
-		spec.Type = fieldTypeDenseVector
+		spec.Type = d.getVectorType()
 		spec.Dims = 768
 	default:
 		spec.Type = fieldTypeKeyword
@@ -149,7 +149,7 @@ func indexExists(mig migrator, tableName string) (bool, error) {
 	return mig.checkILMPolicyExists(ilmPolicyName)
 }
 
-func createIndex(mig migrator, indexName string, indexDefinition *db.TableDefinition, tableMigrationDDL string) error {
+func createIndex(d dialect, mig migrator, indexName string, indexDefinition *db.TableDefinition, tableMigrationDDL string) error {
 	if err := createSearchQueryBuilder(indexName, indexDefinition.TableRows); err != nil {
 		return err
 	}
@@ -217,7 +217,7 @@ func createIndex(mig migrator, indexName string, indexDefinition *db.TableDefini
 			continue
 		}
 
-		mp[row.Name] = convertToEsType(row)
+		mp[row.Name] = convertToEsType(d, row)
 	}
 
 	if err := mig.initComponentTemplate(mappingTemplateName, componentTemplate{

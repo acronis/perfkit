@@ -6,14 +6,24 @@ package benchmark
 import (
 	"bytes"
 	"fmt"
+	"os"
 	"os/exec"
 	"strconv"
 	"strings"
 	"syscall"
 )
 
+func isGitHubCI() bool {
+	return os.Getenv("GITHUB_ACTIONS") == "true"
+}
+
 // adjustFilenoUlimit adjusts file descriptor limits on Linux and Darwin
 func (b *Benchmark) adjustFilenoUlimit() int {
+	// Skip adjustment in GitHub Actions CI
+	if isGitHubCI() {
+		return 0
+	}
+
 	var rLimit syscall.Rlimit
 	fileno := uint64(1048576)
 

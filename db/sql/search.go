@@ -82,6 +82,7 @@ type selectBuilder struct {
 
 // sqlOrder generates the ORDER BY clause
 // Parameters:
+// - d: SQL dialect
 // - fields: columns to select
 // - values: order specifications (e.g. "asc(field)", "desc(field)")
 // Returns the ORDER BY clause or error
@@ -225,7 +226,14 @@ func (b selectBuilder) sqlConditions(d dialect, optimizeConditions bool, fields 
 			}
 		}
 
-		fmts, args, err := condgen(d, optimizeConditions, fmt.Sprintf("%v.%v", b.tableName, c.Col), c.Vals)
+		var fieldName string
+		if d.name() == db.CASSANDRA {
+			fieldName = c.Col
+		} else {
+			fieldName = fmt.Sprintf("%v.%v", b.tableName, c.Col)
+		}
+
+		fmts, args, err := condgen(d, optimizeConditions, fieldName, c.Vals)
 		if err != nil {
 			return "", nil, false, err
 		}
@@ -358,14 +366,15 @@ func (b selectBuilder) sql(d dialect, c *db.SelectCtrl) (string, bool, error) {
 	}
 
 	if c.Page.Limit > 0 {
-		if d.name() != db.MSSQL {
-			limit = fmt.Sprintf("LIMIT %v OFFSET %v", c.Page.Limit, c.Page.Offset)
-		} else {
-			if order == "" {
-				order = "ORDER BY id DESC"
-			} else {
+		switch d.name() {
+		case db.CASSANDRA:
+			limit = fmt.Sprintf("LIMIT %v", c.Page.Limit)
+		case db.MSSQL:
+			if len(order) != 0 {
 				limit = fmt.Sprintf("OFFSET %v ROWS FETCH NEXT %v ROWS ONLY", c.Page.Offset, c.Page.Limit)
 			}
+		default:
+			limit = fmt.Sprintf("LIMIT %v OFFSET %v", c.Page.Limit, c.Page.Offset)
 		}
 	}
 
@@ -923,6 +932,9 @@ func (g *sqlGateway) Select(tableName string, sc *db.SelectCtrl) (db.Rows, error
 
 	var rows *sql.Rows
 	rows, err = g.rw.queryContext(g.ctx, query)
+	if err != nil {
+		return nil, err
+	}
 
 	if g.explain && g.explainLogger != nil {
 		if err = logExplainResults(g.explainLogger, g.dialect.name(), rows, query); err != nil {

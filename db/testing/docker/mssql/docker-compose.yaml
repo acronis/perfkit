@@ -8,16 +8,31 @@ x-logging:
 
 services:
   mssql:
-    image: mcmoe/mssqldocker:v1.0.0
+    image: mcr.microsoft.com/mssql/server:2019-latest
     environment:
-      ACCEPT_EULA: Y
-      SA_PASSWORD: MyP@ssw0rd123  # example value of a secret compliant with MS SQL Server password policy
-      MSSQL_DB: perfkit_db_ci
-      MSSQL_USER: perfkit_db_runner
-      MSSQL_PASSWORD: MyP@ssw0rd123 # example value of a secret compliant with MS SQL Server password policy
+      ACCEPT_EULA: 'Y'
+      MSSQL_SA_PASSWORD: MyP@ssw0rd123  # example value of a secret compliant with MS SQL Server password policy
+      MSSQL_PID: Developer
+      MSSQL_TCP_PORT: 1433
+      MSSQL_COLLATION: SQL_Latin1_General_CP1_CI_AS
+      MSSQL_DATA_DIR: /var/opt/mssql/data
+      MSSQL_LOG_DIR: /var/opt/mssql/log
+      MSSQL_BACKUP_DIR: /var/opt/mssql/backup
+      MSSQL_AGENT_ENABLED: true
     logging: *logging
     ports:
       - "1433:1433"
+    volumes:
+      - mssql:/var/opt/mssql
+
+  init:
+    image: mcr.microsoft.com/mssql-tools
+    depends_on:
+      - mssql
+    restart: "no"
+    entrypoint: ["/bin/bash", "-c", "chmod +x /init.sh && /init.sh"]
+    volumes:
+      - ./init.sh:/init.sh
 
 volumes:
   mssql:

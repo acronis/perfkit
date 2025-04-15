@@ -262,6 +262,10 @@ func ParseFuncMultipleArgs(s string, sep string) (fName string, args []string, e
 		return "", nil, fmt.Errorf("bad function '%v', closing bracket placed before opening bracket", s)
 	}
 
+	if argOpen+1 == argClose {
+		return s[:argOpen], nil, nil
+	}
+
 	return s[:argOpen], strings.Split(s[argOpen+1:argClose], sep), nil
 }
 
