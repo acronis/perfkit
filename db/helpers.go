@@ -361,3 +361,45 @@ func GenDBParameterPlaceholders(start int, count int) string {
 
 	return strings.Join(ret, ",")
 }
+
+func DumpExecutionTime(logger Logger, ctx *Context) {
+	if logger == nil {
+		return
+	}
+
+	if ctx == nil {
+		return
+	}
+
+	// Build parts for the log message
+	var parts []string
+
+	if ctx.BeginTime != nil && ctx.BeginTime.Load() > 0 {
+		parts = append(parts, fmt.Sprintf("begin=%v", time.Duration(ctx.BeginTime.Load())))
+	}
+
+	if ctx.PrepareTime != nil && ctx.PrepareTime.Load() > 0 {
+		parts = append(parts, fmt.Sprintf("prepare=%v", time.Duration(ctx.PrepareTime.Load())))
+	}
+
+	if ctx.ExecTime != nil && ctx.ExecTime.Load() > 0 {
+		parts = append(parts, fmt.Sprintf("exec=%v", time.Duration(ctx.ExecTime.Load())))
+	}
+
+	if ctx.QueryTime != nil && ctx.QueryTime.Load() > 0 {
+		parts = append(parts, fmt.Sprintf("query=%v", time.Duration(ctx.QueryTime.Load())))
+	}
+
+	if ctx.DeallocTime != nil && ctx.DeallocTime.Load() > 0 {
+		parts = append(parts, fmt.Sprintf("dealloc=%v", time.Duration(ctx.DeallocTime.Load())))
+	}
+
+	if ctx.CommitTime != nil && ctx.CommitTime.Load() > 0 {
+		parts = append(parts, fmt.Sprintf("commit=%v", time.Duration(ctx.CommitTime.Load())))
+	}
+
+	// Log all metrics in a single message if there's anything to log
+	if len(parts) > 0 {
+		logger.Log("session statistics: %s", strings.Join(parts, ", "))
+	}
+}
