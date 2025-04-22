@@ -185,11 +185,16 @@ func NewDBConnector(dbOpts *DatabaseOpts, workerID int, l logger.Logger, retryAt
 		return c, nil
 	}
 
+	var logOperationTime bool
 	var queryLogger, readRowsLogger, explainLogger, systemLogger db.Logger
 
 	if l.GetLevel() >= logger.LevelInfo {
 		queryLogger = newDBLogger(l.Clone(), logger.LevelInfo)
 		systemLogger = newDBLogger(l.Clone(), logger.LevelInfo)
+	}
+
+	if l.GetLevel() >= logger.LevelDebug {
+		logOperationTime = true
 	}
 
 	if l.GetLevel() >= logger.LevelTrace {
@@ -205,6 +210,7 @@ func NewDBConnector(dbOpts *DatabaseOpts, workerID int, l logger.Logger, retryAt
 		MaxOpenConns:             dbOpts.MaxOpenConns,
 		QueryStringInterpolation: dbOpts.EnableQueryStringInterpolation,
 		DryRun:                   dbOpts.DryRun,
+		LogOperationsTime:        logOperationTime,
 		UseTruncate:              dbOpts.UseTruncate,
 
 		QueryLogger:    queryLogger,

@@ -100,11 +100,12 @@ func (suite *TestingSuite) makeTestSession() (db.Database, db.Session, *db.Conte
 	var logger = newTestLogger(suite.T())
 
 	dbo, err := db.Open(db.Config{
-		ConnString:      suite.ConnString,
-		MaxOpenConns:    16,
-		MaxConnLifetime: 100 * time.Millisecond,
-		QueryLogger:     logger,
-		ReadRowsLogger:  logger,
+		ConnString:        suite.ConnString,
+		MaxOpenConns:      16,
+		MaxConnLifetime:   100 * time.Millisecond,
+		QueryLogger:       logger,
+		ReadRowsLogger:    logger,
+		LogOperationsTime: true,
 	})
 
 	require.NoError(suite.T(), err, "making test sqlSession")

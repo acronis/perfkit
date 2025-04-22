@@ -79,6 +79,7 @@ func (suite *TestingSuite) makeVectorTestSession() (db.Database, db.Session, *db
 		MaxOpenConns:             16,
 		MaxConnLifetime:          100 * time.Millisecond,
 		QueryStringInterpolation: true,
+		LogOperationsTime:        true,
 		QueryLogger:              logger,
 	})
 

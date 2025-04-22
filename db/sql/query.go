@@ -70,7 +70,7 @@ func (g *sqlGateway) QueryRow(format string, args ...interface{}) db.Row {
 
 	// Execute actual query using querier interface
 	var row = g.rw.queryRowContext(g.ctx, format, args...)
-	return &wrappedRow{row: row, readRowsLogger: g.readRowsLogger}
+	return &wrappedRow{row: row, logTime: g.LogTime, readRowsLogger: g.readRowsLogger}
 }
 
 // Query executes a query that returns multiple rows
@@ -105,5 +105,5 @@ func (g *sqlGateway) Query(format string, args ...interface{}) (db.Rows, error) 
 		}
 	}
 
-	return &wrappedRows{rows: rows, readRowsLogger: g.readRowsLogger}, err
+	return &wrappedRows{rows: rows, logTime: g.LogTime, readRowsLogger: g.readRowsLogger}, err
 }

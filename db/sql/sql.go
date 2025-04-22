@@ -103,6 +103,7 @@ type sqlGateway struct {
 	InsideTX                 bool // Indicates if running within transaction
 	MaxRetries               int  // Maximum number of retry attempts
 	QueryStringInterpolation bool // Whether to interpolate query strings
+	LogTime                  bool // Whether to log execution time
 
 	explain bool // Whether to explain queries
 
@@ -132,6 +133,7 @@ func (s *sqlSession) Transact(fn func(tx db.DatabaseAccessor) error) error {
 				true,
 				s.MaxRetries,
 				s.QueryStringInterpolation,
+				s.LogTime,
 				s.explain,
 				s.readRowsLogger,
 				s.explainLogger,
@@ -155,6 +157,7 @@ type sqlDatabase struct {
 	useTruncate              bool
 	queryStringInterpolation bool
 	dryRun                   bool
+	logTime                  bool
 
 	queryLogger    db.Logger
 	readRowsLogger db.Logger
@@ -285,11 +288,13 @@ func (d *sqlDatabase) Session(c *db.Context) db.Session {
 				queryTime:   c.QueryTime,
 				deallocTime: c.DeallocTime,
 				dryRun:      d.dryRun,
+				logTime:     d.logTime,
 				queryLogger: d.queryLogger,
 			},
 			dialect:                  d.dialect,
 			InsideTX:                 false,
 			QueryStringInterpolation: d.queryStringInterpolation,
+			LogTime:                  d.logTime,
 			explain:                  c.Explain,
 			readRowsLogger:           d.readRowsLogger,
 			explainLogger:            d.explainLogger,
@@ -303,6 +308,7 @@ func (d *sqlDatabase) Session(c *db.Context) db.Session {
 			deallocTime:    c.DeallocTime,
 			commitTime:     c.CommitTime,
 			dryRun:         d.dryRun,
+			logTime:        d.logTime,
 			queryLogger:    d.queryLogger,
 			txNotSupported: !d.dialect.supportTransactions(),
 		},

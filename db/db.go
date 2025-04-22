@@ -467,6 +467,36 @@ type Config struct {
 	//    - Reports initialization status
 	//    - Captures server-side messages
 	SystemLogger Logger
+
+	// LogOperationsTime controls whether to log the time taken for database operations.
+	// When enabled (true), all SQL operations include timing information in logs.
+	//
+	// Features:
+	// - Adds timing information (duration) to all query logs
+	// - Works with queries, prepared statements, and transactions
+	// - Measurements are taken using high-precision time.Since()
+	//
+	// Example output with LogOperationsTime=true:
+	// ```
+	// INSERT INTO users(id, name) VALUES (1, 'john') -- duration: 2.3ms
+	// SELECT * FROM users WHERE id = 1 -- duration: 1.5ms
+	// BEGIN -- duration: 0.2ms
+	// COMMIT -- duration: 5.1ms
+	// ```
+	//
+	// Without LogOperationsTime (false):
+	// ```
+	// INSERT INTO users(id, name) VALUES (1, 'john')
+	// SELECT * FROM users WHERE id = 1
+	// BEGIN
+	// COMMIT
+	// ```
+	//
+	// Usage recommendation:
+	// - Enable during development and testing for performance insights
+	// - Use for debugging slow queries and transactions
+	// - Can be enabled in production for detailed monitoring
+	LogOperationsTime bool
 }
 
 // Open opens a database connection using the provided configuration.

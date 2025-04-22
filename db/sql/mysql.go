@@ -332,6 +332,7 @@ func (c *mysqlConnector) ConnectionPool(cfg db.Config) (db.Database, error) {
 	dbo.useTruncate = cfg.UseTruncate
 	dbo.queryStringInterpolation = cfg.QueryStringInterpolation
 	dbo.dryRun = cfg.DryRun
+	dbo.logTime = cfg.LogOperationsTime
 	dbo.queryLogger = cfg.QueryLogger
 	dbo.readRowsLogger = cfg.ReadRowsLogger
 	dbo.explainLogger = cfg.ExplainLogger
