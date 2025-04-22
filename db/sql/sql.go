@@ -182,86 +182,117 @@ func (d *sqlDatabase) UseTruncate() bool {
 	return d.useTruncate
 }
 
+func (d *sqlDatabase) systemQuerier() querier {
+	var c = d.Context(context.Background(), false)
+	return wrappedQuerier{
+		q:           d.rw,
+		prepareTime: c.PrepareTime,
+		execTime:    c.ExecTime,
+		queryTime:   c.QueryTime,
+		deallocTime: c.DeallocTime,
+		dryRun:      d.dryRun,
+		logTime:     d.logTime,
+		queryLogger: d.queryLogger,
+	}
+}
+
+func (d *sqlDatabase) systemTransactor() transactor {
+	var c = d.Context(context.Background(), false)
+	return wrappedTransactor{
+		t:              d.t,
+		beginTime:      c.BeginTime,
+		prepareTime:    c.PrepareTime,
+		execTime:       c.ExecTime,
+		queryTime:      c.QueryTime,
+		deallocTime:    c.DeallocTime,
+		commitTime:     c.CommitTime,
+		dryRun:         d.dryRun,
+		logTime:        d.logTime,
+		queryLogger:    d.queryLogger,
+		txNotSupported: !d.dialect.supportTransactions(),
+	}
+}
+
 func (d *sqlDatabase) GetVersion() (db.DialectName, string, error) {
-	return getVersion(d.rw, d.dialect)
+	return getVersion(d.systemQuerier(), d.dialect)
 }
 
 func (d *sqlDatabase) GetInfo(version string) (ret []string, dbInfo *db.Info, err error) {
-	return getInfo(d.rw, d.dialect, version)
+	return getInfo(d.systemQuerier(), d.dialect, version)
 }
 
 func (d *sqlDatabase) ApplyMigrations(tableName, tableMigrationSQL string) error {
-	return inTx(context.Background(), d.t, d.dialect, func(q querier, dia dialect) error {
+	return inTx(context.Background(), d.systemTransactor(), d.dialect, func(q querier, dia dialect) error {
 		return applyMigrations(q, dia, tableName, tableMigrationSQL)
 	})
 }
 
 func (d *sqlDatabase) TableExists(tableName string) (bool, error) {
-	return tableExists(d.rw, d.dialect, tableName)
+	return tableExists(d.systemQuerier(), d.dialect, tableName)
 }
 
 func (d *sqlDatabase) CreateTable(tableName string, tableDefinition *db.TableDefinition, tableMigrationDDL string) error {
-	return inTx(context.Background(), d.t, d.dialect, func(q querier, dia dialect) error {
+	return inTx(context.Background(), d.systemTransactor(), d.dialect, func(q querier, dia dialect) error {
 		return createTable(q, dia, tableName, tableDefinition, tableMigrationDDL)
 	})
 }
 
 func (d *sqlDatabase) DropTable(name string) error {
-	return inTx(context.Background(), d.t, d.dialect, func(q querier, dia dialect) error {
+	return inTx(context.Background(), d.systemTransactor(), d.dialect, func(q querier, dia dialect) error {
 		return dropTable(q, dia, name, d.useTruncate)
 	})
 }
 
 func (d *sqlDatabase) IndexExists(indexName string, tableName string) (bool, error) {
-	return indexExists(d.rw, d.dialect, indexName, tableName)
+	return indexExists(d.systemQuerier(), d.dialect, indexName, tableName)
 }
 
 func (d *sqlDatabase) CreateIndex(indexName string, tableName string, columns []string, indexType db.IndexType) error {
-	return inTx(context.Background(), d.t, d.dialect, func(q querier, dia dialect) error {
+	return inTx(context.Background(), d.systemTransactor(), d.dialect, func(q querier, dia dialect) error {
 		return createIndex(q, dia, indexName, tableName, columns, indexType)
 	})
 }
 
 func (d *sqlDatabase) DropIndex(indexName string, tableName string) error {
-	return inTx(context.Background(), d.t, d.dialect, func(q querier, dia dialect) error {
+	return inTx(context.Background(), d.systemTransactor(), d.dialect, func(q querier, dia dialect) error {
 		return dropIndex(q, dia, indexName, tableName)
 	})
 }
 
 func (d *sqlDatabase) ReadConstraints() ([]db.Constraint, error) {
-	return readConstraints(d.rw, d.dialect)
+	return readConstraints(d.systemQuerier(), d.dialect)
 }
 
 func (d *sqlDatabase) AddConstraints(constraints []db.Constraint) error {
-	return inTx(context.Background(), d.t, d.dialect, func(q querier, dia dialect) error {
+	return inTx(context.Background(), d.systemTransactor(), d.dialect, func(q querier, dia dialect) error {
 		return addConstraints(q, dia, constraints)
 	})
 }
 
 func (d *sqlDatabase) DropConstraints(constraints []db.Constraint) error {
-	return inTx(context.Background(), d.t, d.dialect, func(q querier, dia dialect) error {
+	return inTx(context.Background(), d.systemTransactor(), d.dialect, func(q querier, dia dialect) error {
 		return dropConstraints(q, dia, constraints)
 	})
 }
 
 func (d *sqlDatabase) CreateSequence(sequenceName string) error {
-	return inTx(context.Background(), d.t, d.dialect, func(q querier, dia dialect) error {
+	return inTx(context.Background(), d.systemTransactor(), d.dialect, func(q querier, dia dialect) error {
 		return createSequence(q, dia, sequenceName)
 	})
 }
 
 func (d *sqlDatabase) DropSequence(sequenceName string) error {
-	return inTx(context.Background(), d.t, d.dialect, func(q querier, dia dialect) error {
+	return inTx(context.Background(), d.systemTransactor(), d.dialect, func(q querier, dia dialect) error {
 		return dropSequence(q, dia, sequenceName)
 	})
 }
 
 func (d *sqlDatabase) GetTablesSchemaInfo(tableNames []string) ([]string, error) {
-	return getTablesSchemaInfo(d.rw, d.dialect, tableNames)
+	return getTablesSchemaInfo(d.systemQuerier(), d.dialect, tableNames)
 }
 
 func (d *sqlDatabase) GetTablesVolumeInfo(tableNames []string) ([]string, error) {
-	return getTablesVolumeInfo(d.rw, d.dialect, tableNames)
+	return getTablesVolumeInfo(d.systemQuerier(), d.dialect, tableNames)
 }
 
 func (d *sqlDatabase) Context(ctx context.Context, explain bool) *db.Context {
