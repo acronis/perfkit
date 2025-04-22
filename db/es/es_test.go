@@ -10,7 +10,6 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/acronis/perfkit/db"
-	"github.com/acronis/perfkit/logger"
 )
 
 const (
@@ -35,6 +34,10 @@ type testLogger struct {
 	t *testing.T
 }
 
+func newTestLogger(t *testing.T) db.Logger {
+	return &testLogger{t: t}
+}
+
 func (l *testLogger) Log(format string, args ...interface{}) {
 	l.t.Logf(format, args...)
 }
@@ -55,7 +58,7 @@ func testTableDefinition() *db.TableDefinition {
 }
 
 func (suite *TestingSuite) makeTestSession() (db.Database, db.Session, *db.Context) {
-	var logger = logger.NewPlaneLogger(logger.LevelDebug, true)
+	var logger = newTestLogger(suite.T())
 
 	dbo, err := db.Open(db.Config{
 		ConnString:      suite.ConnString,

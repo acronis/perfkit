@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/acronis/perfkit/db"
-	"github.com/acronis/perfkit/logger"
 )
 
 // addExplainPrefix adds an 'explain' prefix to the query
@@ -41,7 +40,7 @@ func addExplainPrefix(dialectName db.DialectName, query string) (string, error) 
 //
 // Returns:
 //   - error: if any operation fails
-func logExplainResults(logger logger.Logger, dialectName db.DialectName, rows *sql.Rows, query string, args ...interface{}) error {
+func logExplainResults(logger db.Logger, dialectName db.DialectName, rows *sql.Rows, query string, args ...interface{}) error {
 	// Get column names from the result set
 	cols, err := rows.Columns()
 	if err != nil {
@@ -56,11 +55,11 @@ func logExplainResults(logger logger.Logger, dialectName db.DialectName, rows *s
 	}
 
 	// Log the original query and its parameters
-	logger.Info("\n%s", query)
+	logger.Log("\n%s", query)
 	if args != nil {
-		logger.Info(" %v\n", args)
+		logger.Log(" %v\n", args)
 	} else {
-		logger.Info("\n")
+		logger.Log("\n")
 	}
 
 	// Iterate through result rows
@@ -73,7 +72,7 @@ func logExplainResults(logger logger.Logger, dialectName db.DialectName, rows *s
 			if err = rows.Scan(&id, &parent, &notUsed, &detail); err != nil {
 				return fmt.Errorf("DB query result scan failed: %s\nError: %s", query, err)
 			}
-			logger.Info("ID: %d, Parent: %d, Not Used: %d, Detail: %s\n", id, parent, notUsed, detail)
+			logger.Log("ID: %d, Parent: %d, Not Used: %d, Detail: %s\n", id, parent, notUsed, detail)
 		case db.MYSQL:
 			// MySQL scanning into dynamic column array
 			if err = rows.Scan(scanArgs...); err != nil {
@@ -81,16 +80,16 @@ func logExplainResults(logger logger.Logger, dialectName db.DialectName, rows *s
 			}
 			// Print each column with its name
 			for i, col := range values {
-				logger.Info("  %-15s: %s", cols[i], string(col))
+				logger.Log("  %-15s: %s", cols[i], string(col))
 			}
-			logger.Info("\n")
+			logger.Log("\n")
 		case db.POSTGRES, db.CASSANDRA:
 			// Postgres and Cassandra return explain output as a single text column
 			var explainOutput string
 			if err = rows.Scan(&explainOutput); err != nil {
 				return fmt.Errorf("DB query result scan failed: %s\nError: %s", query, err)
 			}
-			logger.Info("  %s", explainOutput)
+			logger.Log("  %s", explainOutput)
 		default:
 			return fmt.Errorf("the 'explain' mode is not supported for given database driver: %s", dialectName)
 		}

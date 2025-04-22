@@ -9,11 +9,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/acronis/perfkit/db"
-	"github.com/acronis/perfkit/logger"
 )
 
 func (suite *TestingSuite) makeVectorTestSession() (db.Database, db.Session, *db.Context) {
-	var logger = logger.NewPlaneLogger(logger.LevelDebug, true)
+	var logger = newTestLogger(suite.T())
 
 	dbo, err := db.Open(db.Config{
 		ConnString:      suite.ConnString,

@@ -6,7 +6,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/acronis/perfkit/logger"
 	"go.uber.org/atomic"
 )
 
@@ -364,7 +363,7 @@ type Config struct {
 	//    APPLY BATCH;
 	//    */
 	//    ```
-	QueryLogger logger.Logger
+	QueryLogger Logger
 
 	// ReadRowsLogger logs the data returned from queries
 	// When configured:
@@ -400,7 +399,7 @@ type Config struct {
 	//     ReadRowsLogger: &customLogger{},
 	// }
 	// ```
-	ReadRowsLogger logger.Logger
+	ReadRowsLogger Logger
 
 	// ExplainLogger receives query execution plan output when Explain is true.
 	// The output format varies by dialect:
@@ -448,7 +447,7 @@ type Config struct {
 	// - Captures and formats execution plan output
 	// - Works with Select(), Query(), and QueryRow() operations
 	// - Returns error if explain not supported by dialect
-	ExplainLogger logger.Logger
+	ExplainLogger Logger
 
 	// SystemLogger logs system-level database operations and events.
 	// Primary uses:
@@ -467,7 +466,7 @@ type Config struct {
 	//    - Logs critical system events
 	//    - Reports initialization status
 	//    - Captures server-side messages
-	SystemLogger logger.Logger
+	SystemLogger Logger
 }
 
 // Open opens a database connection using the provided configuration.

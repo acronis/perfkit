@@ -190,25 +190,21 @@ func NewDBConnector(dbOpts *DatabaseOpts, workerID int, l logger.Logger, retryAt
 		return c, nil
 	}
 
-	var queryLogger, readRowsLogger, explainLogger, systemLogger logger.Logger
+	var queryLogger, readRowsLogger, explainLogger, systemLogger db.Logger
 	if dbOpts.LogQueries {
-		queryLogger = l.Clone()
-		queryLogger.SetLevel(logger.LevelInfo)
+		queryLogger = newDBLogger(l.Clone(), l.GetLevel())
 	}
 
 	if dbOpts.LogReadRows {
-		readRowsLogger = l.Clone()
-		readRowsLogger.SetLevel(logger.LevelInfo)
+		readRowsLogger = newDBLogger(l.Clone(), l.GetLevel())
 	}
 
 	if dbOpts.Explain {
-		explainLogger = l.Clone()
-		explainLogger.SetLevel(logger.LevelInfo)
+		explainLogger = newDBLogger(l.Clone(), l.GetLevel())
 	}
 
 	if dbOpts.LogSystemOps {
-		systemLogger = l.Clone()
-		systemLogger.SetLevel(logger.LevelInfo)
+		systemLogger = newDBLogger(l.Clone(), l.GetLevel())
 	}
 
 	var dbConn, err = db.Open(db.Config{
@@ -276,4 +272,20 @@ func (c *DBConnector) Exit(fmts string, args ...interface{}) {
 	fmt.Printf(fmts, args...)
 	fmt.Println()
 	os.Exit(127)
+}
+
+type dbLogger struct {
+	l     logger.Logger
+	level logger.LogLevel
+}
+
+func (l *dbLogger) Log(format string, args ...interface{}) {
+	l.l.Log(l.level, format, args...)
+}
+
+func newDBLogger(l logger.Logger, level logger.LogLevel) *dbLogger {
+	return &dbLogger{
+		l:     l,
+		level: level,
+	}
 }

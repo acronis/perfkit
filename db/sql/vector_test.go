@@ -72,7 +72,7 @@ func scanVector(src interface{}, dialect db.DialectName) ([]float32, error) {
 }
 
 func (suite *TestingSuite) makeVectorTestSession() (db.Database, db.Session, *db.Context) {
-	var logger = &testLogger{t: suite.T()}
+	var logger = newTestLogger(suite.T())
 
 	dbo, err := db.Open(db.Config{
 		ConnString:               suite.ConnString,
