@@ -129,7 +129,11 @@ func (wq wrappedQuerier) execContext(ctx context.Context, query string, args ...
 				wq.queryLogger.Log(formattedQuery)
 			}
 		} else {
-			wq.queryLogger.Log(query)
+			if len(args) > 0 {
+				wq.queryLogger.Log("%s -- %s", query, db.DumpRecursive(args, " "))
+			} else {
+				wq.queryLogger.Log(query)
+			}
 		}
 	}
 
@@ -145,7 +149,11 @@ func (wq wrappedQuerier) queryRowContext(ctx context.Context, query string, args
 	defer accountTime(wq.queryTime, time.Now())
 
 	if wq.queryLogger != nil {
-		wq.queryLogger.Log(query)
+		if len(args) > 0 {
+			wq.queryLogger.Log("%s -- %s", query, db.DumpRecursive(args, " "))
+		} else {
+			wq.queryLogger.Log(query)
+		}
 	}
 
 	return wq.q.queryRowContext(ctx, query, args...)
@@ -156,7 +164,11 @@ func (wq wrappedQuerier) queryContext(ctx context.Context, query string, args ..
 	defer accountTime(wq.queryTime, time.Now())
 
 	if wq.queryLogger != nil {
-		wq.queryLogger.Log(query, args...)
+		if len(args) > 0 {
+			wq.queryLogger.Log("%s -- %s", query, db.DumpRecursive(args, " "))
+		} else {
+			wq.queryLogger.Log(query)
+		}
 	}
 
 	return wq.q.queryContext(ctx, query, args...)
@@ -206,7 +218,11 @@ func (ws *wrappedStatement) Exec(args ...any) (db.Result, error) {
 		if ws.dryRun {
 			ws.queryLogger.Log("-- EXECUTE stmt -- skip because of 'dry-run' mode")
 		} else {
-			ws.queryLogger.Log("EXECUTE stmt;")
+			if len(args) > 0 {
+				ws.queryLogger.Log("EXECUTE stmt; -- %s", db.DumpRecursive(args, " "))
+			} else {
+				ws.queryLogger.Log("EXECUTE stmt;")
+			}
 		}
 	}
 
@@ -260,7 +276,11 @@ func (wtx wrappedTransaction) execContext(ctx context.Context, query string, arg
 				wtx.queryLogger.Log(formattedQuery)
 			}
 		} else {
-			wtx.queryLogger.Log(query)
+			if len(args) > 0 {
+				wtx.queryLogger.Log("%s -- %s", query, db.DumpRecursive(args, " "))
+			} else {
+				wtx.queryLogger.Log(query)
+			}
 		}
 	}
 
@@ -276,7 +296,11 @@ func (wtx wrappedTransaction) queryRowContext(ctx context.Context, query string,
 	defer accountTime(wtx.queryTime, time.Now())
 
 	if wtx.queryLogger != nil {
-		wtx.queryLogger.Log(query)
+		if len(args) > 0 {
+			wtx.queryLogger.Log("%s -- %s", query, db.DumpRecursive(args, " "))
+		} else {
+			wtx.queryLogger.Log(query)
+		}
 	}
 
 	return wtx.tx.queryRowContext(ctx, query, args...)
@@ -287,7 +311,11 @@ func (wtx wrappedTransaction) queryContext(ctx context.Context, query string, ar
 	defer accountTime(wtx.queryTime, time.Now())
 
 	if wtx.queryLogger != nil {
-		wtx.queryLogger.Log(query)
+		if len(args) > 0 {
+			wtx.queryLogger.Log("%s -- %s", query, db.DumpRecursive(args, " "))
+		} else {
+			wtx.queryLogger.Log(query)
+		}
 	}
 
 	return wtx.tx.queryContext(ctx, query, args...)
