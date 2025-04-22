@@ -25,11 +25,6 @@ type DatabaseOpts struct {
 	DryRun  bool `long:"dry-run" description:"do not execute any INSERT/UPDATE/DELETE queries on DB-side" required:"false"`
 	Explain bool `long:"explain" description:"prepend the test queries by EXPLAIN ANALYZE" required:"false"`
 
-	LogQueries   bool `long:"log-queries" description:"log queries" required:"false"`
-	LogReadRows  bool `long:"log-read-rows" description:"log read rows" required:"false"`
-	LogQueryTime bool `long:"log-query-time" description:"log query time" required:"false"`
-	LogSystemOps bool `long:"log-system-operations" description:"log system operations on database side" required:"false"`
-
 	DontCleanup bool `long:"dont-cleanup" description:"do not cleanup DB content before/after the test in '-t all' mode" required:"false"`
 	UseTruncate bool `long:"use-truncate" description:"use TRUNCATE instead of DROP TABLE in cleanup procedure" required:"false"`
 }
@@ -191,20 +186,18 @@ func NewDBConnector(dbOpts *DatabaseOpts, workerID int, l logger.Logger, retryAt
 	}
 
 	var queryLogger, readRowsLogger, explainLogger, systemLogger db.Logger
-	if dbOpts.LogQueries {
-		queryLogger = newDBLogger(l.Clone(), l.GetLevel())
+
+	if l.GetLevel() >= logger.LevelInfo {
+		queryLogger = newDBLogger(l.Clone(), logger.LevelInfo)
+		systemLogger = newDBLogger(l.Clone(), logger.LevelInfo)
 	}
 
-	if dbOpts.LogReadRows {
-		readRowsLogger = newDBLogger(l.Clone(), l.GetLevel())
+	if l.GetLevel() >= logger.LevelTrace {
+		readRowsLogger = newDBLogger(l.Clone(), logger.LevelTrace)
 	}
 
 	if dbOpts.Explain {
 		explainLogger = newDBLogger(l.Clone(), l.GetLevel())
-	}
-
-	if dbOpts.LogSystemOps {
-		systemLogger = newDBLogger(l.Clone(), l.GetLevel())
 	}
 
 	var dbConn, err = db.Open(db.Config{
