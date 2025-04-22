@@ -68,7 +68,7 @@ func createTables(b *benchmark.Benchmark) {
 }
 
 func DbConnector(b *benchmark.Benchmark) *DBConnector {
-	var conn, err = NewDBConnector(&b.TestOpts.(*TestOpts).DBOpts, -1, b.Logger, 1)
+	var conn, err = NewDBConnector(&b.TestOpts.(*TestOpts).DBOpts, -1, true, b.Logger, 1)
 	if err != nil {
 		FatalError(err.Error())
 	}

@@ -268,7 +268,7 @@ func Main() {
 
 		if b.TestOpts.(*TestOpts).BenchOpts.Events {
 			var workingConn *DBConnector
-			if workingConn, err = NewDBConnector(&b.TestOpts.(*TestOpts).DBOpts, -1, b.Logger, 1); err != nil {
+			if workingConn, err = NewDBConnector(&b.TestOpts.(*TestOpts).DBOpts, -1, true, b.Logger, 1); err != nil {
 				return
 			}
 

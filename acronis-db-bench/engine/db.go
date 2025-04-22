@@ -179,7 +179,7 @@ type DBConnector struct {
 }
 
 // NewDBConnector creates a new DBConnector
-func NewDBConnector(dbOpts *DatabaseOpts, workerID int, l logger.Logger, retryAttempts int) (*DBConnector, error) {
+func NewDBConnector(dbOpts *DatabaseOpts, workerID int, systemConnect bool, l logger.Logger, retryAttempts int) (*DBConnector, error) {
 	c := connPool.take(dbOpts, workerID)
 	if c != nil {
 		return c, nil
