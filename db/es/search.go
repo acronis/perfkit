@@ -909,7 +909,18 @@ func (g *esGateway) Select(idxName string, sc *db.SelectCtrl) (db.Rows, error) {
 			return &db.EmptyRows{}, nil
 		}
 
-		return &esRows{data: fields, requestedColumns: sc.Fields}, nil
+		var rows = &esRows{data: fields, requestedColumns: sc.Fields}
+
+		// Only wrap if we have a logger
+		if g.readRowsLogger != nil {
+			return &wrappedRows{
+				rows:           rows,
+				logTime:        g.logTime,
+				readRowsLogger: g.readRowsLogger,
+			}, nil
+		}
+
+		return rows, nil
 	case queryTypeCount:
 		var countQuery = &CountRequest{
 			Query: query.Query,

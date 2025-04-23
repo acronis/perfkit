@@ -28,6 +28,9 @@ type accessor interface {
 type esGateway struct {
 	q   querier
 	ctx *db.Context
+
+	logTime        bool
+	readRowsLogger db.Logger // Logger for read operations
 }
 
 type esSession struct {
@@ -149,7 +152,9 @@ func (d *esDatabase) Session(c *db.Context) db.Session {
 				queryLogger: d.queryLogger,
 				logTime:     d.logTime,
 			},
-			ctx: c,
+			ctx:            c,
+			logTime:        d.logTime,
+			readRowsLogger: d.readRowsLogger,
 		},
 	}
 }

@@ -15,10 +15,12 @@ func (suite *TestingSuite) makeVectorTestSession() (db.Database, db.Session, *db
 	var logger = newTestLogger(suite.T())
 
 	dbo, err := db.Open(db.Config{
-		ConnString:      suite.ConnString,
-		MaxOpenConns:    16,
-		MaxConnLifetime: 1000 * time.Millisecond,
-		QueryLogger:     logger,
+		ConnString:        suite.ConnString,
+		MaxOpenConns:      16,
+		MaxConnLifetime:   1000 * time.Millisecond,
+		QueryLogger:       logger,
+		ReadRowsLogger:    logger,
+		LogOperationsTime: true,
 	})
 
 	require.NoError(suite.T(), err, "making test esSession")

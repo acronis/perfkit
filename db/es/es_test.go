@@ -65,6 +65,7 @@ func (suite *TestingSuite) makeTestSession() (db.Database, db.Session, *db.Conte
 		MaxOpenConns:      16,
 		MaxConnLifetime:   1000 * time.Millisecond,
 		QueryLogger:       logger,
+		ReadRowsLogger:    logger,
 		LogOperationsTime: true,
 	})
 

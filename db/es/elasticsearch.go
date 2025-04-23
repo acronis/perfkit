@@ -135,11 +135,12 @@ func (c *esConnector) ConnectionPool(cfg db.Config) (db.Database, error) {
 
 	var rw = &esQuerier{es: es}
 	return &esDatabase{
-		rw:          rw,
-		mig:         rw,
-		dialect:     &elasticSearchDialect{},
-		logTime:     cfg.LogOperationsTime,
-		queryLogger: cfg.QueryLogger,
+		rw:             rw,
+		mig:            rw,
+		dialect:        &elasticSearchDialect{},
+		logTime:        cfg.LogOperationsTime,
+		queryLogger:    cfg.QueryLogger,
+		readRowsLogger: cfg.ReadRowsLogger,
 	}, nil
 }
 

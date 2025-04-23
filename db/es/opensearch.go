@@ -132,11 +132,12 @@ func (c *openSearchConnector) ConnectionPool(cfg db.Config) (db.Database, error)
 	var rw = &openSearchQuerier{client: openSearchClient}
 	var mig = &openSearchMigrator{client: openSearchClient, ismClient: ismClient}
 	return &esDatabase{
-		rw:          rw,
-		mig:         mig,
-		dialect:     &openSearchDialect{},
-		logTime:     cfg.LogOperationsTime,
-		queryLogger: cfg.QueryLogger,
+		rw:             rw,
+		mig:            mig,
+		dialect:        &openSearchDialect{},
+		logTime:        cfg.LogOperationsTime,
+		queryLogger:    cfg.QueryLogger,
+		readRowsLogger: cfg.ReadRowsLogger,
 	}, nil
 }
 

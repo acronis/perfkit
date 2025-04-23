@@ -36,6 +36,68 @@ func accountTime(t *atomic.Int64, since time.Time) {
 	t.Add(time.Since(since).Nanoseconds())
 }
 
+// wrappedRows is a struct for storing and logging ES rows results
+type wrappedRows struct {
+	rows *esRows
+
+	logTime        bool
+	readRowsLogger db.Logger
+	printed        int
+}
+
+// Next advances the cursor to the next row, returning false if no more rows
+func (r *wrappedRows) Next() bool {
+	return r.rows.Next()
+}
+
+// Err returns any error that was encountered during iteration
+func (r *wrappedRows) Err() error {
+	return r.rows.Err()
+}
+
+const maxRowsToPrint = 10
+
+func logRow(logger db.Logger, logTime bool, since time.Time, dest ...interface{}) {
+	if logger == nil {
+		return
+	}
+
+	var values = db.DumpRecursive(dest, " ")
+	if logTime {
+		var dur = time.Since(since)
+		logger.Log("Row: %s -- %s", values, fmt.Sprintf("parse duration: %v", dur))
+	} else {
+		logger.Log("Row: %s", values)
+	}
+}
+
+// Scan copies the columns in the current row into the values pointed at by dest.
+// Logs the scanned values if readRowsLogger is configured, up to maxRowsToPrint rows.
+func (r *wrappedRows) Scan(dest ...interface{}) error {
+	var err = r.rows.Scan(dest...)
+
+	if r.readRowsLogger != nil {
+		if r.printed >= maxRowsToPrint {
+			return err
+		} else if r.printed == maxRowsToPrint {
+			r.readRowsLogger.Log("... truncated ...")
+			r.printed++
+			return err
+		}
+
+		// Create a single log line with all columns
+		logRow(r.readRowsLogger, r.logTime, time.Now(), dest...)
+		r.printed++
+	}
+
+	return err
+}
+
+// Close closes the rows iterator
+func (r *wrappedRows) Close() error {
+	return r.rows.Close()
+}
+
 // wrappedQuerier implements the querier interface with additional functionality:
 // - measuring time of queries
 // - logging of queries
