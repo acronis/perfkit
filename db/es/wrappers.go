@@ -18,16 +18,23 @@ This file contains all wrapper implementations that handle:
 - Performance measurements: tracks time spent in various database operations
 */
 
-func logQuery(logger db.Logger, logTime bool, since time.Time, request string, headers string, body string) {
+func logQuery(logger db.Logger, logTime bool, since time.Time, method string, index indexName, request string, headers string, body string) {
 	if logger == nil {
 		return
 	}
 
+	var query string
+	if index != "" {
+		query = fmt.Sprintf("%s /%s/%s", method, index, request)
+	} else {
+		query = fmt.Sprintf("%s /%s", method, request)
+	}
+
 	if logTime {
 		var dur = time.Since(since)
-		logger.Log("%s // %s\n%s\n\n%s", request, fmt.Sprintf("duration: %v", dur), headers, body)
+		logger.Log("%s // %s\n%s\n\n%s", query, fmt.Sprintf("duration: %v", dur), headers, body)
 	} else {
-		logger.Log("%s\n%s\n\n%s", request, headers, body)
+		logger.Log("%s\n%s\n\n%s", query, headers, body)
 	}
 }
 
@@ -118,7 +125,7 @@ func (wq wrappedQuerier) insert(ctx context.Context, idxName indexName, query *B
 	if wq.queryLogger != nil {
 		defer func(since time.Time) {
 			logQuery(wq.queryLogger, wq.logTime, since,
-				fmt.Sprintf("POST /%s/_bulk", idxName),
+				"POST", idxName, "_bulk",
 				"Content-Type: application/x-ndjson",
 				fmt.Sprintf("%s", query.Reader()))
 		}(time.Now())
@@ -133,7 +140,7 @@ func (wq wrappedQuerier) search(ctx context.Context, idxName indexName, request 
 	if wq.queryLogger != nil {
 		defer func(since time.Time) {
 			logQuery(wq.queryLogger, wq.logTime, since,
-				fmt.Sprintf("POST /%s/_search", idxName),
+				"POST", idxName, "_search",
 				"Content-Type: application/json",
 				request.String())
 		}(time.Now())
@@ -148,7 +155,7 @@ func (wq wrappedQuerier) count(ctx context.Context, idxName indexName, request *
 	if wq.queryLogger != nil {
 		defer func(since time.Time) {
 			logQuery(wq.queryLogger, wq.logTime, since,
-				fmt.Sprintf("POST /%s/_search", idxName),
+				"POST", idxName, "_search",
 				"Content-Type: application/json",
 				request.String())
 		}(time.Now())
