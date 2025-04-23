@@ -14,6 +14,11 @@ import (
 	"github.com/acronis/perfkit/db/optimize"
 )
 
+// init initializes empty query builder for empty table name
+func init() {
+	tableQueryBuilders[""] = selectBuilder{tableName: ""}
+}
+
 // tableQueryBuilders maps table names to their corresponding query builders
 // Used to cache query builders for better performance
 var tableQueryBuilders = make(map[string]selectBuilder)
@@ -351,6 +356,10 @@ func (b selectBuilder) sql(d dialect, c *db.SelectCtrl) (string, bool, error) {
 
 	if selectWhat, err = b.sqlSelectionAlias(c.Fields, b.tableName); err != nil {
 		return "", false, err
+	}
+
+	if b.tableName == "" {
+		return selectWhat, false, nil
 	}
 
 	if where, args, empty, err = b.sqlConditions(d, c.OptimizeConditions, c.Where); err != nil {
