@@ -74,6 +74,7 @@ func logRow(logger db.Logger, logTime bool, since time.Time, dest ...interface{}
 // Scan copies the columns in the current row into the values pointed at by dest.
 // Logs the scanned values if readRowsLogger is configured, up to maxRowsToPrint rows.
 func (r *wrappedRows) Scan(dest ...interface{}) error {
+	var since = time.Now()
 	var err = r.rows.Scan(dest...)
 
 	if r.readRowsLogger != nil {
@@ -86,7 +87,7 @@ func (r *wrappedRows) Scan(dest ...interface{}) error {
 		}
 
 		// Create a single log line with all columns
-		logRow(r.readRowsLogger, r.logTime, time.Now(), dest...)
+		logRow(r.readRowsLogger, r.logTime, since, dest...)
 		r.printed++
 	}
 
