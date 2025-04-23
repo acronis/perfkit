@@ -207,10 +207,6 @@ func Main() {
 				workerData.workingConn.Close()
 			}
 
-			if workerData.tenantsCache != nil {
-				workerData.tenantsCache.Close()
-			}
-
 			worker.Data = nil
 		}
 	}
@@ -261,6 +257,21 @@ func Main() {
 
 		b.Vault.(*DBTestData).TenantsCache.SetTenantsWorkingSet(b.TestOpts.(*TestOpts).BenchOpts.TenantsWorkingSet)
 		b.Vault.(*DBTestData).TenantsCache.SetCTIsWorkingSet(b.TestOpts.(*TestOpts).BenchOpts.CTIsWorkingSet)
+
+		var tenantCacheDBOpts = b.TestOpts.(*TestOpts).DBOpts
+		if b.TestOpts.(*TestOpts).BenchOpts.TenantConnString != "" {
+			tenantCacheDBOpts.ConnString = b.TestOpts.(*TestOpts).BenchOpts.TenantConnString
+		}
+
+		var tenantCacheDatabase *DBConnector
+		if tenantCacheDatabase, err = NewDBConnector(&tenantCacheDBOpts, -1, true, b.Logger, 1); err != nil {
+			b.Exit("db: cannot create tenants cache connection: %v", err)
+			return
+		}
+
+		if err = b.Vault.(*DBTestData).TenantsCache.Init(tenantCacheDatabase.Database); err != nil {
+			b.Exit("db: cannot initialize tenants cache: %v", err)
+		}
 
 		if b.Logger.GetLevel() > logger.LevelInfo && !testOpts.BenchOpts.Info {
 			b.Log(logger.LevelTrace, 0, getDBInfo(b, content))

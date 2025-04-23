@@ -150,16 +150,12 @@ func connectionsChecker(conn *DBConnector) {
 
 // DBWorkerData is a structure to store all the worker data
 type DBWorkerData struct {
-	workingConn  *DBConnector
-	tenantsCache *DBConnector
+	workingConn *DBConnector
 }
 
 func (d *DBWorkerData) release() {
 	if d.workingConn != nil {
 		d.workingConn.Release()
-	}
-	if d.tenantsCache != nil {
-		d.tenantsCache.Release()
 	}
 }
 
