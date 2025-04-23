@@ -18,6 +18,11 @@ const (
 	timeStoreFormatPrecise = time.RFC3339Nano
 )
 
+// init initializes empty query builder for empty index
+func init() {
+	indexQueryBuilders[""] = searchQueryBuilder{}
+}
+
 var indexQueryBuilders = make(map[indexName]searchQueryBuilder)
 
 func createSearchQueryBuilder(idxName string, tableRows []db.TableRow) error {
@@ -168,8 +173,8 @@ type KnnRequest struct {
 
 type SearchRequest struct {
 	Source bool                         `json:"_source"` // Should always be false
-	Fields []string                     `json:"fields"`
-	Query  *SearchQuery                 `json:"query"`
+	Fields []string                     `json:"fields,omitempty"`
+	Query  *SearchQuery                 `json:"query,omitempty"`
 	Knn    *KnnRequest                  `json:"knn,omitempty"`
 	Sort   []map[string]json.RawMessage `json:"sort,omitempty"` // list to keep ordering
 	Size   int64                        `json:"size,omitempty"`
@@ -236,7 +241,7 @@ const (
 	queryTypeAggs   queryType = 3
 )
 
-func (b searchQueryBuilder) searchRequest(c *db.SelectCtrl) (*SearchRequest, queryType, bool, error) {
+func (b searchQueryBuilder) searchRequest(index indexName, c *db.SelectCtrl) (*SearchRequest, queryType, bool, error) {
 	if c == nil {
 		return nil, queryTypeSearch, true, nil
 	}
@@ -248,6 +253,15 @@ func (b searchQueryBuilder) searchRequest(c *db.SelectCtrl) (*SearchRequest, que
 	if c.Fields == nil {
 		c.Fields = []string{}
 	}
+
+	// Special case for SELECT 1
+	if index == "" && len(c.Fields) == 1 && c.Fields[0] == "1" {
+		return &SearchRequest{
+			Size:   1,
+			Source: false,
+		}, queryTypeSearch, false, nil
+	}
+
 	q, empty, err = b.searchQuery(c.OptimizeConditions, c.Where)
 	if err != nil {
 		return nil, queryTypeError, false, fmt.Errorf("failed to create search request: %v", err)
@@ -889,7 +903,7 @@ func (g *esGateway) Select(idxName string, sc *db.SelectCtrl) (db.Rows, error) {
 		return nil, fmt.Errorf("index %s is not supported", index)
 	}
 
-	var query, qType, empty, err = queryBuilder.searchRequest(sc)
+	var query, qType, empty, err = queryBuilder.searchRequest(index, sc)
 	if err != nil {
 		return nil, err
 	}

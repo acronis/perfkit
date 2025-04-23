@@ -95,3 +95,26 @@ func (suite *TestingSuite) TestInsert() {
 		}
 	}
 }
+
+// TestSelectOne tests the basic database connectivity by executing a "SELECT 1" query.
+// This is a common pattern used to verify that a database connection is alive
+// without relying on any specific tables or data structures.
+func (suite *TestingSuite) TestSelectOne() {
+	d, s, c := suite.makeTestSession()
+	defer logDbTime(suite.T(), c)
+	defer cleanup(suite.T(), d)
+
+	// Create a simple SelectCtrl that requests the literal value "1"
+	selectCtrl := &db.SelectCtrl{
+		Fields: []string{"1"},
+	}
+
+	// Execute the "SELECT 1" query
+	rows, err := s.Select("", selectCtrl)
+	if err != nil {
+		suite.T().Errorf("Failed to execute SELECT 1: %v", err)
+		return
+	}
+
+	rows.Close()
+}

@@ -305,7 +305,7 @@ func TestSearchQueryBuilder(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		var query, _, empty, err = testQueryBuilder.searchRequest(test.c)
+		var query, _, empty, err = testQueryBuilder.searchRequest("", test.c)
 		if err != nil {
 			if test.err != nil {
 				assert.Equalf(t, test.err.Error(), err.Error(), "failure in test for col %v", test.c)

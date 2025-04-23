@@ -192,10 +192,16 @@ func (q *openSearchQuerier) search(ctx context.Context, idxName indexName, reque
 		return nil, fmt.Errorf("request encode error: %v", err)
 	}
 
+	var indices []string
+	if idxName != "" {
+		indices = []string{string(idxName)}
+	}
+
 	var resp, err = q.client.Search(ctx, &opensearchapi.SearchReq{
-		Indices: []string{string(idxName)},
+		Indices: indices,
 		Body:    &buf,
 	})
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to perform search: %v", err)
 	}
@@ -203,6 +209,10 @@ func (q *openSearchQuerier) search(ctx context.Context, idxName indexName, reque
 	var fields []map[string]interface{}
 	for _, hit := range resp.Hits.Hits {
 		var documentFields = make(map[string]interface{})
+		if len(hit.Fields) == 0 {
+			continue
+		}
+
 		if err = json.Unmarshal(hit.Fields, &documentFields); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal source: %v", err)
 		}
