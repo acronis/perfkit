@@ -135,6 +135,7 @@ func (c *openSearchConnector) ConnectionPool(cfg db.Config) (db.Database, error)
 		rw:          rw,
 		mig:         mig,
 		dialect:     &openSearchDialect{},
+		logTime:     cfg.LogOperationsTime,
 		queryLogger: cfg.QueryLogger,
 	}, nil
 }

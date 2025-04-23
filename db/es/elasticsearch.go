@@ -138,6 +138,7 @@ func (c *esConnector) ConnectionPool(cfg db.Config) (db.Database, error) {
 		rw:          rw,
 		mig:         rw,
 		dialect:     &elasticSearchDialect{},
+		logTime:     cfg.LogOperationsTime,
 		queryLogger: cfg.QueryLogger,
 	}, nil
 }
