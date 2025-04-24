@@ -25,11 +25,6 @@ type DatabaseOpts struct {
 	DryRun  bool `long:"dry-run" description:"do not execute any INSERT/UPDATE/DELETE queries on DB-side" required:"false"`
 	Explain bool `long:"explain" description:"prepend the test queries by EXPLAIN ANALYZE" required:"false"`
 
-	LogQueries   bool `long:"log-queries" description:"log queries" required:"false"`
-	LogReadRows  bool `long:"log-read-rows" description:"log read rows" required:"false"`
-	LogQueryTime bool `long:"log-query-time" description:"log query time" required:"false"`
-	LogSystemOps bool `long:"log-system-operations" description:"log system operations on database side" required:"false"`
-
 	DontCleanup bool `long:"dont-cleanup" description:"do not cleanup DB content before/after the test in '-t all' mode" required:"false"`
 	UseTruncate bool `long:"use-truncate" description:"use TRUNCATE instead of DROP TABLE in cleanup procedure" required:"false"`
 }
@@ -155,16 +150,12 @@ func connectionsChecker(conn *DBConnector) {
 
 // DBWorkerData is a structure to store all the worker data
 type DBWorkerData struct {
-	workingConn  *DBConnector
-	tenantsCache *DBConnector
+	workingConn *DBConnector
 }
 
 func (d *DBWorkerData) release() {
 	if d.workingConn != nil {
 		d.workingConn.Release()
-	}
-	if d.tenantsCache != nil {
-		d.tenantsCache.Release()
 	}
 }
 
@@ -184,31 +175,45 @@ type DBConnector struct {
 }
 
 // NewDBConnector creates a new DBConnector
-func NewDBConnector(dbOpts *DatabaseOpts, workerID int, l logger.Logger, retryAttempts int) (*DBConnector, error) {
+func NewDBConnector(dbOpts *DatabaseOpts, workerID int, systemConnect bool, l logger.Logger, retryAttempts int) (*DBConnector, error) {
 	c := connPool.take(dbOpts, workerID)
 	if c != nil {
 		return c, nil
 	}
 
-	var queryLogger, readRowsLogger, explainLogger, systemLogger logger.Logger
-	if dbOpts.LogQueries {
-		queryLogger = l.Clone()
-		queryLogger.SetLevel(logger.LevelInfo)
-	}
+	var logOperationTime bool
+	var queryLogger, readRowsLogger, explainLogger, systemLogger db.Logger
 
-	if dbOpts.LogReadRows {
-		readRowsLogger = l.Clone()
-		readRowsLogger.SetLevel(logger.LevelInfo)
+	if systemConnect {
+		if l.GetLevel() >= logger.LevelInfo {
+			systemLogger = newDBLogger(l.Clone(), logger.LevelInfo)
+		}
+
+		if l.GetLevel() >= logger.LevelDebug {
+			queryLogger = newDBLogger(l.Clone(), logger.LevelDebug)
+			logOperationTime = true
+		}
+
+		if l.GetLevel() >= logger.LevelTrace {
+			readRowsLogger = newDBLogger(l.Clone(), logger.LevelTrace)
+		}
+	} else {
+		if l.GetLevel() >= logger.LevelInfo {
+			queryLogger = newDBLogger(l.Clone(), logger.LevelInfo)
+			systemLogger = newDBLogger(l.Clone(), logger.LevelInfo)
+		}
+
+		if l.GetLevel() >= logger.LevelDebug {
+			logOperationTime = true
+		}
+
+		if l.GetLevel() >= logger.LevelTrace {
+			readRowsLogger = newDBLogger(l.Clone(), logger.LevelTrace)
+		}
 	}
 
 	if dbOpts.Explain {
-		explainLogger = l.Clone()
-		explainLogger.SetLevel(logger.LevelInfo)
-	}
-
-	if dbOpts.LogSystemOps {
-		systemLogger = l.Clone()
-		systemLogger.SetLevel(logger.LevelInfo)
+		explainLogger = newDBLogger(l.Clone(), l.GetLevel())
 	}
 
 	var dbConn, err = db.Open(db.Config{
@@ -216,6 +221,7 @@ func NewDBConnector(dbOpts *DatabaseOpts, workerID int, l logger.Logger, retryAt
 		MaxOpenConns:             dbOpts.MaxOpenConns,
 		QueryStringInterpolation: dbOpts.EnableQueryStringInterpolation,
 		DryRun:                   dbOpts.DryRun,
+		LogOperationsTime:        logOperationTime,
 		UseTruncate:              dbOpts.UseTruncate,
 
 		QueryLogger:    queryLogger,
@@ -276,4 +282,20 @@ func (c *DBConnector) Exit(fmts string, args ...interface{}) {
 	fmt.Printf(fmts, args...)
 	fmt.Println()
 	os.Exit(127)
+}
+
+type dbLogger struct {
+	l     logger.Logger
+	level logger.LogLevel
+}
+
+func (l *dbLogger) Log(format string, args ...interface{}) {
+	l.l.Log(l.level, format, args...)
+}
+
+func newDBLogger(l logger.Logger, level logger.LogLevel) *dbLogger {
+	return &dbLogger{
+		l:     l,
+		level: level,
+	}
 }

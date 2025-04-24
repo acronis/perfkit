@@ -6,7 +6,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/acronis/perfkit/logger"
 	"go.uber.org/atomic"
 )
 
@@ -364,7 +363,7 @@ type Config struct {
 	//    APPLY BATCH;
 	//    */
 	//    ```
-	QueryLogger logger.Logger
+	QueryLogger Logger
 
 	// ReadRowsLogger logs the data returned from queries
 	// When configured:
@@ -400,7 +399,7 @@ type Config struct {
 	//     ReadRowsLogger: &customLogger{},
 	// }
 	// ```
-	ReadRowsLogger logger.Logger
+	ReadRowsLogger Logger
 
 	// ExplainLogger receives query execution plan output when Explain is true.
 	// The output format varies by dialect:
@@ -448,7 +447,7 @@ type Config struct {
 	// - Captures and formats execution plan output
 	// - Works with Select(), Query(), and QueryRow() operations
 	// - Returns error if explain not supported by dialect
-	ExplainLogger logger.Logger
+	ExplainLogger Logger
 
 	// SystemLogger logs system-level database operations and events.
 	// Primary uses:
@@ -467,7 +466,37 @@ type Config struct {
 	//    - Logs critical system events
 	//    - Reports initialization status
 	//    - Captures server-side messages
-	SystemLogger logger.Logger
+	SystemLogger Logger
+
+	// LogOperationsTime controls whether to log the time taken for database operations.
+	// When enabled (true), all SQL operations include timing information in logs.
+	//
+	// Features:
+	// - Adds timing information (duration) to all query logs
+	// - Works with queries, prepared statements, and transactions
+	// - Measurements are taken using high-precision time.Since()
+	//
+	// Example output with LogOperationsTime=true:
+	// ```
+	// INSERT INTO users(id, name) VALUES (1, 'john') -- duration: 2.3ms
+	// SELECT * FROM users WHERE id = 1 -- duration: 1.5ms
+	// BEGIN -- duration: 0.2ms
+	// COMMIT -- duration: 5.1ms
+	// ```
+	//
+	// Without LogOperationsTime (false):
+	// ```
+	// INSERT INTO users(id, name) VALUES (1, 'john')
+	// SELECT * FROM users WHERE id = 1
+	// BEGIN
+	// COMMIT
+	// ```
+	//
+	// Usage recommendation:
+	// - Enable during development and testing for performance insights
+	// - Use for debugging slow queries and transactions
+	// - Can be enabled in production for detailed monitoring
+	LogOperationsTime bool
 }
 
 // Open opens a database connection using the provided configuration.

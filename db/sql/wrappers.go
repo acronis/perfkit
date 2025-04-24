@@ -10,7 +10,6 @@ import (
 	"go.uber.org/atomic"
 
 	"github.com/acronis/perfkit/db"
-	"github.com/acronis/perfkit/logger"
 )
 
 /*
@@ -28,11 +27,77 @@ while maintaining the original interfaces.
 
 const maxRowsToPrint = 10
 
+func logRow(logger db.Logger, logTime bool, since time.Time, dest ...interface{}) {
+	if logger == nil {
+		return
+	}
+
+	var values = db.DumpRecursive(dest, " ")
+	if logTime {
+		var dur = time.Since(since)
+		logger.Log("Row: %s -- %s", values, fmt.Sprintf("read duration: %v", dur))
+	} else {
+		logger.Log("Row: %s", values)
+	}
+}
+
+func logQuery(logger db.Logger, logTime bool, since time.Time, dryRun bool, query string, args ...interface{}) {
+	if logger == nil {
+		return
+	}
+
+	if dryRun {
+		if !strings.Contains(query, "\n") {
+			logger.Log("-- %s -- skip because of 'dry-run' mode", query)
+		} else {
+			logger.Log("-- skip because of 'dry-run' mode")
+			formattedQuery := fmt.Sprintf("/*\n%s\n*/", query)
+			logger.Log(formattedQuery)
+		}
+
+		return
+	}
+
+	if logTime {
+		var dur = time.Since(since)
+		if len(args) > 0 {
+			logger.Log("%s -- %s, %s", query, db.DumpRecursive(args, " "), fmt.Sprintf("duration: %v", dur))
+		} else {
+			logger.Log("%s -- %s", query, fmt.Sprintf("duration: %v", dur))
+		}
+	} else {
+		if len(args) > 0 {
+			logger.Log("%s -- %s", query, db.DumpRecursive(args, " "))
+		} else {
+			logger.Log(query)
+		}
+	}
+}
+
+func logTxOperation(logger db.Logger, logTime bool, since time.Time, txNotSupported bool, operation string) {
+	if logger == nil {
+		return
+	}
+
+	if txNotSupported {
+		logger.Log("-- %s -- skip because dialect does not support transactions", operation)
+		return
+	}
+
+	if logTime {
+		var dur = time.Since(since)
+		logger.Log("%s -- %s", operation, fmt.Sprintf("duration: %v", dur))
+	} else {
+		logger.Log(operation)
+	}
+}
+
 // wrappedRow is a struct for storing and logging DB *sql.Row results
 type wrappedRow struct {
 	row *sql.Row
 
-	readRowsLogger logger.Logger
+	logTime        bool
+	readRowsLogger db.Logger
 }
 
 // Scan copies the columns in the current row into the values pointed at by dest.
@@ -42,8 +107,7 @@ func (r *wrappedRow) Scan(dest ...any) error {
 
 	if r.readRowsLogger != nil {
 		// Create a single log line with all columns
-		var values = db.DumpRecursive(dest, " ")
-		r.readRowsLogger.Info("Row: %s", values)
+		logRow(r.readRowsLogger, r.logTime, time.Now(), dest...)
 	}
 
 	return err
@@ -53,7 +117,8 @@ func (r *wrappedRow) Scan(dest ...any) error {
 type wrappedRows struct {
 	rows *sql.Rows
 
-	readRowsLogger logger.Logger
+	logTime        bool
+	readRowsLogger db.Logger
 	printed        int
 }
 
@@ -70,20 +135,20 @@ func (r *wrappedRows) Err() error {
 // Scan copies the columns in the current row into the values pointed at by dest.
 // Logs the scanned values if readRowsLogger is configured, up to maxRowsToPrint rows.
 func (r *wrappedRows) Scan(dest ...interface{}) error {
+	var since = time.Now()
 	var err = r.rows.Scan(dest...)
 
 	if r.readRowsLogger != nil {
 		if r.printed >= maxRowsToPrint {
 			return err
 		} else if r.printed == maxRowsToPrint {
-			r.readRowsLogger.Debug("... truncated ...")
+			r.readRowsLogger.Log("... truncated ...")
 			r.printed++
 			return err
 		}
 
 		// Create a single log line with all columns
-		var values = db.DumpRecursive(dest, " ")
-		r.readRowsLogger.Debug("Row: %s", values)
+		logRow(r.readRowsLogger, r.logTime, since, dest...)
 		r.printed++
 	}
 
@@ -113,7 +178,8 @@ type wrappedQuerier struct {
 	deallocTime *atomic.Int64 // Deallocation time counter
 
 	dryRun      bool
-	queryLogger logger.Logger
+	logTime     bool
+	queryLogger db.Logger
 }
 
 // execContext implements querier.execContext with timing, logging and dry-run support
@@ -121,17 +187,9 @@ func (wq wrappedQuerier) execContext(ctx context.Context, query string, args ...
 	defer accountTime(wq.execTime, time.Now())
 
 	if wq.queryLogger != nil {
-		if wq.dryRun {
-			if !strings.Contains(query, "\n") {
-				wq.queryLogger.Info("-- %s -- skip because of 'dry-run' mode", query)
-			} else {
-				wq.queryLogger.Info("-- skip because of 'dry-run' mode")
-				formattedQuery := fmt.Sprintf("/*\n%s\n*/", query)
-				wq.queryLogger.Info(formattedQuery)
-			}
-		} else {
-			wq.queryLogger.Info(query)
-		}
+		defer func(since time.Time) {
+			logQuery(wq.queryLogger, wq.logTime, since, wq.dryRun, query, args...)
+		}(time.Now())
 	}
 
 	if wq.dryRun {
@@ -146,7 +204,9 @@ func (wq wrappedQuerier) queryRowContext(ctx context.Context, query string, args
 	defer accountTime(wq.queryTime, time.Now())
 
 	if wq.queryLogger != nil {
-		wq.queryLogger.Info(query)
+		defer func(since time.Time) {
+			logQuery(wq.queryLogger, wq.logTime, since, false, query, args...)
+		}(time.Now())
 	}
 
 	return wq.q.queryRowContext(ctx, query, args...)
@@ -157,7 +217,9 @@ func (wq wrappedQuerier) queryContext(ctx context.Context, query string, args ..
 	defer accountTime(wq.queryTime, time.Now())
 
 	if wq.queryLogger != nil {
-		wq.queryLogger.Info(query, args...)
+		defer func(since time.Time) {
+			logQuery(wq.queryLogger, wq.logTime, since, false, query, args...)
+		}(time.Now())
 	}
 
 	return wq.q.queryContext(ctx, query, args...)
@@ -168,7 +230,9 @@ func (wq wrappedQuerier) prepareContext(ctx context.Context, query string) (sqlS
 	defer accountTime(wq.prepareTime, time.Now())
 
 	if wq.queryLogger != nil {
-		wq.queryLogger.Info("PREPARE stmt FROM '%s';", query)
+		defer func(since time.Time) {
+			logQuery(wq.queryLogger, wq.logTime, since, false, fmt.Sprintf("PREPARE stmt FROM '%s';", query))
+		}(time.Now())
 	}
 
 	var stmt, err = wq.q.prepareContext(ctx, query)
@@ -181,6 +245,7 @@ func (wq wrappedQuerier) prepareContext(ctx context.Context, query string) (sqlS
 		execTime:    wq.execTime,
 		deallocTime: wq.deallocTime,
 		dryRun:      wq.dryRun,
+		logTime:     wq.logTime,
 		queryLogger: wq.queryLogger,
 	}, nil
 }
@@ -196,7 +261,8 @@ type wrappedStatement struct {
 	deallocTime *atomic.Int64 // Deallocation time counter
 
 	dryRun      bool
-	queryLogger logger.Logger
+	logTime     bool
+	queryLogger db.Logger
 }
 
 // Exec executes a prepared statement with timing, logging and dry-run support
@@ -204,11 +270,9 @@ func (ws *wrappedStatement) Exec(args ...any) (db.Result, error) {
 	defer accountTime(ws.execTime, time.Now())
 
 	if ws.queryLogger != nil {
-		if ws.dryRun {
-			ws.queryLogger.Info("-- EXECUTE stmt -- skip because of 'dry-run' mode")
-		} else {
-			ws.queryLogger.Info("EXECUTE stmt;")
-		}
+		defer func(since time.Time) {
+			logQuery(ws.queryLogger, ws.logTime, since, ws.dryRun, "EXECUTE stmt;", args...)
+		}(time.Now())
 	}
 
 	if ws.dryRun {
@@ -223,7 +287,9 @@ func (ws *wrappedStatement) Close() error {
 	defer accountTime(ws.deallocTime, time.Now())
 
 	if ws.queryLogger != nil {
-		ws.queryLogger.Info("DEALLOCATE PREPARE stmt;")
+		defer func(since time.Time) {
+			logQuery(ws.queryLogger, ws.logTime, since, ws.dryRun, "DEALLOCATE PREPARE stmt;")
+		}(time.Now())
 	}
 
 	return ws.stmt.Close()
@@ -243,7 +309,8 @@ type wrappedTransaction struct {
 	commitTime  *atomic.Int64 // Commit time counter
 
 	dryRun         bool
-	queryLogger    logger.Logger
+	logTime        bool
+	queryLogger    db.Logger
 	txNotSupported bool
 }
 
@@ -252,17 +319,9 @@ func (wtx wrappedTransaction) execContext(ctx context.Context, query string, arg
 	defer accountTime(wtx.execTime, time.Now())
 
 	if wtx.queryLogger != nil {
-		if wtx.dryRun {
-			if !strings.Contains(query, "\n") {
-				wtx.queryLogger.Info("-- %s -- skip because of 'dry-run' mode", query)
-			} else {
-				wtx.queryLogger.Info("-- skip because of 'dry-run' mode")
-				formattedQuery := fmt.Sprintf("/*\n%s\n*/", query)
-				wtx.queryLogger.Info(formattedQuery)
-			}
-		} else {
-			wtx.queryLogger.Info(query)
-		}
+		defer func(since time.Time) {
+			logQuery(wtx.queryLogger, wtx.logTime, since, wtx.dryRun, query, args...)
+		}(time.Now())
 	}
 
 	if wtx.dryRun {
@@ -277,7 +336,9 @@ func (wtx wrappedTransaction) queryRowContext(ctx context.Context, query string,
 	defer accountTime(wtx.queryTime, time.Now())
 
 	if wtx.queryLogger != nil {
-		wtx.queryLogger.Info(query)
+		defer func(since time.Time) {
+			logQuery(wtx.queryLogger, wtx.logTime, since, false, query, args...)
+		}(time.Now())
 	}
 
 	return wtx.tx.queryRowContext(ctx, query, args...)
@@ -288,7 +349,9 @@ func (wtx wrappedTransaction) queryContext(ctx context.Context, query string, ar
 	defer accountTime(wtx.queryTime, time.Now())
 
 	if wtx.queryLogger != nil {
-		wtx.queryLogger.Info(query)
+		defer func(since time.Time) {
+			logQuery(wtx.queryLogger, wtx.logTime, since, false, query, args...)
+		}(time.Now())
 	}
 
 	return wtx.tx.queryContext(ctx, query, args...)
@@ -299,7 +362,9 @@ func (wtx wrappedTransaction) prepareContext(ctx context.Context, query string) 
 	defer accountTime(wtx.prepareTime, time.Now())
 
 	if wtx.queryLogger != nil {
-		wtx.queryLogger.Info("PREPARE stmt FROM '%s';", query)
+		defer func(since time.Time) {
+			logQuery(wtx.queryLogger, wtx.logTime, since, false, fmt.Sprintf("PREPARE stmt FROM '%s';", query))
+		}(time.Now())
 	}
 
 	var stmt, err = wtx.tx.prepareContext(ctx, query)
@@ -312,6 +377,7 @@ func (wtx wrappedTransaction) prepareContext(ctx context.Context, query string) 
 		execTime:    wtx.execTime,
 		deallocTime: wtx.deallocTime,
 		dryRun:      wtx.dryRun,
+		logTime:     wtx.logTime,
 		queryLogger: wtx.queryLogger,
 	}, nil
 }
@@ -321,11 +387,9 @@ func (wtx wrappedTransaction) commit() error {
 	defer accountTime(wtx.commitTime, time.Now())
 
 	if wtx.queryLogger != nil {
-		if wtx.txNotSupported {
-			wtx.queryLogger.Info("-- COMMIT -- skip because dialect does not support transactions")
-		} else {
-			wtx.queryLogger.Info("COMMIT")
-		}
+		defer func(since time.Time) {
+			logTxOperation(wtx.queryLogger, wtx.logTime, since, wtx.txNotSupported, "COMMIT")
+		}(time.Now())
 	}
 
 	return wtx.tx.commit()
@@ -336,11 +400,9 @@ func (wtx wrappedTransaction) rollback() error {
 	defer accountTime(wtx.commitTime, time.Now())
 
 	if wtx.queryLogger != nil {
-		if wtx.txNotSupported {
-			wtx.queryLogger.Info("-- ROLLBACK -- skip because dialect does not support transactions")
-		} else {
-			wtx.queryLogger.Info("ROLLBACK")
-		}
+		defer func(since time.Time) {
+			logTxOperation(wtx.queryLogger, wtx.logTime, since, wtx.txNotSupported, "ROLLBACK")
+		}(time.Now())
 	}
 
 	return wtx.tx.rollback()
@@ -360,9 +422,10 @@ type wrappedTransactor struct {
 	deallocTime *atomic.Int64 // Deallocation time counter
 	commitTime  *atomic.Int64 // Commit time counter
 
-	dryRun bool
+	dryRun  bool
+	logTime bool
 
-	queryLogger logger.Logger
+	queryLogger db.Logger
 
 	txNotSupported bool
 }
@@ -372,11 +435,9 @@ func (wt wrappedTransactor) begin(ctx context.Context) (transaction, error) {
 	defer accountTime(wt.beginTime, time.Now())
 
 	if wt.queryLogger != nil {
-		if wt.txNotSupported {
-			wt.queryLogger.Info("-- BEGIN -- skip because dialect does not support transactions")
-		} else {
-			wt.queryLogger.Info("BEGIN")
-		}
+		defer func(since time.Time) {
+			logTxOperation(wt.queryLogger, wt.logTime, since, wt.txNotSupported, "BEGIN")
+		}(time.Now())
 	}
 
 	var t, err = wt.t.begin(ctx)
@@ -393,6 +454,7 @@ func (wt wrappedTransactor) begin(ctx context.Context) (transaction, error) {
 		deallocTime:    wt.deallocTime,
 		commitTime:     wt.commitTime,
 		dryRun:         wt.dryRun,
+		logTime:        wt.logTime,
 		queryLogger:    wt.queryLogger,
 		txNotSupported: wt.txNotSupported,
 	}, nil

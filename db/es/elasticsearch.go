@@ -106,16 +106,29 @@ func (c *esConnector) ConnectionPool(cfg db.Config) (db.Database, error) {
 		}
 	}
 
+	// Create the base transport
+	baseTransport := &http.Transport{
+		MaxIdleConnsPerHost:   cfg.MaxOpenConns,
+		ResponseHeaderTimeout: cfg.MaxConnLifetime,
+		DialContext:           (&net.Dialer{Timeout: cfg.MaxConnLifetime}).DialContext,
+		TLSClientConfig:       &tlsConfig,
+	}
+
+	// Wrap with logging transport if we have a logger
+	var transport http.RoundTripper = baseTransport
+	if cfg.QueryLogger != nil {
+		transport = &httpWrapperTransport{
+			transport:   baseTransport,
+			queryLogger: cfg.QueryLogger,
+			logTime:     cfg.LogOperationsTime,
+		}
+	}
+
 	var conf = es8.Config{
 		Addresses: adds,
-		Transport: &http.Transport{
-			MaxIdleConnsPerHost:   cfg.MaxOpenConns,
-			ResponseHeaderTimeout: cfg.MaxConnLifetime,
-			DialContext:           (&net.Dialer{Timeout: cfg.MaxConnLifetime}).DialContext,
-			TLSClientConfig:       &tlsConfig,
-		},
-		Username: username,
-		Password: password,
+		Transport: transport,
+		Username:  username,
+		Password:  password,
 	}
 
 	var es *es8.Client
@@ -135,10 +148,11 @@ func (c *esConnector) ConnectionPool(cfg db.Config) (db.Database, error) {
 
 	var rw = &esQuerier{es: es}
 	return &esDatabase{
-		rw:          rw,
-		mig:         rw,
-		dialect:     &elasticSearchDialect{},
-		queryLogger: cfg.QueryLogger,
+		rw:             rw,
+		mig:            rw,
+		dialect:        &elasticSearchDialect{},
+		logTime:        cfg.LogOperationsTime,
+		readRowsLogger: cfg.ReadRowsLogger,
 	}, nil
 }
 
@@ -300,12 +314,17 @@ func (q *esQuerier) search(ctx context.Context, idxName indexName, request *Sear
 		return nil, fmt.Errorf("request encode error: %v", err)
 	}
 
-	var res, err = q.es.Search(
-		q.es.Search.WithContext(ctx),
-		q.es.Search.WithIndex(string(idxName)),
-		q.es.Search.WithBody(&buf))
-	if err != nil {
-		return nil, fmt.Errorf("failed to perform search: %v", err)
+	var res *esapi.Response
+	var err error
+	if idxName != "" {
+		res, err = q.es.Search(
+			q.es.Search.WithContext(ctx),
+			q.es.Search.WithIndex(string(idxName)),
+			q.es.Search.WithBody(&buf))
+	} else {
+		res, err = q.es.Search(
+			q.es.Search.WithContext(ctx),
+			q.es.Search.WithBody(&buf))
 	}
 
 	// nolint: errcheck // Need to have logger here for deferred errors

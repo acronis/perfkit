@@ -1,9 +1,9 @@
 package basic_scenarios
 
 import (
-	"github.com/acronis/perfkit/benchmark"
-
 	"github.com/acronis/perfkit/acronis-db-bench/engine"
+	tenants "github.com/acronis/perfkit/acronis-db-bench/tenants-cache"
+	"github.com/acronis/perfkit/benchmark"
 )
 
 func (suite *TestingSuite) TestMediumTableTests() {
@@ -76,6 +76,20 @@ func (suite *TestingSuite) TestMediumTableTests() {
 
 	for _, s := range engine.TestCategories {
 		d.Scores[s] = []benchmark.Score{}
+	}
+
+	b.Init = func() {
+		b.Vault.(*engine.DBTestData).TenantsCache = tenants.NewTenantsCache(b)
+
+		var tenantCacheDatabase, err = engine.NewDBConnector(&b.TestOpts.(*engine.TestOpts).DBOpts, -1, true, b.Logger, 1)
+		if err != nil {
+			b.Exit("db: cannot create tenants cache connection: %v", err)
+			return
+		}
+
+		if err = b.Vault.(*engine.DBTestData).TenantsCache.Init(tenantCacheDatabase.Database); err != nil {
+			b.Exit("db: cannot initialize tenants cache: %v", err)
+		}
 	}
 
 	mediumTableTestSuite.Execute(b, &engine.TestOpts{

@@ -10,7 +10,6 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/acronis/perfkit/db"
-	"github.com/acronis/perfkit/logger"
 )
 
 const (
@@ -35,6 +34,10 @@ type testLogger struct {
 	t *testing.T
 }
 
+func newTestLogger(t *testing.T) db.Logger {
+	return &testLogger{t: t}
+}
+
 func (l *testLogger) Log(format string, args ...interface{}) {
 	l.t.Logf(format, args...)
 }
@@ -55,13 +58,15 @@ func testTableDefinition() *db.TableDefinition {
 }
 
 func (suite *TestingSuite) makeTestSession() (db.Database, db.Session, *db.Context) {
-	var logger = logger.NewPlaneLogger(logger.LevelDebug, true)
+	var logger = newTestLogger(suite.T())
 
 	dbo, err := db.Open(db.Config{
-		ConnString:      suite.ConnString,
-		MaxOpenConns:    16,
-		MaxConnLifetime: 1000 * time.Millisecond,
-		QueryLogger:     logger,
+		ConnString:        suite.ConnString,
+		MaxOpenConns:      16,
+		MaxConnLifetime:   1000 * time.Millisecond,
+		QueryLogger:       logger,
+		ReadRowsLogger:    logger,
+		LogOperationsTime: true,
 	})
 
 	require.NoError(suite.T(), err, "making test esSession")
@@ -83,13 +88,7 @@ func (suite *TestingSuite) makeTestSession() (db.Database, db.Session, *db.Conte
 
 func logDbTime(t *testing.T, c *db.Context) {
 	t.Helper()
-
-	t.Log("beginTime", time.Duration(c.BeginTime.Load()))
-	t.Log("prepareTime", time.Duration(c.PrepareTime.Load()))
-	t.Log("execTime", time.Duration(c.ExecTime.Load()))
-	t.Log("queryTime", time.Duration(c.QueryTime.Load()))
-	t.Log("deallocTime", time.Duration(c.DeallocTime.Load()))
-	t.Log("commitTime", time.Duration(c.CommitTime.Load()))
+	db.DumpExecutionTime(newTestLogger(t), c)
 }
 
 func cleanup(t *testing.T, dbo db.Database) {

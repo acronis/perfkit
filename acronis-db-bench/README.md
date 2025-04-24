@@ -73,10 +73,6 @@ Note: If both the `--connection-string` command-line option and the `ACRONIS_DB_
   --enable-query-string-interpolation enable query string interpolation
   --dry-run                           do not execute any INSERT/UPDATE/DELETE queries on DB-side
   --explain                           prepend the test queries by EXPLAIN ANALYZE
-  --log-queries                       log all queries
-  --log-read-rows                     log all read rows
-  --log-query-time                    log query time
-  --log-system-operations             log system operations
   --dont-cleanup                      do not cleanup DB content before/after the test in '-t all' mode
   --use-truncate                      use TRUNCATE instead of DROP TABLE in cleanup procedure
 ```

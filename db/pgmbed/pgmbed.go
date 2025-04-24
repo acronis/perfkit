@@ -9,7 +9,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/acronis/perfkit/logger"
+	"github.com/acronis/perfkit/db"
 	embeddedpostgres "github.com/fergusstrange/embedded-postgres"
 )
 
@@ -102,7 +102,7 @@ func packConnectionString(cs string, opts *Opts) string {
 }
 
 type embeddedPostgresLogger struct {
-	logger logger.Logger
+	logger db.Logger
 }
 
 func (l embeddedPostgresLogger) Write(p []byte) (n int, err error) {
@@ -114,13 +114,13 @@ func (l embeddedPostgresLogger) Write(p []byte) (n int, err error) {
 
 	var lines = strings.Split(message, "\n")
 	for _, line := range lines {
-		l.logger.Info("-- embedded postgres: %s\n", line)
+		l.logger.Log("-- embedded postgres: %s\n", line)
 	}
 
 	return len(p), nil
 }
 
-func getEmbeddedPostgresDataDir(dir string, logger logger.Logger) (string, error) {
+func getEmbeddedPostgresDataDir(dir string, logger db.Logger) (string, error) {
 	if dir == "" {
 		dir = ".embedded-postgres-go"
 		if userHome, err := os.UserHomeDir(); err == nil {
@@ -131,7 +131,7 @@ func getEmbeddedPostgresDataDir(dir string, logger logger.Logger) (string, error
 
 	if _, err := os.Stat(dir); os.IsNotExist(err) {
 		if logger != nil {
-			logger.Info("creating Embedded Postgres data dir: " + dir)
+			logger.Log("creating Embedded Postgres data dir: " + dir)
 		}
 		err = os.MkdirAll(dir, os.ModePerm)
 		if err != nil {
@@ -140,14 +140,14 @@ func getEmbeddedPostgresDataDir(dir string, logger logger.Logger) (string, error
 	}
 
 	if logger != nil {
-		logger.Info("using Embedded Postgres data dir: " + dir)
+		logger.Log("using Embedded Postgres data dir: " + dir)
 	}
 
 	return dir, nil
 }
 
 // Launch starts the embedded Postgres instance if it's enabled and not already running.
-func Launch(cs string, opts *Opts, logger logger.Logger) (string, error) {
+func Launch(cs string, opts *Opts, logger db.Logger) (string, error) {
 	if opts == nil || !opts.Enabled {
 		// If embedded Postgres is not enabled, return the original connection string.
 		return cs, nil

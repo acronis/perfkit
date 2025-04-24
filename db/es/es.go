@@ -4,12 +4,10 @@ package es
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"go.uber.org/atomic"
 
 	"github.com/acronis/perfkit/db"
-	"github.com/acronis/perfkit/logger"
 )
 
 type querier interface {
@@ -30,6 +28,9 @@ type accessor interface {
 type esGateway struct {
 	q   querier
 	ctx *db.Context
+
+	logTime        bool
+	readRowsLogger db.Logger // Logger for read operations
 }
 
 type esSession struct {
@@ -45,7 +46,9 @@ type esDatabase struct {
 	mig     migrator
 	dialect dialect
 
-	queryLogger logger.Logger
+	logTime bool
+
+	readRowsLogger db.Logger
 }
 
 // Ping pings the DB
@@ -141,12 +144,14 @@ func (d *esDatabase) Context(ctx context.Context, explain bool) *db.Context {
 func (d *esDatabase) Session(c *db.Context) db.Session {
 	return &esSession{
 		esGateway: esGateway{
-			q: timedQuerier{q: d.rw,
-				execTime:    c.ExecTime,
-				queryTime:   c.QueryTime,
-				queryLogger: d.queryLogger,
+			q: wrappedQuerier{
+				q:         d.rw,
+				execTime:  c.ExecTime,
+				queryTime: c.QueryTime,
 			},
-			ctx: c,
+			ctx:            c,
+			logTime:        d.logTime,
+			readRowsLogger: d.readRowsLogger,
 		},
 	}
 }
@@ -166,49 +171,6 @@ func (d *esDatabase) Close() error {
 	}
 
 	return nil
-}
-
-type timedQuerier struct {
-	q querier
-
-	execTime  *atomic.Int64 // *time.Duration
-	queryTime *atomic.Int64 // *time.Duration
-
-	queryLogger logger.Logger
-}
-
-func accountTime(t *atomic.Int64, since time.Time) {
-	t.Add(time.Since(since).Nanoseconds())
-}
-
-func (tq timedQuerier) insert(ctx context.Context, idxName indexName, query *BulkIndexRequest) (*BulkIndexResult, int, error) {
-	defer accountTime(tq.execTime, time.Now())
-
-	if tq.queryLogger != nil {
-		tq.queryLogger.Info("bulk insert:\n%v", query.Reader())
-	}
-
-	return tq.q.insert(ctx, idxName, query)
-}
-
-func (tq timedQuerier) search(ctx context.Context, idxName indexName, request *SearchRequest) ([]map[string]interface{}, error) {
-	defer accountTime(tq.queryTime, time.Now())
-
-	if tq.queryLogger != nil {
-		tq.queryLogger.Info("search:\n%s", request.String())
-	}
-
-	return tq.q.search(ctx, idxName, request)
-}
-
-func (tq timedQuerier) count(ctx context.Context, idxName indexName, request *CountRequest) (int64, error) {
-	defer accountTime(tq.queryTime, time.Now())
-
-	if tq.queryLogger != nil {
-		tq.queryLogger.Info("count:\n%s", request.String())
-	}
-
-	return tq.q.count(ctx, idxName, request)
 }
 
 type dialect interface {

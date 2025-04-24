@@ -17,7 +17,6 @@ import (
 
 	"github.com/acronis/perfkit/db"
 	"github.com/acronis/perfkit/db/pgmbed"
-	"github.com/acronis/perfkit/logger"
 )
 
 func init() {
@@ -273,7 +272,7 @@ func postgresSchemaAndConnString(cs string) (string, string, error) {
 	return schemaName, cs, nil
 }
 
-func initializePostgresDB(cs string, logger logger.Logger) (string, dialect, error) {
+func initializePostgresDB(cs string, logger db.Logger) (string, dialect, error) {
 	var schemaName, cleanedConnectionString, err = postgresSchemaAndConnString(cs)
 	if err != nil {
 		return "", nil, fmt.Errorf("db: postgres: %v", err)
@@ -327,6 +326,7 @@ func (c *pgConnector) ConnectionPool(cfg db.Config) (db.Database, error) {
 	dbo.useTruncate = cfg.UseTruncate
 	dbo.queryStringInterpolation = cfg.QueryStringInterpolation
 	dbo.dryRun = cfg.DryRun
+	dbo.logTime = cfg.LogOperationsTime
 	dbo.queryLogger = cfg.QueryLogger
 	dbo.readRowsLogger = cfg.ReadRowsLogger
 	dbo.explainLogger = cfg.ExplainLogger

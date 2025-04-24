@@ -90,9 +90,11 @@ func NewTenantsCache(bench *benchmark.Benchmark) *TenantsCache {
 		bench.CommonOpts.RandSeed = time.Now().UnixNano()
 	}
 
-	bench.Randomizer.RegisterPlugin("tenant", tenantCache)
-	for _, worker := range bench.Workers {
-		worker.Randomizer.RegisterPlugin("tenant", tenantCache)
+	if bench.Randomizer != nil {
+		bench.Randomizer.RegisterPlugin("tenant", tenantCache)
+		for _, worker := range bench.Workers {
+			worker.Randomizer.RegisterPlugin("tenant", tenantCache)
+		}
 	}
 
 	return tenantCache
@@ -452,17 +454,20 @@ func (tc *TenantsCache) InitTables(database db.Database) {
 }
 
 // DropTables drops all tables created by this test
-func (tc *TenantsCache) DropTables(database db.Database) {
+func (tc *TenantsCache) DropTables(database db.Database) error {
 	tc.logger.Trace("drop tenant tables")
 
 	for _, table := range []string{TableNameTenants, TableNameTenantClosure, TableNameCtiEntities, TableNameCtiProvisioning} {
-		if droppedErr := database.DropTable(table); droppedErr != nil {
-			tc.logger.Error("error dropping table %s: %v", table, droppedErr)
+		if err := database.DropTable(table); err != nil {
+			return err
 		}
 	}
+
 	if database.UseTruncate() {
 		tc.InitTables(database)
 	}
+
+	return nil
 }
 
 // PopulateUuidsFromDB populates uuids from DB table acronis_db_bench_cybercache_tenants

@@ -145,3 +145,61 @@ func (suite *TestingSuite) TestSelect() {
 		}
 	}
 }
+
+// TestSelectOne tests the basic database connectivity by executing a "SELECT 1" query.
+// This is a common pattern used to verify that a database connection is alive
+// without relying on any specific tables or data structures.
+func (suite *TestingSuite) TestSelectOne() {
+	d, s, c := suite.makeTestSession()
+	defer logDbTime(suite.T(), c)
+	defer cleanup(suite.T(), d)
+
+	// Create a simple SelectCtrl that requests the literal value "1"
+	selectCtrl := &db.SelectCtrl{
+		Fields: []string{"1"},
+	}
+
+	// Execute the "SELECT 1" query
+	rows, err := s.Select("", selectCtrl)
+	if err != nil {
+		suite.T().Errorf("Failed to execute SELECT 1: %v", err)
+		return
+	}
+	defer rows.Close()
+
+	if d.DialectName() == db.CASSANDRA {
+		// Cassandra driver returns empty rows on SELECT 1
+		return
+	}
+
+	// Check if there's at least one row returned
+	if !rows.Next() {
+		suite.T().Error("No rows returned from SELECT 1 query")
+		return
+	}
+
+	// Scan the result
+	var result int
+	if err := rows.Scan(&result); err != nil {
+		suite.T().Errorf("Failed to scan result: %v", err)
+		return
+	}
+
+	// Verify the result is 1
+	if result != 1 {
+		suite.T().Errorf("Expected result to be 1, got %d", result)
+		return
+	}
+
+	// Check there are no more rows (should be only one)
+	if rows.Next() {
+		suite.T().Error("More than one row returned from SELECT 1 query")
+		return
+	}
+
+	// Check for any errors during iteration
+	if err := rows.Err(); err != nil {
+		suite.T().Errorf("Error during row iteration: %v", err)
+		return
+	}
+}

@@ -68,7 +68,7 @@ func createTables(b *benchmark.Benchmark) {
 }
 
 func DbConnector(b *benchmark.Benchmark) *DBConnector {
-	var conn, err = NewDBConnector(&b.TestOpts.(*TestOpts).DBOpts, -1, b.Logger, 1)
+	var conn, err = NewDBConnector(&b.TestOpts.(*TestOpts).DBOpts, -1, true, b.Logger, 1)
 	if err != nil {
 		FatalError(err.Error())
 	}
@@ -87,22 +87,35 @@ func CleanupTables(b *benchmark.Benchmark) {
 
 	fmt.Printf("cleaning up the test tables ... ")
 
-	c := DbConnector(b)
+	var c = DbConnector(b)
 
 	for tableName := range testRegistry.GetTables() {
-		c.Database.DropTable(tableName)
+		if err := c.Database.DropTable(tableName); err != nil {
+			b.Exit("failed drop table: %s", err)
+		}
 	}
 
 	if b.Vault.(*DBTestData).TenantsCache == nil {
 		b.Vault.(*DBTestData).TenantsCache = tenants.NewTenantsCache(b)
 	}
 
-	b.Vault.(*DBTestData).TenantsCache.DropTables(c.Database)
-	c.Database.DropSequence(SequenceName)
-	c.Release()
+	if err := b.Vault.(*DBTestData).TenantsCache.DropTables(c.Database); err != nil {
+		b.Exit("failed drop table: %s", err)
+	}
 
-	eb := events.NewEventBus(c.Database, b.Logger)
-	eb.DropTables()
+	if err := c.Database.DropSequence(SequenceName); err != nil {
+		b.Exit("failed drop sequence: %s", err)
+	}
+
+	if b.Vault.(*DBTestData).EventBus == nil {
+		b.Vault.(*DBTestData).EventBus = events.NewEventBus(c.Database, b.Logger)
+	}
+
+	if err := b.Vault.(*DBTestData).EventBus.DropTables(); err != nil {
+		b.Exit("failed drop table: %s", err)
+	}
+
+	c.Release()
 
 	fmt.Printf("done\n")
 }

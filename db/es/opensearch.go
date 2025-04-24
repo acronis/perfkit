@@ -95,17 +95,30 @@ func (c *openSearchConnector) ConnectionPool(cfg db.Config) (db.Database, error)
 		}
 	}
 
+	// Create the base transport
+	baseTransport := &http.Transport{
+		MaxIdleConnsPerHost:   cfg.MaxOpenConns,
+		ResponseHeaderTimeout: cfg.MaxConnLifetime,
+		DialContext:           (&net.Dialer{Timeout: cfg.MaxConnLifetime}).DialContext,
+		TLSClientConfig:       &tlsConfig,
+	}
+
+	// Wrap with logging transport if we have a logger
+	var transport http.RoundTripper = baseTransport
+	if cfg.QueryLogger != nil {
+		transport = &httpWrapperTransport{
+			transport:   baseTransport,
+			queryLogger: cfg.QueryLogger,
+			logTime:     cfg.LogOperationsTime,
+		}
+	}
+
 	var conf = opensearchapi.Config{
 		Client: opensearch.Config{
 			Addresses: adds,
-			Transport: &http.Transport{
-				MaxIdleConnsPerHost:   cfg.MaxOpenConns,
-				ResponseHeaderTimeout: cfg.MaxConnLifetime,
-				DialContext:           (&net.Dialer{Timeout: cfg.MaxConnLifetime}).DialContext,
-				TLSClientConfig:       &tlsConfig,
-			},
-			Username: username,
-			Password: password,
+			Transport: transport,
+			Username:  username,
+			Password:  password,
 		},
 	}
 
@@ -132,10 +145,11 @@ func (c *openSearchConnector) ConnectionPool(cfg db.Config) (db.Database, error)
 	var rw = &openSearchQuerier{client: openSearchClient}
 	var mig = &openSearchMigrator{client: openSearchClient, ismClient: ismClient}
 	return &esDatabase{
-		rw:          rw,
-		mig:         mig,
-		dialect:     &openSearchDialect{},
-		queryLogger: cfg.QueryLogger,
+		rw:             rw,
+		mig:            mig,
+		dialect:        &openSearchDialect{},
+		logTime:        cfg.LogOperationsTime,
+		readRowsLogger: cfg.ReadRowsLogger,
 	}, nil
 }
 
@@ -190,10 +204,16 @@ func (q *openSearchQuerier) search(ctx context.Context, idxName indexName, reque
 		return nil, fmt.Errorf("request encode error: %v", err)
 	}
 
+	var indices []string
+	if idxName != "" {
+		indices = []string{string(idxName)}
+	}
+
 	var resp, err = q.client.Search(ctx, &opensearchapi.SearchReq{
-		Indices: []string{string(idxName)},
+		Indices: indices,
 		Body:    &buf,
 	})
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to perform search: %v", err)
 	}
@@ -201,6 +221,10 @@ func (q *openSearchQuerier) search(ctx context.Context, idxName indexName, reque
 	var fields []map[string]interface{}
 	for _, hit := range resp.Hits.Hits {
 		var documentFields = make(map[string]interface{})
+		if len(hit.Fields) == 0 {
+			continue
+		}
+
 		if err = json.Unmarshal(hit.Fields, &documentFields); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal source: %v", err)
 		}

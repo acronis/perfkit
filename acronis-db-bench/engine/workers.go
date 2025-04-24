@@ -29,18 +29,8 @@ func initWorker(worker *benchmark.BenchmarkWorker, testDesc *TestDesc, rowsRequi
 		var workerData DBWorkerData
 		var err error
 
-		if workerData.workingConn, err = NewDBConnector(&b.TestOpts.(*TestOpts).DBOpts, workerID, worker.Logger, 1); err != nil {
+		if workerData.workingConn, err = NewDBConnector(&b.TestOpts.(*TestOpts).DBOpts, workerID, false, worker.Logger, 1); err != nil {
 			return
-		}
-
-		if b.TestOpts.(*TestOpts).BenchOpts.TenantConnString != "" {
-			var tenantCacheDBOpts = b.TestOpts.(*TestOpts).DBOpts
-			tenantCacheDBOpts.ConnString = b.TestOpts.(*TestOpts).BenchOpts.TenantConnString
-
-			if workerData.tenantsCache, err = NewDBConnector(&tenantCacheDBOpts, workerID, b.Logger, 1); err != nil {
-				workerData.release()
-				b.Exit("db: cannot create tenants cache connection: %v", err)
-			}
 		}
 
 		worker.Data = &workerData
@@ -101,17 +91,6 @@ func initWorker(worker *benchmark.BenchmarkWorker, testDesc *TestDesc, rowsRequi
 				}
 			}
 		}
-
-		var tenantCacheDatabase db.Database
-		if worker.Data.(*DBWorkerData).tenantsCache != nil {
-			tenantCacheDatabase = worker.Data.(*DBWorkerData).tenantsCache.Database
-		} else {
-			tenantCacheDatabase = conn.Database
-		}
-
-		if err := testData.TenantsCache.Init(tenantCacheDatabase); err != nil {
-			b.Exit("db: cannot initialize tenants cache: %v", err)
-		}
 	}
 	worker.Logger.Trace("worker is initialized")
 }
@@ -147,9 +126,6 @@ func initCommon(b *benchmark.Benchmark, testDesc *TestDesc, rowsRequired uint64)
 					if workerData, ok := worker.Data.(*DBWorkerData); ok {
 						if workerData.workingConn != nil {
 							workerData.workingConn.Close()
-						}
-						if workerData.tenantsCache != nil {
-							workerData.tenantsCache.Close()
 						}
 					}
 				}
