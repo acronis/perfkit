@@ -277,6 +277,8 @@ func Main() {
 			b.Log(logger.LevelTrace, 0, getDBInfo(b, content))
 		}
 
+		tenantCacheDatabase.Release()
+
 		if b.TestOpts.(*TestOpts).BenchOpts.Events {
 			var workingConn *DBConnector
 			if workingConn, err = NewDBConnector(&b.TestOpts.(*TestOpts).DBOpts, -1, true, b.Logger, 1); err != nil {
