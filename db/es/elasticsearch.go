@@ -314,12 +314,17 @@ func (q *esQuerier) search(ctx context.Context, idxName indexName, request *Sear
 		return nil, fmt.Errorf("request encode error: %v", err)
 	}
 
-	var res, err = q.es.Search(
-		q.es.Search.WithContext(ctx),
-		q.es.Search.WithIndex(string(idxName)),
-		q.es.Search.WithBody(&buf))
-	if err != nil {
-		return nil, fmt.Errorf("failed to perform search: %v", err)
+	var res *esapi.Response
+	var err error
+	if idxName != "" {
+		res, err = q.es.Search(
+			q.es.Search.WithContext(ctx),
+			q.es.Search.WithIndex(string(idxName)),
+			q.es.Search.WithBody(&buf))
+	} else {
+		res, err = q.es.Search(
+			q.es.Search.WithContext(ctx),
+			q.es.Search.WithBody(&buf))
 	}
 
 	// nolint: errcheck // Need to have logger here for deferred errors
