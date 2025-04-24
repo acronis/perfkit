@@ -106,16 +106,29 @@ func (c *esConnector) ConnectionPool(cfg db.Config) (db.Database, error) {
 		}
 	}
 
+	// Create the base transport
+	baseTransport := &http.Transport{
+		MaxIdleConnsPerHost:   cfg.MaxOpenConns,
+		ResponseHeaderTimeout: cfg.MaxConnLifetime,
+		DialContext:           (&net.Dialer{Timeout: cfg.MaxConnLifetime}).DialContext,
+		TLSClientConfig:       &tlsConfig,
+	}
+
+	// Wrap with logging transport if we have a logger
+	var transport http.RoundTripper = baseTransport
+	if cfg.QueryLogger != nil {
+		transport = &httpWrapperTransport{
+			transport:   baseTransport,
+			queryLogger: cfg.QueryLogger,
+			logTime:     cfg.LogOperationsTime,
+		}
+	}
+
 	var conf = es8.Config{
 		Addresses: adds,
-		Transport: &http.Transport{
-			MaxIdleConnsPerHost:   cfg.MaxOpenConns,
-			ResponseHeaderTimeout: cfg.MaxConnLifetime,
-			DialContext:           (&net.Dialer{Timeout: cfg.MaxConnLifetime}).DialContext,
-			TLSClientConfig:       &tlsConfig,
-		},
-		Username: username,
-		Password: password,
+		Transport: transport,
+		Username:  username,
+		Password:  password,
 	}
 
 	var es *es8.Client
@@ -139,7 +152,6 @@ func (c *esConnector) ConnectionPool(cfg db.Config) (db.Database, error) {
 		mig:            rw,
 		dialect:        &elasticSearchDialect{},
 		logTime:        cfg.LogOperationsTime,
-		queryLogger:    cfg.QueryLogger,
 		readRowsLogger: cfg.ReadRowsLogger,
 	}, nil
 }

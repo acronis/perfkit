@@ -48,7 +48,6 @@ type esDatabase struct {
 
 	logTime bool
 
-	queryLogger    db.Logger
 	readRowsLogger db.Logger
 }
 
@@ -146,11 +145,9 @@ func (d *esDatabase) Session(c *db.Context) db.Session {
 	return &esSession{
 		esGateway: esGateway{
 			q: wrappedQuerier{
-				q:           d.rw,
-				execTime:    c.ExecTime,
-				queryTime:   c.QueryTime,
-				queryLogger: d.queryLogger,
-				logTime:     d.logTime,
+				q:         d.rw,
+				execTime:  c.ExecTime,
+				queryTime: c.QueryTime,
 			},
 			ctx:            c,
 			logTime:        d.logTime,
