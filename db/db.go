@@ -1766,6 +1766,15 @@ type Recommendation struct {
 	RecommendedVal int64
 }
 
+// BadInputError Special error indicating bad user input as opposed to a database error
+type BadInputError struct {
+	Details error
+}
+
+func (bi BadInputError) Error() string {
+	return bi.Details.Error()
+}
+
 // DBType - database type
 type DBType struct {
 	Driver DialectName // driver name (used in the code)

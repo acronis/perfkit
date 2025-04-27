@@ -331,6 +331,10 @@ func ParseScheme(s string) (scheme string, uri string, err error) {
 	return parts[0], parts[1], nil
 }
 
+func FormatTimeStamp(timestamp time.Time) string {
+	return fmt.Sprintf("%vns", timestamp.UTC().UnixNano())
+}
+
 // Cond represents a condition
 type Cond struct {
 	Col  string
