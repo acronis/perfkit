@@ -253,6 +253,7 @@ func (c *cassandraConnector) ConnectionPool(cfg db.Config) (db.Database, error) 
 	rwc.SetMaxIdleConns(maxConn)
 
 	dbo.dialect = &cassandraDialect{keySpace: keySpace}
+	dbo.qbs = newDefaultQueryBuildersFactory()
 	dbo.useTruncate = cfg.UseTruncate
 	dbo.queryStringInterpolation = cfg.QueryStringInterpolation
 	dbo.dryRun = cfg.DryRun

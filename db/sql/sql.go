@@ -154,6 +154,8 @@ type sqlDatabase struct {
 	t       transactor
 	dialect dialect
 
+	qbs queryBuilderFactory
+
 	useTruncate              bool
 	queryStringInterpolation bool
 	dryRun                   bool
@@ -233,7 +235,7 @@ func (d *sqlDatabase) TableExists(tableName string) (bool, error) {
 
 func (d *sqlDatabase) CreateTable(tableName string, tableDefinition *db.TableDefinition, tableMigrationDDL string) error {
 	return inTx(context.Background(), d.systemTransactor(), d.dialect, func(q querier, dia dialect) error {
-		return createTable(q, dia, tableName, tableDefinition, tableMigrationDDL)
+		return createTable(q, dia, d.qbs, tableName, tableDefinition, tableMigrationDDL)
 	})
 }
 
@@ -409,6 +411,12 @@ type dialect interface {
 	recommendations() []db.Recommendation
 	// close cleans up any dialect-specific resources
 	close() error
+}
+
+// queryBuilderFactory defines the interface for creating query builders
+type queryBuilderFactory interface {
+	// newSelectQueryBuilder creates a new select query builder
+	newSelectQueryBuilder(tableName string, queryable map[string]filterFunction) selectQueryBuilder
 }
 
 // sanitizeConn removes sensitive information from connection string

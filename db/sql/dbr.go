@@ -145,6 +145,7 @@ func (c *dbrConnector) ConnectionPool(cfg db.Config) (db.Database, error) {
 	}
 
 	dbo.dialect = dia
+	dbo.qbs = newDefaultQueryBuildersFactory()
 	dbo.useTruncate = cfg.UseTruncate
 	dbo.queryStringInterpolation = cfg.QueryStringInterpolation
 	dbo.dryRun = cfg.DryRun

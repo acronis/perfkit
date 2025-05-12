@@ -254,6 +254,7 @@ func (c *sqliteConnector) ConnectionPool(cfg db.Config) (db.Database, error) {
 	rwc.SetMaxIdleConns(cfg.MaxOpenConns)
 
 	dbo.dialect = &dia
+	dbo.qbs = newDefaultQueryBuildersFactory()
 	dbo.useTruncate = cfg.UseTruncate
 	dbo.queryStringInterpolation = cfg.QueryStringInterpolation
 	dbo.dryRun = cfg.DryRun

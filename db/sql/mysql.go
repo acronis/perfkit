@@ -333,6 +333,7 @@ func (c *mysqlConnector) ConnectionPool(cfg db.Config) (db.Database, error) {
 	}
 
 	dbo.dialect = &mysqlDialect{}
+	dbo.qbs = newDefaultQueryBuildersFactory()
 	dbo.useTruncate = cfg.UseTruncate
 	dbo.queryStringInterpolation = cfg.QueryStringInterpolation
 	dbo.dryRun = cfg.DryRun

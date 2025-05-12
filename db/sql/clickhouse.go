@@ -233,6 +233,7 @@ func (c *clickhouseConnector) ConnectionPool(cfg db.Config) (db.Database, error)
 	}
 
 	dbo.dialect = &clickHouseDialect{}
+	dbo.qbs = newDefaultQueryBuildersFactory()
 	dbo.useTruncate = cfg.UseTruncate
 	dbo.queryStringInterpolation = cfg.QueryStringInterpolation
 	dbo.dryRun = cfg.DryRun
