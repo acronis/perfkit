@@ -76,24 +76,24 @@ func (r *dbrEventReceiver) TimingKv(eventName string, nanoseconds int64, kvs map
 	r.queries = append(r.queries, dbrQuery{query: kvs["sql"], duration: float64(nanoseconds) / 1000000000.0})
 }
 
-func dialectFromDbrScheme(scheme string) (string, dialect, error) {
+func dialectFromDbrScheme(scheme string, path string) (string, string, dialect, error) {
 	const schemeSeparator = "+"
 	parts := strings.Split(scheme, schemeSeparator)
 	if len(parts) != 2 {
-		return "", nil, fmt.Errorf("'%s' is invalid scheme separator", schemeSeparator)
+		return "", "", nil, fmt.Errorf("'%s' is invalid scheme separator", schemeSeparator)
 	}
 
 	switch parts[0] {
 	case "sqlite":
-		return "sqlite", &sqliteDialect{}, nil
+		return "sqlite3", path, &sqliteDialect{}, nil
 	case "mysql":
-		return "mysql", &mysqlDialect{}, nil
+		return "mysql", path, &mysqlDialect{}, nil
 	case "postgres":
-		return "postgres", &pgDialect{}, nil
+		return "postgres", fmt.Sprintf("%s://%s", "postgres", path), &pgDialect{standardArgumentPlaceholder: true}, nil
 	case "mssql":
-		return "mssql", &msDialect{}, nil
+		return "mssql", fmt.Sprintf("%s://%s", "sqlserver", path), &msDialect{standardArgumentPlaceholder: true}, nil
 	default:
-		return "", nil, fmt.Errorf("'%s' is unsupported dialect", parts[0])
+		return "", "", nil, fmt.Errorf("'%s' is unsupported dialect", parts[0])
 	}
 }
 
@@ -110,23 +110,23 @@ func (c *dbrConnector) ConnectionPool(cfg db.Config) (db.Database, error) {
 
 	var driver string
 	var dia dialect
-	if driver, dia, err = dialectFromDbrScheme(scheme); err != nil {
+	if driver, cs, dia, err = dialectFromDbrScheme(scheme, cs); err != nil {
 		return nil, fmt.Errorf("db: cannot parse dbr db path, err: %v", err)
 	}
 
 	if dia.name() == db.POSTGRES {
-		cs, dia, err = initializePostgresDB(cfg.ConnString, cfg.SystemLogger)
+		cs, dia, err = initializePostgresDB(cs, cfg.SystemLogger)
 		if err != nil {
 			return nil, err
 		}
 	}
 
 	if rwc, err = dbr.Open(driver, cs, &dbrEventReceiver{queryLogger: cfg.QueryLogger, exitOnError: true, queries: []dbrQuery{}}); err != nil {
-		return nil, fmt.Errorf("db: cannot connect to mysql db at %v, err: %v", sanitizeConn(cfg.ConnString), err)
+		return nil, fmt.Errorf("db: cannot connect to dbr sql db at %v, err: %v", sanitizeConn(cfg.ConnString), err)
 	}
 
 	if err = rwc.Ping(); err != nil {
-		return nil, fmt.Errorf("db: failed ping mysql db at %v, err: %v", sanitizeConn(cfg.ConnString), err)
+		return nil, fmt.Errorf("db: failed ping dbr sql db at %v, err: %v", sanitizeConn(cfg.ConnString), err)
 	}
 
 	var sess = rwc.NewSession(nil)
@@ -145,13 +145,19 @@ func (c *dbrConnector) ConnectionPool(cfg db.Config) (db.Database, error) {
 	}
 
 	dbo.dialect = dia
+	dbo.useTruncate = cfg.UseTruncate
+	dbo.queryStringInterpolation = cfg.QueryStringInterpolation
+	dbo.dryRun = cfg.DryRun
+	dbo.logTime = cfg.LogOperationsTime
 	dbo.queryLogger = cfg.QueryLogger
+	dbo.readRowsLogger = cfg.ReadRowsLogger
+	dbo.explainLogger = cfg.ExplainLogger
 
 	return dbo, nil
 }
 
 func (c *dbrConnector) DialectName(scheme string) (db.DialectName, error) {
-	var driver, _, err = dialectFromDbrScheme(scheme)
+	var driver, _, _, err = dialectFromDbrScheme(scheme, "")
 	if err != nil {
 		return "", nil
 	}
