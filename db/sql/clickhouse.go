@@ -26,6 +26,10 @@ func (d *clickHouseDialect) name() db.DialectName {
 	return db.CLICKHOUSE
 }
 
+func (d *clickHouseDialect) argumentPlaceholder(index int) string {
+	return "?"
+}
+
 func (d *clickHouseDialect) encodeString(s string) string {
 	// borrowed from dbr
 	// http://www.postgresql.org/docs/9.2/static/sql-syntax-lexical.html

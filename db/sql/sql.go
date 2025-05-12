@@ -375,6 +375,8 @@ func (d *sqlDatabase) Close() error {
 type dialect interface {
 	// name returns the dialect name
 	name() db.DialectName
+	// argumentPlaceholder returns the placeholder for query arguments
+	argumentPlaceholder(index int) string
 	// encodeString converts a string to dialect-specific format
 	encodeString(s string) string
 	// encodeUUID converts a UUID to dialect-specific format

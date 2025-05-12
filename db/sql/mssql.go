@@ -23,10 +23,20 @@ func init() {
 	}
 }
 
-type msDialect struct{}
+type msDialect struct {
+	standardArgumentPlaceholder bool
+}
 
 func (d *msDialect) name() db.DialectName {
 	return db.MSSQL
+}
+
+func (d *msDialect) argumentPlaceholder(index int) string {
+	if d.standardArgumentPlaceholder {
+		return "?"
+	} else {
+		return fmt.Sprintf("@p%d", index+1)
+	}
 }
 
 func (d *msDialect) encodeString(s string) string {

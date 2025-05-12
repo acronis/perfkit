@@ -30,6 +30,10 @@ func (d *cassandraDialect) name() db.DialectName {
 	return db.CASSANDRA
 }
 
+func (d *cassandraDialect) argumentPlaceholder(index int) string {
+	return "?"
+}
+
 func (d *cassandraDialect) encodeString(s string) string {
 	// borrowed from dbr
 	// http://www.postgresql.org/docs/9.2/static/sql-syntax-lexical.html

@@ -28,6 +28,10 @@ func (d *sqliteDialect) name() db.DialectName {
 	return db.SQLITE
 }
 
+func (d *sqliteDialect) argumentPlaceholder(index int) string {
+	return "?"
+}
+
 func (d *sqliteDialect) encodeString(s string) string {
 	// borrowed from dbr
 	// https://www.sqlite.org/faq.html
