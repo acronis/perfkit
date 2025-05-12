@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/gocraft/dbr/v2"
+	dbrdialect "github.com/gocraft/dbr/v2/dialect"
 
 	"github.com/acronis/perfkit/db"
 )
@@ -145,7 +146,7 @@ func (c *dbrConnector) ConnectionPool(cfg db.Config) (db.Database, error) {
 	}
 
 	dbo.dialect = dia
-	dbo.qbs = newDefaultQueryBuildersFactory()
+	dbo.qbs = newDBRQueryBuildersFactory(sess)
 	dbo.useTruncate = cfg.UseTruncate
 	dbo.queryStringInterpolation = cfg.QueryStringInterpolation
 	dbo.dryRun = cfg.DryRun
@@ -195,6 +196,188 @@ func (c *dbrConnector) FlushLogs(result interface{}) {
 	er.queries = []dbrQuery{}
 }
 */
+
+type dbrQueryBuildersFactory struct {
+	sess *dbr.Session // only for building queries
+}
+
+func newDBRQueryBuildersFactory(sess *dbr.Session) queryBuilderFactory {
+	return &dbrQueryBuildersFactory{sess: sess}
+}
+
+func (queryBuildersFactory *dbrQueryBuildersFactory) newSelectQueryBuilder(tableName string, queryable map[string]filterFunction) selectQueryBuilder {
+	return &dbrSelectBuilder{
+		sess:      queryBuildersFactory.sess,
+		tableName: tableName,
+		queryable: queryable,
+	}
+}
+
+type dbrSelectBuilder struct {
+	sess      *dbr.Session              // only for building queries
+	tableName string                    // Name of the table being queried
+	queryable map[string]filterFunction // Maps column names to their filter functions
+}
+
+func dbrSqlConditions(sb *dbrSelectBuilder, stmt *dbr.SelectStmt, d dialect, c *db.SelectCtrl) (*dbr.SelectStmt, bool, error) {
+	if len(c.Where) == 0 {
+		return stmt, false, nil
+	}
+
+	for _, field := range db.SortFields(c.Where) {
+		if field.Col == "" {
+			return nil, false, fmt.Errorf("empty condition field")
+		}
+
+		condgen, ok := sb.queryable[field.Col]
+		if !ok {
+			return nil, false, fmt.Errorf("bad condition field '%v'", field.Col)
+		}
+
+		if len(field.Vals) == 1 {
+			// Handle special cases
+			if field.Vals[0] == db.SpecialConditionIsNull {
+				stmt = stmt.Where(fmt.Sprintf("%v.%v IS NULL", sb.tableName, field.Col))
+				continue
+			}
+			if field.Vals[0] == db.SpecialConditionIsNotNull {
+				stmt = stmt.Where(fmt.Sprintf("%v.%v IS NOT NULL", sb.tableName, field.Col))
+				continue
+			}
+		}
+
+		var fieldName string
+		fieldName = fmt.Sprintf("%v.%v", sb.tableName, field.Col)
+
+		fmts, args, err := condgen(d, c.OptimizeConditions, fieldName, field.Vals)
+		if err != nil {
+			return nil, false, err
+		}
+
+		if fmts == nil {
+			continue
+		}
+
+		if len(fmts) != len(args) {
+			return nil, false, fmt.Errorf("number of args %d doesn't match number of conditions %d", len(args), len(fmts))
+		}
+
+		for i := range fmts {
+			stmt = stmt.Where(sqlf(d, fmts[i], args[i]))
+		}
+	}
+
+	return stmt, false, nil
+}
+
+func dbrSqlOrder(sb *dbrSelectBuilder, stmt *dbr.SelectStmt, d dialect, c *db.SelectCtrl) (*dbr.SelectStmt, error) {
+	if len(c.Order) == 0 {
+		return stmt, nil
+	}
+
+	for _, v := range c.Order {
+		fnc, args, err := db.ParseFuncMultipleArgs(v, ";")
+		if err != nil {
+			return nil, err
+		}
+
+		if len(args) == 0 {
+			return nil, fmt.Errorf("empty order field")
+		}
+
+		var dir string
+		switch fnc {
+		case "asc":
+			dir = "ASC"
+		case "desc":
+			dir = "DESC"
+		case "nearest":
+			dir = "NEAREST"
+		case "":
+			return nil, fmt.Errorf("empty order function")
+		default:
+			return nil, fmt.Errorf("bad order function '%v'", fnc)
+		}
+
+		if dir == "ASC" || dir == "DESC" {
+			if len(args) != 1 {
+				return nil, fmt.Errorf("number of args %d doesn't match number of conditions 1", len(args))
+			}
+			stmt = stmt.OrderBy(fmt.Sprintf("%v.%v %v", sb.tableName, args[0], dir))
+		} else if dir == "NEAREST" {
+			if len(args) != 3 {
+				return nil, fmt.Errorf("number of args %d doesn't match number of conditions for nearest function, should be 3", len(args))
+			}
+			orderStatement := d.encodeOrderByVector(args[0], args[1], args[2])
+			stmt = stmt.OrderBy(orderStatement)
+		}
+	}
+
+	return stmt, nil
+}
+
+func (sb *dbrSelectBuilder) sql(d dialect, c *db.SelectCtrl) (string, bool, error) {
+	var stmt = sb.sess.Select(c.Fields...)
+
+	if sb.tableName == "" {
+		var buf = dbr.NewBuffer()
+
+		// If no table name is provided, build a simple SELECT statement
+		// Taken PostgreSQL dialect as an default
+		if err := stmt.Build(dbrdialect.PostgreSQL, buf); err != nil {
+			return "", false, fmt.Errorf("failed to build query: %w", err)
+		}
+
+		return buf.String(), false, nil
+	}
+
+	// Add FROM clause
+	stmt = stmt.From(d.table(sb.tableName))
+
+	// Add WHERE conditions
+	var empty bool
+	var err error
+	stmt, empty, err = dbrSqlConditions(sb, stmt, d, c)
+	if err != nil {
+		return "", false, err
+	}
+
+	if empty {
+		return "", true, nil
+	}
+
+	// Add ORDER BY
+	stmt, err = dbrSqlOrder(sb, stmt, d, c)
+	if err != nil {
+		return "", false, err
+	}
+
+	// Add LIMIT and OFFSET
+	if c.Page.Limit > 0 {
+		stmt = stmt.Offset(uint64(c.Page.Offset)).Limit(uint64(c.Page.Limit))
+	}
+
+	// Convert dialect to dbr dialect
+	var dbrDialect dbr.Dialect
+	switch d.name() {
+	case db.POSTGRES:
+		dbrDialect = dbrdialect.PostgreSQL
+	case db.MYSQL:
+		dbrDialect = dbrdialect.MySQL
+	case db.MSSQL:
+		dbrDialect = dbrdialect.MSSQL
+	default:
+		dbrDialect = dbrdialect.PostgreSQL // Default to PostgreSQL if unknown
+	}
+
+	var buf = dbr.NewBuffer()
+
+	if err := stmt.Build(dbrDialect, buf); err != nil {
+		return "", false, fmt.Errorf("failed to build query: %w", err)
+	}
+
+	return buf.String(), false, nil
+}
 
 type dbrQuerier struct {
 	be *dbr.Session
