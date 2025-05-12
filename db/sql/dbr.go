@@ -360,6 +360,8 @@ func (sb *dbrSelectBuilder) sql(d dialect, c *db.SelectCtrl) (string, bool, erro
 	// Convert dialect to dbr dialect
 	var dbrDialect dbr.Dialect
 	switch d.name() {
+	case db.SQLITE:
+		dbrDialect = dbrdialect.SQLite3
 	case db.POSTGRES:
 		dbrDialect = dbrdialect.PostgreSQL
 	case db.MYSQL:
