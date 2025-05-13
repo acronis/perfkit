@@ -423,6 +423,8 @@ type queryBuilderFactory interface {
 	newSelectQueryBuilder(tableName string, queryable map[string]filterFunction) selectQueryBuilder
 	// newInsertQueryBuilder creates a new insert query builder
 	newInsertQueryBuilder(tableName string) insertQueryBuilder
+	// newUpdateQueryBuilder creates a new update query builder
+	newUpdateQueryBuilder(tableName string, queryable map[string]filterFunction) updateQueryBuilder
 }
 
 // sanitizeConn removes sensitive information from connection string

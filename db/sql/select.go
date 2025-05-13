@@ -72,8 +72,14 @@ func createSelectQueryBuilder(queryBuilders queryBuilderFactory, tableName strin
 	// Create new builder with table name and set of queryable columns
 	var queryBuilder = queryBuilders.newSelectQueryBuilder(tableName, queryable)
 
-	// Cache the builder for future use
+	// Create new update query builder with table name and set of queryable columns
+	var updQueryBuilder = queryBuilders.newUpdateQueryBuilder(tableName, queryable)
+
+	// Cache select builder for future use
 	tableQueryBuilders[tableName] = queryBuilder
+
+	// Cache update query builder for future use
+	updateQueryBuilders[tableName] = updQueryBuilder
 
 	return nil
 }
@@ -218,7 +224,7 @@ func (b selectBuilder) sqlSelectionAlias(fields []string, alias string) (string,
 // - optimizeConditions: whether to use optimized condition building
 // - fields: map of column names to filter values
 // Returns WHERE clause, arguments, and error
-func (b selectBuilder) sqlConditions(d dialect, optimizeConditions bool, fields map[string][]string) (string, []interface{}, bool, error) {
+func sqlConditions(d dialect, tableName string, queryable map[string]filterFunction, optimizeConditions bool, fields map[string][]string) (string, []interface{}, bool, error) {
 	var fmtString = ""
 	var fmtArgs []interface{}
 
@@ -239,7 +245,7 @@ func (b selectBuilder) sqlConditions(d dialect, optimizeConditions bool, fields 
 			return "", nil, false, fmt.Errorf("empty condition field")
 		}
 
-		condgen, ok := b.queryable[c.Col]
+		condgen, ok := queryable[c.Col]
 		if !ok {
 			return "", nil, false, fmt.Errorf("bad condition field '%v'", c.Col)
 		}
@@ -247,11 +253,11 @@ func (b selectBuilder) sqlConditions(d dialect, optimizeConditions bool, fields 
 		if len(c.Vals) == 1 {
 			// generic special cases
 			if c.Vals[0] == db.SpecialConditionIsNull {
-				addFmt(fmt.Sprintf("%v.%v IS %%v", b.tableName, c.Col), sql.NullString{})
+				addFmt(fmt.Sprintf("%v.%v IS %%v", tableName, c.Col), sql.NullString{})
 				continue
 			}
 			if c.Vals[0] == db.SpecialConditionIsNotNull {
-				addFmt(fmt.Sprintf("%v.%v IS NOT %%v", b.tableName, c.Col), sql.NullString{})
+				addFmt(fmt.Sprintf("%v.%v IS NOT %%v", tableName, c.Col), sql.NullString{})
 				continue
 			}
 		}
@@ -260,7 +266,7 @@ func (b selectBuilder) sqlConditions(d dialect, optimizeConditions bool, fields 
 		if d.name() == db.CASSANDRA {
 			fieldName = c.Col
 		} else {
-			fieldName = fmt.Sprintf("%v.%v", b.tableName, c.Col)
+			fieldName = fmt.Sprintf("%v.%v", tableName, c.Col)
 		}
 
 		fmts, args, err := condgen(d, optimizeConditions, fieldName, c.Vals)
@@ -387,7 +393,7 @@ func (b selectBuilder) sql(d dialect, c *db.SelectCtrl) (string, bool, error) {
 		return selectWhat, false, nil
 	}
 
-	if where, args, empty, err = b.sqlConditions(d, c.OptimizeConditions, c.Where); err != nil {
+	if where, args, empty, err = sqlConditions(d, b.tableName, b.queryable, c.OptimizeConditions, c.Where); err != nil {
 		return "", false, err
 	}
 

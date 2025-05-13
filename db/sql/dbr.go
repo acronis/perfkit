@@ -164,6 +164,13 @@ func (queryBuildersFactory *dbrQueryBuildersFactory) newInsertQueryBuilder(table
 	}
 }
 
+func (queryBuildersFactory *dbrQueryBuildersFactory) newUpdateQueryBuilder(tableName string, queryable map[string]filterFunction) updateQueryBuilder {
+	return &updateBuilder{
+		tableName: tableName,
+		queryable: queryable,
+	}
+}
+
 type dbrSelectBuilder struct {
 	sess      *dbr.Session              // only for building queries
 	tableName string                    // Name of the table being queried
