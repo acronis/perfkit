@@ -323,6 +323,22 @@ func dbrSqlOrder(sb *dbrSelectBuilder, stmt *dbr.SelectStmt, d dialect, c *db.Se
 	return stmt, nil
 }
 
+// convertToDbrDialect converts internal dialect to dbr dialect
+func convertToDbrDialect(d dialect) dbr.Dialect {
+	switch d.name() {
+	case db.SQLITE:
+		return dbrdialect.SQLite3
+	case db.POSTGRES:
+		return dbrdialect.PostgreSQL
+	case db.MYSQL:
+		return dbrdialect.MySQL
+	case db.MSSQL:
+		return dbrdialect.MSSQL
+	default:
+		return dbrdialect.PostgreSQL // Default to PostgreSQL if unknown
+	}
+}
+
 func (sb *dbrSelectBuilder) sql(d dialect, c *db.SelectCtrl) (string, bool, error) {
 	var stmt = sb.sess.Select(c.Fields...)
 
@@ -364,24 +380,9 @@ func (sb *dbrSelectBuilder) sql(d dialect, c *db.SelectCtrl) (string, bool, erro
 		stmt = stmt.Offset(uint64(c.Page.Offset)).Limit(uint64(c.Page.Limit))
 	}
 
-	// Convert dialect to dbr dialect
-	var dbrDialect dbr.Dialect
-	switch d.name() {
-	case db.SQLITE:
-		dbrDialect = dbrdialect.SQLite3
-	case db.POSTGRES:
-		dbrDialect = dbrdialect.PostgreSQL
-	case db.MYSQL:
-		dbrDialect = dbrdialect.MySQL
-	case db.MSSQL:
-		dbrDialect = dbrdialect.MSSQL
-	default:
-		dbrDialect = dbrdialect.PostgreSQL // Default to PostgreSQL if unknown
-	}
-
 	var buf = dbr.NewBuffer()
 
-	if err := stmt.Build(dbrDialect, buf); err != nil {
+	if err := stmt.Build(convertToDbrDialect(d), buf); err != nil {
 		return "", false, fmt.Errorf("failed to build query: %w", err)
 	}
 
@@ -424,24 +425,9 @@ func (ib *dbrInsertBuilder) sql(d dialect, rows [][]interface{}, columnNames []s
 		stmt = stmt.Values(row...)
 	}
 
-	// Convert dialect to dbr dialect
-	var dbrDialect dbr.Dialect
-	switch d.name() {
-	case db.SQLITE:
-		dbrDialect = dbrdialect.SQLite3
-	case db.POSTGRES:
-		dbrDialect = dbrdialect.PostgreSQL
-	case db.MYSQL:
-		dbrDialect = dbrdialect.MySQL
-	case db.MSSQL:
-		dbrDialect = dbrdialect.MSSQL
-	default:
-		dbrDialect = dbrdialect.PostgreSQL // Default to PostgreSQL if unknown
-	}
-
 	// Build the query
 	var buf = dbr.NewBuffer()
-	if err := stmt.Build(dbrDialect, buf); err != nil {
+	if err := stmt.Build(convertToDbrDialect(d), buf); err != nil {
 		return "", nil, fmt.Errorf("failed to build query: %w", err)
 	}
 
