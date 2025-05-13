@@ -173,10 +173,6 @@ func TestSelectRun(
 
 	batch := b.Vault.(*DBTestData).EffectiveBatch
 
-	type row struct {
-		ID int64 `db:"id"`
-	}
-
 	b.WorkerRunFunc = func(worker *benchmark.BenchmarkWorker) (loops int) {
 		b := worker.Benchmark
 		c := worker.Data.(*DBWorkerData).workingConn
@@ -194,34 +190,6 @@ func TestSelectRun(
 		var orderBy []string
 		if orderByFunc != nil {
 			orderBy = orderByFunc(worker)
-		}
-
-		if testDesc.IsDBRTest {
-			if rawSession, casted := c.Database.RawSession().(*dbr.Session); casted {
-				var rows []row
-				if explain {
-					b.Exit("sorry, the 'explain' mode is not supported for DBR SELECT yet")
-				}
-
-				var q = rawSession.Select("*").From(from).Where("id = ?", 1).Limit(uint64(batch))
-
-				/*
-					if orderBy != "" {
-						q = q.OrderBy(orderBy)
-					}
-
-					if where != "" {
-						q = q.Where(where)
-					}
-				*/
-
-				_, err := q.Load(rows)
-				if err != nil {
-					c.Exit("DBRSelect load error: %v: from: %s, what: %s, orderBy: %s, limit: %d", err, from, what, orderBy, batch)
-				}
-
-				return batch
-			}
 		}
 
 		var session = c.Database.Session(c.Database.Context(context.Background(), explain))

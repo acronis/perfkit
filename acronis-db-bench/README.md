@@ -279,10 +279,6 @@ Acronis Database Benchmark: version v1-main-dev
 
   -- Golang DBR query builder tests -----------------------------------------------------------------------------------------------
 
-  dbr-select-heavy-last                   : [PMWS----] : select last row from the 'heavy' table using golang DBR driver
-  dbr-select-heavy-rand                   : [PMWS----] : select random row from the 'heavy' table using golang DBR query builder
-  dbr-select-medium-last                  : [PMWS----] : select last row from the 'medium' table with few columns and 1 index
-  dbr-select-medium-rand                  : [PMWS----] : select random row from the 'medium' table using golang DBR query builder
   dbr-update-heavy                        : [PMWS----] : update random row in the 'heavy' table using golang DB driver
   dbr-update-medium                       : [PMWS----] : update random row in the 'medium' table using golang DB driver
 

@@ -168,23 +168,6 @@ var TestSelectMediumLast = engine.TestDesc{
 	},
 }
 
-// TestSelectMediumLastDBR tests select last row from the 'medium' table with few columns and 1 index using golang DBR query builder
-var TestSelectMediumLastDBR = engine.TestDesc{
-	Name:        "dbr-select-medium-last",
-	Metric:      "rows/sec",
-	Description: "select last row from the 'medium' table with few columns and 1 index",
-	Category:    engine.TestSelect,
-	IsReadonly:  true,
-	IsDBRTest:   true,
-	Databases:   engine.RELATIONAL,
-	Table:       TestTableMedium,
-	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
-		var idToRead int64
-		var orderBy = func(worker *benchmark.BenchmarkWorker) []string { return []string{"desc(id)"} } //nolint:revive
-		engine.TestSelectRun(b, testDesc, nil, []string{"id"}, []interface{}{&idToRead}, nil, orderBy, 1)
-	},
-}
-
 // TestSelectMediumRand selects random row from the 'medium' table with few columns and 1 index
 var TestSelectMediumRand = engine.TestDesc{
 	Name:        "select-medium-rand",
@@ -208,32 +191,6 @@ var TestSelectMediumRand = engine.TestDesc{
 			return []string{"asc(id)"}
 		}
 
-		engine.TestSelectRun(b, testDesc, nil, []string{"id"}, []interface{}{&idToRead}, where, orderBy, 1)
-	},
-}
-
-// TestSelectMediumRandDBR selects random row from the 'medium' table using golang DBR query builder
-var TestSelectMediumRandDBR = engine.TestDesc{
-	Name:        "dbr-select-medium-rand",
-	Metric:      "rows/sec",
-	Description: "select random row from the 'medium' table using golang DBR query builder",
-	Category:    engine.TestSelect,
-	IsReadonly:  true,
-	IsDBRTest:   true,
-	Databases:   engine.RELATIONAL,
-	Table:       TestTableMedium,
-	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
-		var idToRead int64
-
-		var where = func(worker *benchmark.BenchmarkWorker) map[string][]string {
-			var id = worker.Randomizer.Uintn64(testDesc.Table.RowsCount - 1)
-
-			return map[string][]string{"id": {fmt.Sprintf("gt(%d)", id)}}
-		}
-
-		var orderBy = func(worker *benchmark.BenchmarkWorker) []string { //nolint:revive
-			return []string{"asc(id)"}
-		}
 		engine.TestSelectRun(b, testDesc, nil, []string{"id"}, []interface{}{&idToRead}, where, orderBy, 1)
 	},
 }

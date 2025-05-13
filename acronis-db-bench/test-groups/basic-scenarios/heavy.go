@@ -461,23 +461,6 @@ var TestSelectHeavyLast = engine.TestDesc{
 	},
 }
 
-// TestSelectHeavyLastDBR selects last row from the 'heavy' table using golang DBR driver
-var TestSelectHeavyLastDBR = engine.TestDesc{
-	Name:        "dbr-select-heavy-last",
-	Metric:      "rows/sec",
-	Description: "select last row from the 'heavy' table using golang DBR driver",
-	Category:    engine.TestSelect,
-	IsReadonly:  true,
-	IsDBRTest:   true,
-	Databases:   engine.RELATIONAL,
-	Table:       TestTableHeavy,
-	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
-		var idToRead int64
-		var orderBy = func(worker *benchmark.BenchmarkWorker) []string { return []string{"desc(id)"} } //nolint:revive
-		engine.TestSelectRun(b, testDesc, nil, []string{"id"}, []interface{}{&idToRead}, nil, orderBy, 1)
-	},
-}
-
 // TestSelectHeavyRand selects random row from the 'heavy' table
 var TestSelectHeavyRand = engine.TestDesc{
 	Name:        "select-heavy-rand",
@@ -486,32 +469,6 @@ var TestSelectHeavyRand = engine.TestDesc{
 	Category:    engine.TestSelect,
 	IsReadonly:  true,
 	IsDBRTest:   false,
-	Databases:   engine.RELATIONAL,
-	Table:       TestTableHeavy,
-	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
-		var idToRead int64
-
-		var where = func(worker *benchmark.BenchmarkWorker) map[string][]string {
-			id := worker.Randomizer.Uintn64(testDesc.Table.RowsCount - 1)
-
-			return map[string][]string{"id": {fmt.Sprintf("gt(%d)", id)}}
-		}
-
-		var orderBy = func(worker *benchmark.BenchmarkWorker) []string { //nolint:revive
-			return []string{"asc(id)"}
-		}
-		engine.TestSelectRun(b, testDesc, nil, []string{"id"}, []interface{}{&idToRead}, where, orderBy, 1)
-	},
-}
-
-// TestSelectHeavyRandDBR selects random row from the 'heavy' table using golang DBR query builder
-var TestSelectHeavyRandDBR = engine.TestDesc{
-	Name:        "dbr-select-heavy-rand",
-	Metric:      "rows/sec",
-	Description: "select random row from the 'heavy' table using golang DBR query builder",
-	Category:    engine.TestSelect,
-	IsReadonly:  true,
-	IsDBRTest:   true,
 	Databases:   engine.RELATIONAL,
 	Table:       TestTableHeavy,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
