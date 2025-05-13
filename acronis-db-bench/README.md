@@ -279,10 +279,6 @@ Acronis Database Benchmark: version v1-main-dev
 
   -- Golang DBR query builder tests -----------------------------------------------------------------------------------------------
 
-  dbr-insert-heavy                        : [PMWS----] : insert a row into the 'heavy' table using golang DB query builder
-  dbr-insert-json                         : [PMWS----] : insert a row into a table with JSON(b) column using golang DBR driver
-  dbr-insert-light                        : [PMWS----] : insert a row into the 'light' table using goland DBR query builder
-  dbr-insert-medium                       : [PMWS----] : insert a row into the 'medium' table using goland DBR query builder
   dbr-select-heavy-last                   : [PMWS----] : select last row from the 'heavy' table using golang DBR driver
   dbr-select-heavy-rand                   : [PMWS----] : select random row from the 'heavy' table using golang DBR query builder
   dbr-select-medium-last                  : [PMWS----] : select last row from the 'medium' table with few columns and 1 index

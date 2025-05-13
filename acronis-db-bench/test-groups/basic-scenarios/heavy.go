@@ -334,21 +334,6 @@ var TestCopyHeavy = engine.TestDesc{
 	},
 }
 
-// TestInsertHeavyDBR inserts a row into the 'heavy' table using golang DB query builder
-var TestInsertHeavyDBR = engine.TestDesc{
-	Name:        "dbr-insert-heavy",
-	Metric:      "rows/sec",
-	Description: "insert a row into the 'heavy' table using golang DB query builder",
-	Category:    engine.TestInsert,
-	IsReadonly:  false,
-	IsDBRTest:   true,
-	Databases:   []db.DialectName{db.POSTGRES, db.ELASTICSEARCH, db.OPENSEARCH},
-	Table:       TestTableHeavy,
-	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
-		engine.TestInsertGeneric(b, testDesc)
-	},
-}
-
 // TestUpdateHeavy updates random row in the 'heavy' table
 var TestUpdateHeavy = engine.TestDesc{
 	Name:        "update-heavy",

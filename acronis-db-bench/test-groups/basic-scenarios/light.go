@@ -88,18 +88,3 @@ var TestCopyLight = engine.TestDesc{
 		engine.TestGeneric(b, testDesc, copyDataWorker, 0)
 	},
 }
-
-// TestInsertLightDBR inserts a row into the 'light' table using goland DBR query builder
-var TestInsertLightDBR = engine.TestDesc{
-	Name:        "dbr-insert-light",
-	Metric:      "rows/sec",
-	Description: "insert a row into the 'light' table using goland DBR query builder",
-	Category:    engine.TestInsert,
-	IsReadonly:  false,
-	IsDBRTest:   true,
-	Databases:   engine.RELATIONAL,
-	Table:       TestTableLight,
-	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
-		engine.TestInsertGeneric(b, testDesc)
-	},
-}

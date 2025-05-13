@@ -421,47 +421,6 @@ func TestInsertGeneric(b *benchmark.Benchmark, testDesc *TestDesc) {
 
 			return batch
 		}
-	} else if testDesc.IsDBRTest {
-		b.WorkerRunFunc = func(worker *benchmark.BenchmarkWorker) (loops int) {
-			var t time.Time
-			if worker.Logger.GetLevel() >= logger.LevelDebug {
-				t = time.Now()
-			}
-
-			c := worker.Data.(*DBWorkerData).workingConn
-
-			var rawDbrSess = c.Database.RawSession()
-			var dbrSess = rawDbrSess.(*dbr.Session)
-
-			tx, err := dbrSess.Begin()
-			worker.Logger.Debug("BEGIN")
-			if err != nil {
-				worker.Exit(err)
-			}
-			defer tx.RollbackUnlessCommitted() // Rollback in case of error
-
-			for i := 0; i < batch; i++ {
-				columns, values, err := worker.Randomizer.GenFakeData(colConfs, false)
-				if err != nil {
-					b.Exit(err)
-				}
-				_, err = tx.InsertInto(table.TableName).Columns(columns...).Values(values...).Exec()
-				if err != nil {
-					b.Exit(err)
-				}
-			}
-
-			err = tx.Commit()
-			if err != nil {
-				b.Exit("Commit() error: %s", err)
-			}
-
-			if worker.Logger.GetLevel() >= logger.LevelDebug {
-				worker.Logger.Debug(fmt.Sprintf("COMMIT # dur: %.6f", time.Since(t).Seconds()))
-			}
-
-			return batch
-		}
 	} else {
 		b.WorkerRunFunc = func(worker *benchmark.BenchmarkWorker) (loops int) {
 			workerData := worker.Data.(*DBWorkerData)

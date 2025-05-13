@@ -16,7 +16,6 @@ func init() {
 
 	// JSON insert tests
 	tg.Add(&TestInsertJSON)
-	tg.Add(&TestInsertJSONDBR)
 
 	// JSON select tests with indexed values
 	tg.Add(&TestSelectJSONByIndexedValue)
@@ -113,21 +112,6 @@ var TestInsertJSON = engine.TestDesc{
 	IsReadonly:  false,
 	IsDBRTest:   false,
 	Databases:   []db.DialectName{db.MYSQL, db.POSTGRES},
-	Table:       TestTableJSON,
-	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
-		engine.TestInsertGeneric(b, testDesc)
-	},
-}
-
-// TestInsertJSONDBR inserts a row into a table with JSON(b) column using golang DBR driver
-var TestInsertJSONDBR = engine.TestDesc{
-	Name:        "dbr-insert-json",
-	Metric:      "rows/sec",
-	Description: "insert a row into a table with JSON(b) column using golang DBR driver",
-	Category:    engine.TestInsert,
-	IsReadonly:  false,
-	IsDBRTest:   true,
-	Databases:   engine.RELATIONAL,
 	Table:       TestTableJSON,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
 		engine.TestInsertGeneric(b, testDesc)

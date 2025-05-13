@@ -103,21 +103,6 @@ var TestCopyMedium = engine.TestDesc{
 	},
 }
 
-// TestInsertMediumDBR inserts a row into the 'medium' table using goland DBR query builder
-var TestInsertMediumDBR = engine.TestDesc{
-	Name:        "dbr-insert-medium",
-	Metric:      "rows/sec",
-	Description: "insert a row into the 'medium' table using goland DBR query builder",
-	Category:    engine.TestInsert,
-	IsReadonly:  false,
-	IsDBRTest:   true,
-	Databases:   engine.RELATIONAL,
-	Table:       TestTableMedium,
-	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
-		engine.TestInsertGeneric(b, testDesc)
-	},
-}
-
 // TestUpdateMedium updates random row in the 'medium' table
 var TestUpdateMedium = engine.TestDesc{
 	Name:        "update-medium",
