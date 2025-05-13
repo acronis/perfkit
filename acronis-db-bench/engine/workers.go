@@ -6,9 +6,6 @@ import (
 	"regexp"
 	"strings"
 	"sync/atomic"
-	"time"
-
-	"github.com/gocraft/dbr/v2"
 
 	"github.com/acronis/perfkit/benchmark"
 	"github.com/acronis/perfkit/db"
@@ -542,89 +539,45 @@ func testDeleteGeneric(b *benchmark.Benchmark, testDesc *TestDesc, deleteRows ui
 		b.Exit(err)
 	}
 
-	if testDesc.IsDBRTest {
-		b.WorkerRunFunc = func(worker *benchmark.BenchmarkWorker) (loops int) {
-			var t time.Time
-			if worker.Logger.GetLevel() >= logger.LevelDebug {
-				t = time.Now()
-			}
-
-			c := worker.Data.(*DBWorkerData).workingConn
-
-			var rawDbrSess = c.Database.RawSession()
-			var dbrSess = rawDbrSess.(*dbr.Session)
-
-			tx, err := dbrSess.Begin()
-			worker.Logger.Debug("BEGIN")
-			if err != nil {
-				b.Exit(err)
-			}
-			defer tx.RollbackUnlessCommitted() // Rollback in case of error
-
-			for i := 0; i < batch; i++ {
-				id := int64(worker.Randomizer.Uintn64(table.RowsCount - deleteRows))
-
-				if deleteRows == 1 {
-					_, err = tx.DeleteFrom(table.TableName).Where(fmt.Sprintf("id > %d", id)).Exec()
-				} else {
-					_, err = tx.DeleteFrom(table.TableName).Where(fmt.Sprintf("id > %d AND id < %d", id, id+int64(deleteRows))).Exec()
-				}
-				if err != nil {
-					b.Exit("aborting")
-				}
-			}
-
-			if err = tx.Commit(); err != nil {
-				b.Exit(err)
-			}
-
-			if worker.Logger.GetLevel() >= logger.LevelDebug {
-				worker.Logger.Debug(fmt.Sprintf("COMMIT # dur: %.6f", time.Since(t).Seconds()))
-			}
-
-			return batch * int(deleteRows)
-		}
+	var deleteSQLTemplate string
+	if deleteRows == 1 {
+		deleteSQLTemplate = fmt.Sprintf("DELETE FROM %s WHERE id = $1", table.TableName)
 	} else {
-		var deleteSQLTemplate string
-		if deleteRows == 1 {
-			deleteSQLTemplate = fmt.Sprintf("DELETE FROM %s WHERE id = $1", table.TableName)
-		} else {
-			deleteSQLTemplate = fmt.Sprintf("DELETE FROM %s WHERE id <= $1 AND id > $2", table.TableName)
-		}
-		deleteSQL := FormatSQL(deleteSQLTemplate, dialectName)
+		deleteSQLTemplate = fmt.Sprintf("DELETE FROM %s WHERE id <= $1 AND id > $2", table.TableName)
+	}
+	deleteSQL := FormatSQL(deleteSQLTemplate, dialectName)
 
-		b.WorkerRunFunc = func(worker *benchmark.BenchmarkWorker) (loops int) {
-			var c = worker.Data.(*DBWorkerData).workingConn
-			var session = c.Database.Session(c.Database.Context(context.Background(), false))
-			if txErr := session.Transact(func(tx db.DatabaseAccessor) error {
-				for i := 0; i < batch; i++ {
-					id := int64(worker.Randomizer.Uintn64(table.RowsCount-deleteRows) + deleteRows)
-					var values []interface{}
+	b.WorkerRunFunc = func(worker *benchmark.BenchmarkWorker) (loops int) {
+		var c = worker.Data.(*DBWorkerData).workingConn
+		var session = c.Database.Session(c.Database.Context(context.Background(), false))
+		if txErr := session.Transact(func(tx db.DatabaseAccessor) error {
+			for i := 0; i < batch; i++ {
+				id := int64(worker.Randomizer.Uintn64(table.RowsCount-deleteRows) + deleteRows)
+				var values []interface{}
 
-					values = append(values, id)
-					if deleteRows > 1 {
-						values = append(values, id-int64(deleteRows))
-					}
+				values = append(values, id)
+				if deleteRows > 1 {
+					values = append(values, id-int64(deleteRows))
+				}
 
-					if _, err := tx.Query(deleteSQL, values...); err != nil {
+				if _, err := tx.Query(deleteSQL, values...); err != nil {
+					return err
+				}
+
+				if b.TestOpts.(*TestOpts).BenchOpts.Events {
+					rw := worker.Randomizer
+					if err := b.Vault.(*DBTestData).EventBus.InsertEvent(rw, tx, rw.UUID()); err != nil {
 						return err
 					}
-
-					if b.TestOpts.(*TestOpts).BenchOpts.Events {
-						rw := worker.Randomizer
-						if err := b.Vault.(*DBTestData).EventBus.InsertEvent(rw, tx, rw.UUID()); err != nil {
-							return err
-						}
-					}
 				}
-
-				return nil
-			}); txErr != nil {
-				b.Exit(txErr.Error())
 			}
 
-			return batch * int(deleteRows)
+			return nil
+		}); txErr != nil {
+			b.Exit(txErr.Error())
 		}
+
+		return batch * int(deleteRows)
 	}
 
 	b.Run()
