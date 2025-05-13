@@ -74,7 +74,13 @@ func (ub *updateBuilder) sql(d dialect, c *db.UpdateCtrl) (string, []interface{}
 		query = fmt.Sprintf("UPDATE %s SET %s %s", d.table(ub.tableName), setClause, whereClause)
 	}
 
-	return query, append(setArgs, whereArgs...), nil
+	// Ensure all parameters are properly set before formatting
+	allArgs := append(setArgs, whereArgs...)
+	if len(allArgs) == 0 {
+		return query, nil, nil
+	}
+
+	return sqlf(d, query, allArgs...), nil, nil
 }
 
 // Update implements the databaseUpdater interface for SQL databases.
@@ -98,8 +104,7 @@ func (g *sqlGateway) Update(tableName string, c *db.UpdateCtrl) (int64, error) {
 	}
 
 	// Execute query with encoded arguments
-	query = sqlf(g.dialect, query, values...)
-	result, err := g.rw.execContext(g.ctx, query)
+	result, err := g.rw.execContext(g.ctx, query, values...)
 	if err != nil {
 		return 0, err
 	}

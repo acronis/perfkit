@@ -165,7 +165,8 @@ func (queryBuildersFactory *dbrQueryBuildersFactory) newInsertQueryBuilder(table
 }
 
 func (queryBuildersFactory *dbrQueryBuildersFactory) newUpdateQueryBuilder(tableName string, queryable map[string]filterFunction) updateQueryBuilder {
-	return &updateBuilder{
+	return &dbrUpdateBuilder{
+		sess:      queryBuildersFactory.sess,
 		tableName: tableName,
 		queryable: queryable,
 	}
@@ -177,39 +178,43 @@ type dbrSelectBuilder struct {
 	queryable map[string]filterFunction // Maps column names to their filter functions
 }
 
-func dbrSqlConditions(sb *dbrSelectBuilder, stmt *dbr.SelectStmt, d dialect, c *db.SelectCtrl) (*dbr.SelectStmt, bool, error) {
-	if len(c.Where) == 0 {
-		return stmt, false, nil
+type enrichableStatement interface {
+	Where(string, ...interface{})
+}
+
+func dbrSqlConditions(tableName string, queryable map[string]filterFunction, stmt enrichableStatement, d dialect, optimizeConditions bool, where map[string][]string) (bool, error) {
+	if len(where) == 0 {
+		return false, nil
 	}
 
-	for _, field := range db.SortFields(c.Where) {
+	for _, field := range db.SortFields(where) {
 		if field.Col == "" {
-			return nil, false, fmt.Errorf("empty condition field")
+			return false, fmt.Errorf("empty condition field")
 		}
 
-		condgen, ok := sb.queryable[field.Col]
+		condgen, ok := queryable[field.Col]
 		if !ok {
-			return nil, false, fmt.Errorf("bad condition field '%v'", field.Col)
+			return false, fmt.Errorf("bad condition field '%v'", field.Col)
 		}
 
 		if len(field.Vals) == 1 {
 			// Handle special cases
 			if field.Vals[0] == db.SpecialConditionIsNull {
-				stmt = stmt.Where(fmt.Sprintf("%v.%v IS NULL", sb.tableName, field.Col))
+				stmt.Where(fmt.Sprintf("%v.%v IS NULL", tableName, field.Col))
 				continue
 			}
 			if field.Vals[0] == db.SpecialConditionIsNotNull {
-				stmt = stmt.Where(fmt.Sprintf("%v.%v IS NOT NULL", sb.tableName, field.Col))
+				stmt.Where(fmt.Sprintf("%v.%v IS NOT NULL", tableName, field.Col))
 				continue
 			}
 		}
 
 		var fieldName string
-		fieldName = fmt.Sprintf("%v.%v", sb.tableName, field.Col)
+		fieldName = fmt.Sprintf("%v.%v", tableName, field.Col)
 
-		fmts, args, err := condgen(d, c.OptimizeConditions, fieldName, field.Vals)
+		fmts, args, err := condgen(d, optimizeConditions, fieldName, field.Vals)
 		if err != nil {
-			return nil, false, err
+			return false, err
 		}
 
 		if fmts == nil {
@@ -217,15 +222,15 @@ func dbrSqlConditions(sb *dbrSelectBuilder, stmt *dbr.SelectStmt, d dialect, c *
 		}
 
 		if len(fmts) != len(args) {
-			return nil, false, fmt.Errorf("number of args %d doesn't match number of conditions %d", len(args), len(fmts))
+			return false, fmt.Errorf("number of args %d doesn't match number of conditions %d", len(args), len(fmts))
 		}
 
 		for i := range fmts {
-			stmt = stmt.Where(sqlf(d, fmts[i], args[i]))
+			stmt.Where(sqlf(d, fmts[i], args[i]))
 		}
 	}
 
-	return stmt, false, nil
+	return false, nil
 }
 
 func dbrSqlOrder(sb *dbrSelectBuilder, stmt *dbr.SelectStmt, d dialect, c *db.SelectCtrl) (*dbr.SelectStmt, error) {
@@ -290,6 +295,14 @@ func convertToDbrDialect(d dialect) dbr.Dialect {
 	}
 }
 
+type enrichableSelectStmt struct {
+	s *dbr.SelectStmt
+}
+
+func (stmt *enrichableSelectStmt) Where(query string, args ...interface{}) {
+	stmt.s = stmt.s.Where(query, args...)
+}
+
 func (sb *dbrSelectBuilder) sql(d dialect, c *db.SelectCtrl) (string, bool, error) {
 	var stmt = sb.sess.Select(c.Fields...)
 
@@ -311,8 +324,7 @@ func (sb *dbrSelectBuilder) sql(d dialect, c *db.SelectCtrl) (string, bool, erro
 	// Add WHERE conditions
 	var empty bool
 	var err error
-	stmt, empty, err = dbrSqlConditions(sb, stmt, d, c)
-	if err != nil {
+	if empty, err = dbrSqlConditions(sb.tableName, sb.queryable, &enrichableSelectStmt{s: stmt}, d, c.OptimizeConditions, c.Where); err != nil {
 		return "", false, err
 	}
 
@@ -387,6 +399,64 @@ func (ib *dbrInsertBuilder) sql(d dialect, rows [][]interface{}, columnNames []s
 	args := buf.Value()
 
 	return query, args, nil
+}
+
+type dbrUpdateBuilder struct {
+	sess      *dbr.Session              // only for building queries
+	tableName string                    // Name of the table being updated
+	queryable map[string]filterFunction // Maps column names to their filter functions
+}
+
+type enrichableUpdateStmt struct {
+	s *dbr.UpdateStmt
+}
+
+func (stmt *enrichableUpdateStmt) Where(query string, args ...interface{}) {
+	stmt.s = stmt.s.Where(query, args...)
+}
+
+func (ub *dbrUpdateBuilder) sql(d dialect, c *db.UpdateCtrl) (string, []interface{}, error) {
+	if len(c.Set) == 0 {
+		return "", nil, fmt.Errorf("no values to update")
+	}
+
+	// dbr does not support PostgreSQL parameters natively
+	// Use our own parameterized query builder to ensure proper parameter placeholders
+	if d.name() == db.POSTGRES {
+		var updBuilder = &updateBuilder{
+			tableName: ub.tableName,
+			queryable: ub.queryable,
+		}
+
+		return updBuilder.sql(d, c)
+	}
+
+	// Create base update statement
+	stmt := ub.sess.Update(d.table(ub.tableName))
+
+	// Add SET values
+	for col, value := range c.Set {
+		stmt = stmt.Set(col, value)
+	}
+
+	// Add WHERE conditions using the helper function
+	var empty bool
+	var err error
+	if empty, err = dbrSqlConditions(ub.tableName, ub.queryable, &enrichableUpdateStmt{s: stmt}, d, c.OptimizeConditions, c.Where); err != nil {
+		return "", nil, err
+	}
+
+	if empty {
+		return "", nil, nil
+	}
+
+	// Build the query
+	var buf = dbr.NewBuffer()
+	if err := stmt.Build(convertToDbrDialect(d), buf); err != nil {
+		return "", nil, fmt.Errorf("failed to build query: %w", err)
+	}
+
+	return buf.String(), buf.Value(), nil
 }
 
 type dbrQuerier struct {
