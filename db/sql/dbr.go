@@ -21,62 +21,6 @@ func init() {
 	}
 }
 
-/*
- * SQL queries logging
- */
-
-// DBRQuery is a struct for storing query and its duration
-type dbrQuery struct {
-	query    string
-	duration float64
-}
-
-// DBREventReceiver is a wrapper for dbr.EventReceiver interface
-type dbrEventReceiver struct {
-	queryLogger db.Logger
-	exitOnError bool
-	queries     []dbrQuery
-}
-
-// Event logs query into DBREventReceiver.queries slice (if logLevel >= LogInfo)
-func (r *dbrEventReceiver) Event(eventName string) {
-	if eventName == "dbr.begin" || eventName == "dbr.commit" {
-		return
-	}
-	r.queryLogger.Log("DBREventReceiver::Event occured: %s", eventName)
-}
-
-// EventKv logs query and its key-value pairs into DBREventReceiver.queries slice (if logLevel >= LogInfo)
-func (r *dbrEventReceiver) EventKv(eventName string, kvs map[string]string) {
-	r.queryLogger.Log("DBREventReceiver::EventKv occured: %s: kvs: %v", eventName, kvs)
-}
-
-// EventErr logs query and its error into DBREventReceiver.queries slice (if logLevel >= LogInfo)
-func (r *dbrEventReceiver) EventErr(eventName string, err error) error { //nolint:revive
-	r.queryLogger.Log("DBREventReceiver::EventErr occured: %s", eventName)
-
-	return nil
-}
-
-// Timing logs query and its duration into DBREventReceiver.queries slice (if logLevel >= LogInfo)
-func (r *dbrEventReceiver) Timing(eventName string, nanoseconds int64) {
-	r.queryLogger.Log("DBREventReceiver::Timing occured: %s: ns: %d", eventName, nanoseconds)
-}
-
-// EventErrKv logs query and its error into DBREventReceiver.queries slice (if logLevel >= LogInfo)
-func (r *dbrEventReceiver) EventErrKv(eventName string, err error, kvs map[string]string) error {
-	if err != nil {
-		r.queryLogger.Log("eventName: %s: %s # %s", eventName, kvs["sql"], err)
-	}
-
-	return nil
-}
-
-// TimingKv adds query and its duration into DBREventReceiver.queries slice (if logLevel >= LogInfo)
-func (r *dbrEventReceiver) TimingKv(eventName string, nanoseconds int64, kvs map[string]string) { //nolint:revive
-	r.queries = append(r.queries, dbrQuery{query: kvs["sql"], duration: float64(nanoseconds) / 1000000000.0})
-}
-
 func dialectFromDbrScheme(scheme string, path string) (string, string, dialect, error) {
 	const schemeSeparator = "+"
 	parts := strings.Split(scheme, schemeSeparator)
@@ -122,7 +66,7 @@ func (c *dbrConnector) ConnectionPool(cfg db.Config) (db.Database, error) {
 		}
 	}
 
-	if rwc, err = dbr.Open(driver, cs, &dbrEventReceiver{queryLogger: cfg.QueryLogger, exitOnError: true, queries: []dbrQuery{}}); err != nil {
+	if rwc, err = dbr.Open(driver, cs, nil); err != nil {
 		return nil, fmt.Errorf("db: cannot connect to dbr sql db at %v, err: %v", sanitizeConn(cfg.ConnString), err)
 	}
 
