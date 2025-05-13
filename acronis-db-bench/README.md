@@ -279,9 +279,6 @@ Acronis Database Benchmark: version v1-main-dev
 
   -- Golang DBR query builder tests -----------------------------------------------------------------------------------------------
 
-  dbr-update-heavy                        : [PMWS----] : update random row in the 'heavy' table using golang DB driver
-  dbr-update-medium                       : [PMWS----] : update random row in the 'medium' table using golang DB driver
-
   -- Advanced monitoring tests ----------------------------------------------------------------------------------------------------
 
   insert-advmagentresources               : [P-------] : insert into the 'adv monitoring agent resources' table

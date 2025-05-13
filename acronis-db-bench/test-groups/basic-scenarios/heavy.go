@@ -349,21 +349,6 @@ var TestUpdateHeavy = engine.TestDesc{
 	},
 }
 
-// TestUpdateHeavyDBR updates random row in the 'heavy' table using golang DBR query builder
-var TestUpdateHeavyDBR = engine.TestDesc{
-	Name:        "dbr-update-heavy",
-	Metric:      "rows/sec",
-	Description: "update random row in the 'heavy' table using golang DB driver",
-	Category:    engine.TestUpdate,
-	IsReadonly:  false,
-	IsDBRTest:   true,
-	Databases:   engine.RELATIONAL,
-	Table:       TestTableHeavy,
-	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
-		engine.TestUpdateGeneric(b, testDesc, 1, nil)
-	},
-}
-
 // TestUpdateHeavyBulk updates N rows (see --batch=, default 50000) in the 'heavy' table by single transaction
 var TestUpdateHeavyBulk = engine.TestDesc{
 	Name:        "bulkupdate-heavy",

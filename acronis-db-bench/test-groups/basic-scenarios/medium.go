@@ -118,21 +118,6 @@ var TestUpdateMedium = engine.TestDesc{
 	},
 }
 
-// TestUpdateMediumDBR updates random row in the 'medium' table using golang DBR query builder
-var TestUpdateMediumDBR = engine.TestDesc{
-	Name:        "dbr-update-medium",
-	Metric:      "rows/sec",
-	Description: "update random row in the 'medium' table using golang DB driver",
-	Category:    engine.TestUpdate,
-	IsReadonly:  false,
-	IsDBRTest:   true,
-	Databases:   engine.RELATIONAL,
-	Table:       TestTableMedium,
-	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
-		engine.TestUpdateGeneric(b, testDesc, 1, nil)
-	},
-}
-
 // TestSelectMediumLastTenant is the same as TestSelectMediumLast but with tenant-awareness
 var TestSelectMediumLastTenant = engine.TestDesc{
 	Name:        "select-medium-last-in-tenant",

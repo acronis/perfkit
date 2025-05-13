@@ -475,100 +475,51 @@ func TestUpdateGeneric(b *benchmark.Benchmark, testDesc *TestDesc, updateRows ui
 	batch := b.Vault.(*DBTestData).EffectiveBatch
 	table := &testDesc.Table
 
-	if testDesc.IsDBRTest {
-		b.WorkerRunFunc = func(worker *benchmark.BenchmarkWorker) (loops int) {
-			var t time.Time
-			if worker.Logger.GetLevel() >= logger.LevelDebug {
-				t = time.Now()
-			}
-
-			c := worker.Data.(*DBWorkerData).workingConn
-
-			var rawDbrSess = c.Database.RawSession()
-			var dbrSess = rawDbrSess.(*dbr.Session)
-
-			tx, err := dbrSess.Begin()
-			worker.Logger.Debug("BEGIN")
-			if err != nil {
-				worker.Exit(err)
-			}
-			defer tx.RollbackUnlessCommitted() // Rollback in case of error
-
+	b.WorkerRunFunc = func(worker *benchmark.BenchmarkWorker) (loops int) {
+		var c = worker.Data.(*DBWorkerData).workingConn
+		var session = c.Database.Session(c.Database.Context(context.Background(), false))
+		if txErr := session.Transact(func(tx db.DatabaseAccessor) error {
 			for i := 0; i < batch; i++ {
-				columns, err := worker.Randomizer.GenFakeDataAsMap(colConfs, false)
+				id := int64(worker.Randomizer.Uintn64(table.RowsCount-updateRows) + updateRows)
+				setValues, err := worker.Randomizer.GenFakeDataAsMap(colConfs, false)
 				if err != nil {
-					worker.Exit(err)
+					return err
 				}
-				id := int64(worker.Randomizer.Uintn64(table.RowsCount - updateRows))
 
+				// Create where condition based on updateRows
+				whereCond := make(map[string][]string)
 				if updateRows == 1 {
-					_, err = tx.Update(table.TableName).SetMap(*columns).Where(fmt.Sprintf("id > %d", id)).Exec()
+					whereCond["id"] = []string{fmt.Sprintf("%d", id)}
 				} else {
-					_, err = tx.Update(table.TableName).SetMap(*columns).Where(fmt.Sprintf("id > %d AND id < %d", id, id+int64(updateRows))).Exec()
+					whereCond["id"] = []string{
+						fmt.Sprintf("le(%d)", id),
+						fmt.Sprintf("gt(%d)", id-int64(updateRows)),
+					}
 				}
-				if err != nil {
-					b.Exit("aborting")
+
+				updateCtrl := &db.UpdateCtrl{
+					Set:   *setValues,
+					Where: whereCond,
 				}
-			}
 
-			err = tx.Commit()
-			if err != nil {
-				b.Exit("Commit() error: %s", err)
-			}
+				if _, err = tx.Update(table.TableName, updateCtrl); err != nil {
+					return err
+				}
 
-			if worker.Logger.GetLevel() >= logger.LevelDebug {
-				worker.Logger.Debug(fmt.Sprintf("COMMIT # dur: %.6f", time.Since(t).Seconds()))
-			}
-
-			return batch * int(updateRows)
-		}
-	} else {
-		b.WorkerRunFunc = func(worker *benchmark.BenchmarkWorker) (loops int) {
-			var c = worker.Data.(*DBWorkerData).workingConn
-			var session = c.Database.Session(c.Database.Context(context.Background(), false))
-			if txErr := session.Transact(func(tx db.DatabaseAccessor) error {
-				for i := 0; i < batch; i++ {
-					id := int64(worker.Randomizer.Uintn64(table.RowsCount-updateRows) + updateRows)
-					setValues, err := worker.Randomizer.GenFakeDataAsMap(colConfs, false)
-					if err != nil {
+				if b.TestOpts.(*TestOpts).BenchOpts.Events {
+					rw := worker.Randomizer
+					if err = b.Vault.(*DBTestData).EventBus.InsertEvent(rw, tx, rw.UUID()); err != nil {
 						return err
 					}
-
-					// Create where condition based on updateRows
-					whereCond := make(map[string][]string)
-					if updateRows == 1 {
-						whereCond["id"] = []string{fmt.Sprintf("%d", id)}
-					} else {
-						whereCond["id"] = []string{
-							fmt.Sprintf("le(%d)", id),
-							fmt.Sprintf("gt(%d)", id-int64(updateRows)),
-						}
-					}
-
-					updateCtrl := &db.UpdateCtrl{
-						Set:   *setValues,
-						Where: whereCond,
-					}
-
-					if _, err = tx.Update(table.TableName, updateCtrl); err != nil {
-						return err
-					}
-
-					if b.TestOpts.(*TestOpts).BenchOpts.Events {
-						rw := worker.Randomizer
-						if err = b.Vault.(*DBTestData).EventBus.InsertEvent(rw, tx, rw.UUID()); err != nil {
-							return err
-						}
-					}
 				}
-
-				return nil
-			}); txErr != nil {
-				b.Exit(txErr.Error())
 			}
 
-			return batch * int(updateRows)
+			return nil
+		}); txErr != nil {
+			b.Exit(txErr.Error())
 		}
+
+		return batch * int(updateRows)
 	}
 
 	b.Run()
