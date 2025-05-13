@@ -276,8 +276,6 @@ Acronis Database Benchmark: version v1-main-dev
   insert-ts-sql                           : [PMWS-A--] : batch insert into the 'timeseries' SQL table
   select-ts-sql                           : [PMWS-A--] : batch select from the 'timeseries' SQL table
 
-  -- Golang DBR query builder tests -----------------------------------------------------------------------------------------------
-
   -- Advanced monitoring tests ----------------------------------------------------------------------------------------------------
 
   insert-advmagentresources               : [P-------] : insert into the 'adv monitoring agent resources' table
