@@ -529,15 +529,9 @@ func TestUpdateGeneric(b *benchmark.Benchmark, testDesc *TestDesc, updateRows ui
 			if txErr := session.Transact(func(tx db.DatabaseAccessor) error {
 				for i := 0; i < batch; i++ {
 					id := int64(worker.Randomizer.Uintn64(table.RowsCount-updateRows) + updateRows)
-					_, fakeDataValues, err := worker.Randomizer.GenFakeData(colConfs, false)
+					setValues, err := worker.Randomizer.GenFakeDataAsMap(colConfs, false)
 					if err != nil {
 						return err
-					}
-
-					// Convert column configs and values to UpdateCtrl format
-					setValues := make(map[string][]string)
-					for j, colConf := range *colConfs {
-						setValues[colConf.ColumnName] = []string{fmt.Sprintf("%v", fakeDataValues[j])}
 					}
 
 					// Create where condition based on updateRows
@@ -552,7 +546,7 @@ func TestUpdateGeneric(b *benchmark.Benchmark, testDesc *TestDesc, updateRows ui
 					}
 
 					updateCtrl := &db.UpdateCtrl{
-						Set:   setValues,
+						Set:   *setValues,
 						Where: whereCond,
 					}
 

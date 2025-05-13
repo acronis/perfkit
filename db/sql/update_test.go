@@ -32,8 +32,8 @@ func (suite *TestingSuite) TestUpdate() {
 		var err error
 		affected, err = tx.Update("perf_table",
 			&db.UpdateCtrl{
-				Set: map[string][]string{
-					"type": {"3"},
+				Set: map[string]interface{}{
+					"type": "3",
 				},
 				Where: map[string][]string{
 					"name": {"test1"},
@@ -70,8 +70,8 @@ func (suite *TestingSuite) TestUpdate() {
 		var err error
 		affected, err = tx.Update("perf_table",
 			&db.UpdateCtrl{
-				Set: map[string][]string{
-					"type": {"5"},
+				Set: map[string]interface{}{
+					"type": "5",
 				},
 				Where: map[string][]string{
 					"name": {"test2"},
@@ -106,8 +106,8 @@ func (suite *TestingSuite) TestUpdate() {
 		var err error
 		affected, err = tx.Update("perf_table",
 			&db.UpdateCtrl{
-				Set: map[string][]string{
-					"type": {"6"},
+				Set: map[string]interface{}{
+					"type": "6",
 				},
 				Where: map[string][]string{
 					"type": {"3"},
@@ -143,8 +143,8 @@ func (suite *TestingSuite) TestUpdate() {
 		var err error
 		affected, err = tx.Update("perf_table",
 			&db.UpdateCtrl{
-				Set: map[string][]string{
-					"type": {"7"},
+				Set: map[string]interface{}{
+					"type": "7",
 				},
 				Where: map[string][]string{
 					"name": {"non_existent"},
@@ -160,8 +160,8 @@ func (suite *TestingSuite) TestUpdate() {
 		var err error
 		_, err = tx.Update("perf_table",
 			&db.UpdateCtrl{
-				Set: map[string][]string{
-					"invalid_field": {"7"},
+				Set: map[string]interface{}{
+					"invalid_field": "7",
 				},
 				Where: map[string][]string{
 					"name": {"test1"},

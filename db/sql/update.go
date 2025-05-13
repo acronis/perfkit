@@ -32,15 +32,10 @@ func (g *sqlGateway) Update(tableName string, c *db.UpdateCtrl) (int64, error) {
 
 	// Process SET values
 	var setParts []string
-	for col, values := range c.Set {
-		if len(values) != 1 {
-			return 0, fmt.Errorf("multiple values not supported for SET clause: %s", col)
-		}
-		value := values[0]
-
+	for col, value := range c.Set {
 		// Handle special functions like now()
-		if strings.HasSuffix(value, "()") {
-			setParts = append(setParts, fmt.Sprintf("%s = %s", col, value))
+		if strValue, ok := value.(string); ok && strings.HasSuffix(strValue, "()") {
+			setParts = append(setParts, fmt.Sprintf("%s = %s", col, strValue))
 		} else {
 			setParts = append(setParts, fmt.Sprintf("%s = %%v", col))
 			setArgs = append(setArgs, value)

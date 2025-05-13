@@ -1053,13 +1053,13 @@ type databaseQueryPreparer interface {
 
 // UpdateCtrl is a struct for storing update control information
 type UpdateCtrl struct {
-	// Set contains the values to update in the format map[columnName][]string{value}
+	// Set contains the values to update in the format map[columnName]interface{}
 	// Example:
-	//   Set: map[string][]string{
-	//       "status": {"active"},
-	//       "updated_at": {"now()"},
+	//   Set: map[string]interface{}{
+	//       "status": "active",
+	//       "updated_at": time.Now(),
 	//   }
-	Set map[string][]string
+	Set map[string]interface{}
 
 	// Where contains filter conditions for the update operation
 	// The map key is the column name and the value array contains one or more conditions
@@ -1110,8 +1110,8 @@ type UpdateCtrl struct {
 // 1. Simple update with exact match:
 //    ```go
 //    ctrl := &UpdateCtrl{
-//        Set: map[string][]string{
-//            "status": {"active"},
+//        Set: map[string]interface{}{
+//            "status": "active",
 //        },
 //        Where: map[string][]string{
 //            "id": {"1"},
@@ -1122,9 +1122,9 @@ type UpdateCtrl struct {
 // 2. Update with multiple conditions:
 //    ```go
 //    ctrl := &UpdateCtrl{
-//        Set: map[string][]string{
-//            "status": {"inactive"},
-//            "updated_at": {"now()"},
+//        Set: map[string]interface{}{
+//            "status": "inactive",
+//            "updated_at": time.Now(),
 //        },
 //        Where: map[string][]string{
 //            "status": {"active"},
@@ -1136,8 +1136,8 @@ type UpdateCtrl struct {
 // 3. Update with range conditions:
 //    ```go
 //    ctrl := &UpdateCtrl{
-//        Set: map[string][]string{
-//            "priority": {"high"},
+//        Set: map[string]interface{}{
+//            "priority": "high",
 //        },
 //        Where: map[string][]string{
 //            "priority": {"gt(normal)", "le(high)"},
@@ -1153,9 +1153,9 @@ type databaseUpdater interface {
 	// Example usage:
 	//   ```go
 	//   ctrl := &UpdateCtrl{
-	//       Set: map[string][]string{
-	//           "status": {"active"},
-	//           "updated_at": {"now()"},
+	//       Set: map[string]interface{}{
+	//           "status": "active",
+	//           "updated_at": time.Now(),
 	//       },
 	//       Where: map[string][]string{
 	//           "id": {"1"},
