@@ -214,7 +214,8 @@ func (queryBuildersFactory *dbrQueryBuildersFactory) newSelectQueryBuilder(table
 }
 
 func (queryBuildersFactory *dbrQueryBuildersFactory) newInsertQueryBuilder(tableName string) insertQueryBuilder {
-	return &insertBuilder{
+	return &dbrInsertBuilder{
+		sess:      queryBuildersFactory.sess,
 		tableName: tableName,
 	}
 }
@@ -385,6 +386,70 @@ func (sb *dbrSelectBuilder) sql(d dialect, c *db.SelectCtrl) (string, bool, erro
 	}
 
 	return buf.String(), false, nil
+}
+
+type dbrInsertBuilder struct {
+	sess      *dbr.Session // only for building queries
+	tableName string       // Name of the table being inserted into
+}
+
+func (ib *dbrInsertBuilder) sql(d dialect, rows [][]interface{}, columnNames []string, queryStringInterpolation bool) (string, []interface{}, error) {
+	if len(rows) == 0 {
+		return "", nil, nil
+	}
+
+	// Validate row lengths
+	for _, row := range rows {
+		if len(row) != len(columnNames) {
+			return "", nil, fmt.Errorf("row length doesn't match column names length")
+		}
+	}
+
+	// dbr does not support literal inserts, so we need to construct the query manually
+	if queryStringInterpolation {
+		return bulkInsertLiteral(d, ib.tableName, rows, columnNames)
+	}
+
+	// dbr does not support PostgreSQL parameters natively
+	// Use our own parameterized query builder to ensure proper parameter placeholders
+	if d.name() == db.POSTGRES {
+		return bulkInsertParameterized(d, ib.tableName, rows, columnNames)
+	}
+
+	// Create the base insert statement for parameterized query
+	stmt := ib.sess.InsertInto(d.table(ib.tableName)).Columns(columnNames...)
+
+	// Add values for each row
+	for _, row := range rows {
+		stmt = stmt.Values(row...)
+	}
+
+	// Convert dialect to dbr dialect
+	var dbrDialect dbr.Dialect
+	switch d.name() {
+	case db.SQLITE:
+		dbrDialect = dbrdialect.SQLite3
+	case db.POSTGRES:
+		dbrDialect = dbrdialect.PostgreSQL
+	case db.MYSQL:
+		dbrDialect = dbrdialect.MySQL
+	case db.MSSQL:
+		dbrDialect = dbrdialect.MSSQL
+	default:
+		dbrDialect = dbrdialect.PostgreSQL // Default to PostgreSQL if unknown
+	}
+
+	// Build the query
+	var buf = dbr.NewBuffer()
+	if err := stmt.Build(dbrDialect, buf); err != nil {
+		return "", nil, fmt.Errorf("failed to build query: %w", err)
+	}
+
+	// Get the query string and arguments
+	query := buf.String()
+	args := buf.Value()
+
+	return query, args, nil
 }
 
 type dbrQuerier struct {
