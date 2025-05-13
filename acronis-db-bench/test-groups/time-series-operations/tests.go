@@ -77,7 +77,6 @@ var TestInsertTimeSeriesSQL = engine.TestDesc{
 	Description: "batch insert into the 'timeseries' SQL table",
 	Category:    engine.TestInsert,
 	IsReadonly:  false,
-	IsDBRTest:   false,
 	Databases:   engine.PMWSA,
 	Table:       TestTableTimeSeriesSQL,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
@@ -100,7 +99,6 @@ var TestSelectTimeSeriesSQL = engine.TestDesc{
 	Description: "batch select from the 'timeseries' SQL table",
 	Category:    engine.TestSelect,
 	IsReadonly:  false,
-	IsDBRTest:   false,
 	Databases:   engine.PMWSA,
 	Table:       TestTableTimeSeriesSQL,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {

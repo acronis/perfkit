@@ -49,7 +49,6 @@ type TestDesc struct {
 	Description string
 	Category    string
 	IsReadonly  bool // indicates the test doesn't run DDL and doesn't modidy data
-	IsDBRTest   bool
 	Databases   []db.DialectName
 
 	Table TestTable // SQL table name

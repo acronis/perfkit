@@ -47,7 +47,6 @@ var TestInsertBlob = engine.TestDesc{
 	Description: "insert a row with large random blob into the 'blob' table",
 	Category:    engine.TestInsert,
 	IsReadonly:  false,
-	IsDBRTest:   false,
 	Databases:   engine.ALL,
 	Table:       TestTableBlob,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
@@ -69,7 +68,6 @@ var TestCopyBlob = engine.TestDesc{
 	Description: "copy a row with large random blob into the 'blob' table",
 	Category:    engine.TestInsert,
 	IsReadonly:  false,
-	IsDBRTest:   false,
 	Databases:   []db.DialectName{db.POSTGRES, db.MSSQL},
 	Table:       TestTableBlob,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
@@ -91,7 +89,6 @@ var TestSelectBlobLastTenant = engine.TestDesc{
 	Description: "select the last row from the 'blob' table WHERE tenant_id = {random tenant uuid}",
 	Category:    engine.TestSelect,
 	IsReadonly:  true,
-	IsDBRTest:   false,
 	Databases:   engine.ALL,
 	Table:       TestTableBlob,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {

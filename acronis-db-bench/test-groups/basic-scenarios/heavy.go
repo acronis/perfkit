@@ -281,7 +281,6 @@ var TestInsertHeavy = engine.TestDesc{
 	Description: "insert a row into the 'heavy' table",
 	Category:    engine.TestInsert,
 	IsReadonly:  false,
-	IsDBRTest:   false,
 	Databases:   engine.ALL,
 	Table:       TestTableHeavy,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
@@ -296,7 +295,6 @@ var TestInsertHeavyPrepared = engine.TestDesc{
 	Description: "insert a row into the 'heavy' table using prepared statement for the batch",
 	Category:    engine.TestInsert,
 	IsReadonly:  false,
-	IsDBRTest:   false,
 	Databases:   engine.RELATIONAL,
 	Table:       TestTableHeavy,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
@@ -311,7 +309,6 @@ var TestInsertHeavyMultivalue = engine.TestDesc{
 	Description: "insert a row into the 'heavy' table using INSERT INTO t (x, y, z) VALUES (..., ..., ...) ",
 	Category:    engine.TestInsert,
 	IsReadonly:  false,
-	IsDBRTest:   false,
 	Databases:   engine.ALL,
 	Table:       TestTableHeavy,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
@@ -326,7 +323,6 @@ var TestCopyHeavy = engine.TestDesc{
 	Description: "copy a row into the 'heavy' table",
 	Category:    engine.TestInsert,
 	IsReadonly:  false,
-	IsDBRTest:   false,
 	Databases:   []db.DialectName{db.POSTGRES, db.MSSQL},
 	Table:       TestTableHeavy,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
@@ -341,7 +337,6 @@ var TestUpdateHeavy = engine.TestDesc{
 	Description: "update random row in the 'heavy' table",
 	Category:    engine.TestUpdate,
 	IsReadonly:  false,
-	IsDBRTest:   false,
 	Databases:   engine.RELATIONAL,
 	Table:       TestTableHeavy,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
@@ -356,7 +351,6 @@ var TestUpdateHeavyBulk = engine.TestDesc{
 	Description: "update N rows (see --batch=, default 50000) in the 'heavy' table by single transaction",
 	Category:    engine.TestUpdate,
 	IsReadonly:  false,
-	IsDBRTest:   false,
 	Databases:   engine.RELATIONAL,
 	Table:       TestTableHeavy,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
@@ -380,7 +374,6 @@ var TestUpdateHeavyBulkDBR = engine.TestDesc{
 	Description: "update N rows (see --update-rows-count= ) in the 'heavy' table by single transaction using DBR query builder",
 	Category:    engine.TestUpdate,
 	IsReadonly:  false,
-	IsDBRTest:   true,
 	Databases:   engine.RELATIONAL,
 	Table:       TestTableHeavy,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
@@ -404,7 +397,6 @@ var TestUpdateHeavySameVal = engine.TestDesc{
 	Description: "update random row in the 'heavy' table putting the value which already exists",
 	Category:    engine.TestUpdate,
 	IsReadonly:  false,
-	IsDBRTest:   false,
 	Databases:   engine.RELATIONAL,
 	Table:       TestTableHeavy,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
@@ -420,7 +412,6 @@ var TestUpdateHeavyPartialSameVal = engine.TestDesc{
 	Description: "update random row in the 'heavy' table putting two values, where one of them is already exists in this row",
 	Category:    engine.TestUpdate,
 	IsReadonly:  false,
-	IsDBRTest:   false,
 	Databases:   engine.RELATIONAL,
 	Table:       TestTableHeavy,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
@@ -436,7 +427,6 @@ var TestSelectHeavyLast = engine.TestDesc{
 	Description: "select last row from the 'heavy' table",
 	Category:    engine.TestSelect,
 	IsReadonly:  true,
-	IsDBRTest:   false,
 	Databases:   engine.RELATIONAL,
 	Table:       TestTableHeavy,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
@@ -453,7 +443,6 @@ var TestSelectHeavyRand = engine.TestDesc{
 	Description: "select random row from the 'heavy' table",
 	Category:    engine.TestSelect,
 	IsReadonly:  true,
-	IsDBRTest:   false,
 	Databases:   engine.RELATIONAL,
 	Table:       TestTableHeavy,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
@@ -479,7 +468,6 @@ var TestSelectHeavyRandTenantLike = engine.TestDesc{
 	Description: "select random row from the 'heavy' table WHERE tenant_id = {} AND resource_name LIKE {}",
 	Category:    engine.TestSelect,
 	IsReadonly:  true,
-	IsDBRTest:   false,
 	Databases:   engine.RELATIONAL,
 	Table:       TestTableHeavy,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
@@ -518,7 +506,6 @@ var TestSelectHeavyMinMaxTenant = engine.TestDesc{
 	Description: "select min(completion_time_ns) and max(completion_time_ns) value from the 'heavy' table WHERE tenant_id = {}",
 	Category:    engine.TestSelect,
 	IsReadonly:  true,
-	IsDBRTest:   false,
 	Databases:   engine.RELATIONAL,
 	Table:       TestTableHeavy,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
@@ -546,7 +533,6 @@ var TestSelectHeavyMinMaxTenantAndState = engine.TestDesc{
 	Description: "select min(completion_time) and max(completion_time) value from the 'heavy' table WHERE tenant_id = {} AND state = {}",
 	Category:    engine.TestSelect,
 	IsReadonly:  true,
-	IsDBRTest:   false,
 	Databases:   engine.RELATIONAL,
 	Table:       TestTableHeavy,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
@@ -579,7 +565,6 @@ var TestSelectHeavyForUpdateSkipLocked = engine.TestDesc{
 	Description: "do SELECT FOR UPDATE SKIP LOCKED and then UPDATE",
 	Category:    engine.TestOther,
 	IsReadonly:  false,
-	IsDBRTest:   false,
 	Databases:   engine.RELATIONAL,
 	Table:       TestTableHeavy,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
@@ -634,7 +619,6 @@ var TestSelectHeavyLastTenant = engine.TestDesc{
 	Description: "select the last row from the 'heavy' table WHERE tenant_id = {random tenant uuid}",
 	Category:    engine.TestSelect,
 	IsReadonly:  true,
-	IsDBRTest:   false,
 	Databases:   engine.RELATIONAL,
 	Table:       TestTableHeavy,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
@@ -652,7 +636,6 @@ var TestSelectHeavyLastTenantCTI = engine.TestDesc{
 	Description: "select the last row from the 'heavy' table WHERE tenant_id = {} AND cti = {}",
 	Category:    engine.TestSelect,
 	IsReadonly:  true,
-	IsDBRTest:   false,
 	Databases:   engine.RELATIONAL,
 	Table:       TestTableHeavy,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {

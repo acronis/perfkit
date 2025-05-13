@@ -36,7 +36,6 @@ var TestInsertLight = engine.TestDesc{
 	Description: "insert a row into the 'light' table",
 	Category:    engine.TestInsert,
 	IsReadonly:  false,
-	IsDBRTest:   false,
 	Databases:   engine.ALL,
 	Table:       TestTableLight,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
@@ -51,7 +50,6 @@ var TestInsertLightPrepared = engine.TestDesc{
 	Description: "insert a row into the 'light' table using prepared statement for the batch",
 	Category:    engine.TestInsert,
 	IsReadonly:  false,
-	IsDBRTest:   false,
 	Databases:   engine.RELATIONAL,
 	Table:       TestTableLight,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
@@ -66,7 +64,6 @@ var TestInsertLightMultiValue = engine.TestDesc{
 	Description: "insert a row into the 'light' table using INSERT INTO t (x, y, z) VALUES (..., ..., ...) ",
 	Category:    engine.TestInsert,
 	IsReadonly:  false,
-	IsDBRTest:   false,
 	Databases:   engine.ALL,
 	Table:       TestTableLight,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
@@ -81,7 +78,6 @@ var TestCopyLight = engine.TestDesc{
 	Description: "copy a row into the 'light' table",
 	Category:    engine.TestInsert,
 	IsReadonly:  false,
-	IsDBRTest:   false,
 	Databases:   []db.DialectName{db.POSTGRES, db.MSSQL},
 	Table:       TestTableLight,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {

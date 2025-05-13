@@ -26,7 +26,6 @@ var TestPing = engine.TestDesc{
 	Description: "just ping DB",
 	Category:    engine.TestOther,
 	IsReadonly:  true,
-	IsDBRTest:   false,
 	Databases:   engine.ALL,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
 		worker := func(b *benchmark.Benchmark, c *engine.DBConnector, testDesc *engine.TestDesc, batch int) (loops int) { //nolint:revive

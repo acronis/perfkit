@@ -50,7 +50,6 @@ var TestInsertMedium = engine.TestDesc{
 	Description: "insert a row into the 'medium' table",
 	Category:    engine.TestInsert,
 	IsReadonly:  false,
-	IsDBRTest:   false,
 	Databases:   engine.ALL,
 	Table:       TestTableMedium,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
@@ -65,7 +64,6 @@ var TestInsertMediumPrepared = engine.TestDesc{
 	Description: "insert a row into the 'medium' table using prepared statement for the batch",
 	Category:    engine.TestInsert,
 	IsReadonly:  false,
-	IsDBRTest:   false,
 	Databases:   engine.RELATIONAL,
 	Table:       TestTableMedium,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
@@ -80,7 +78,6 @@ var TestInsertMediumMultiValue = engine.TestDesc{
 	Description: "insert a row into the 'medium' table using INSERT INTO t (x, y, z) VALUES (..., ..., ...) ",
 	Category:    engine.TestInsert,
 	IsReadonly:  false,
-	IsDBRTest:   false,
 	Databases:   engine.PMWSA,
 	Table:       TestTableMedium,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
@@ -95,7 +92,6 @@ var TestCopyMedium = engine.TestDesc{
 	Description: "copy a row into the 'medium' table",
 	Category:    engine.TestInsert,
 	IsReadonly:  false,
-	IsDBRTest:   false,
 	Databases:   []db.DialectName{db.POSTGRES, db.MSSQL},
 	Table:       TestTableMedium,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
@@ -110,7 +106,6 @@ var TestUpdateMedium = engine.TestDesc{
 	Description: "update random row in the 'medium' table",
 	Category:    engine.TestUpdate,
 	IsReadonly:  false,
-	IsDBRTest:   false,
 	Databases:   engine.RELATIONAL,
 	Table:       TestTableMedium,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
@@ -125,7 +120,6 @@ var TestSelectMediumLastTenant = engine.TestDesc{
 	Description: "select the last row from the 'medium' table WHERE tenant_id = {random tenant uuid}",
 	Category:    engine.TestSelect,
 	IsReadonly:  true,
-	IsDBRTest:   false,
 	Databases:   engine.ALL,
 	Table:       TestTableMedium,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
@@ -143,7 +137,6 @@ var TestSelectMediumLast = engine.TestDesc{
 	Description: "select last row from the 'medium' table with few columns and 1 index",
 	Category:    engine.TestSelect,
 	IsReadonly:  true,
-	IsDBRTest:   false,
 	Databases:   engine.ALL,
 	Table:       TestTableMedium,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
@@ -160,7 +153,6 @@ var TestSelectMediumRand = engine.TestDesc{
 	Description: "select random row from the 'medium' table with few columns and 1 index",
 	Category:    engine.TestSelect,
 	IsReadonly:  true,
-	IsDBRTest:   false,
 	Databases:   engine.ALL,
 	Table:       TestTableMedium,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
