@@ -164,6 +164,7 @@ func TestSelectRun(
 	rowsRequired uint64,
 ) {
 	initCommon(b, testDesc, rowsRequired)
+
 	testOpts, ok := b.TestOpts.(*TestOpts)
 	if !ok {
 		b.Exit("TestOpts type conversion error")
@@ -522,30 +523,6 @@ func TestUpdateGeneric(b *benchmark.Benchmark, testDesc *TestDesc, updateRows ui
 			return batch * int(updateRows)
 		}
 	} else {
-		testOpts, ok := b.TestOpts.(*TestOpts)
-		if !ok {
-			b.Exit("db type conversion error")
-		}
-
-		var dialectName, err = db.GetDialectName(testOpts.DBOpts.ConnString)
-		if err != nil {
-			b.Exit(err)
-		}
-
-		values := make([]string, len(*colConfs))
-		for i := 0; i < len(*colConfs); i++ {
-			values[i] = fmt.Sprintf("%s = $%d", (*colConfs)[i].ColumnName, i+1)
-		}
-		setPart := strings.Join(values, ", ")
-
-		var updateSQLTemplate string
-		if updateRows == 1 {
-			updateSQLTemplate = fmt.Sprintf("UPDATE %s SET %s WHERE id = $%d", table.TableName, setPart, len(*colConfs)+1)
-		} else {
-			updateSQLTemplate = fmt.Sprintf("UPDATE %s SET %s WHERE id <= $%d AND id > $%d", table.TableName, setPart, len(*colConfs)+1, len(*colConfs)+2)
-		}
-		updateSQL := FormatSQL(updateSQLTemplate, dialectName)
-
 		b.WorkerRunFunc = func(worker *benchmark.BenchmarkWorker) (loops int) {
 			var c = worker.Data.(*DBWorkerData).workingConn
 			var session = c.Database.Session(c.Database.Context(context.Background(), false))
@@ -557,12 +534,29 @@ func TestUpdateGeneric(b *benchmark.Benchmark, testDesc *TestDesc, updateRows ui
 						return err
 					}
 
-					fakeDataValues = append(fakeDataValues, id)
-					if updateRows > 1 {
-						fakeDataValues = append(fakeDataValues, id-int64(updateRows))
+					// Convert column configs and values to UpdateCtrl format
+					setValues := make(map[string][]string)
+					for j, colConf := range *colConfs {
+						setValues[colConf.ColumnName] = []string{fmt.Sprintf("%v", fakeDataValues[j])}
 					}
 
-					if _, err = tx.Exec(updateSQL, fakeDataValues...); err != nil {
+					// Create where condition based on updateRows
+					whereCond := make(map[string][]string)
+					if updateRows == 1 {
+						whereCond["id"] = []string{fmt.Sprintf("%d", id)}
+					} else {
+						whereCond["id"] = []string{
+							fmt.Sprintf("le(%d)", id),
+							fmt.Sprintf("gt(%d)", id-int64(updateRows)),
+						}
+					}
+
+					updateCtrl := &db.UpdateCtrl{
+						Set:   setValues,
+						Where: whereCond,
+					}
+
+					if _, err = tx.Update(table.TableName, updateCtrl); err != nil {
 						return err
 					}
 
