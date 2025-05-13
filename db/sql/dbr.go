@@ -213,6 +213,12 @@ func (queryBuildersFactory *dbrQueryBuildersFactory) newSelectQueryBuilder(table
 	}
 }
 
+func (queryBuildersFactory *dbrQueryBuildersFactory) newInsertQueryBuilder(tableName string) insertQueryBuilder {
+	return &insertBuilder{
+		tableName: tableName,
+	}
+}
+
 type dbrSelectBuilder struct {
 	sess      *dbr.Session              // only for building queries
 	tableName string                    // Name of the table being queried

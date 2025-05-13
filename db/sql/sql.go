@@ -100,6 +100,8 @@ type sqlGateway struct {
 	rw      querier         // Query executor
 	dialect dialect         // SQL dialect being used
 
+	qbs queryBuilderFactory
+
 	InsideTX                 bool // Indicates if running within transaction
 	MaxRetries               int  // Maximum number of retry attempts
 	QueryStringInterpolation bool // Whether to interpolate query strings
@@ -130,6 +132,7 @@ func (s *sqlSession) Transact(fn func(tx db.DatabaseAccessor) error) error {
 				s.ctx,
 				q,
 				dl,
+				s.qbs,
 				true,
 				s.MaxRetries,
 				s.QueryStringInterpolation,
@@ -325,6 +328,7 @@ func (d *sqlDatabase) Session(c *db.Context) db.Session {
 				queryLogger: d.queryLogger,
 			},
 			dialect:                  d.dialect,
+			qbs:                      d.qbs,
 			InsideTX:                 false,
 			QueryStringInterpolation: d.queryStringInterpolation,
 			LogTime:                  d.logTime,
@@ -417,6 +421,8 @@ type dialect interface {
 type queryBuilderFactory interface {
 	// newSelectQueryBuilder creates a new select query builder
 	newSelectQueryBuilder(tableName string, queryable map[string]filterFunction) selectQueryBuilder
+	// newInsertQueryBuilder creates a new insert query builder
+	newInsertQueryBuilder(tableName string) insertQueryBuilder
 }
 
 // sanitizeConn removes sensitive information from connection string
