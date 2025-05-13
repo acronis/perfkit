@@ -367,29 +367,6 @@ var TestUpdateHeavyBulk = engine.TestDesc{
 	},
 }
 
-// TestUpdateHeavyBulkDBR updates N rows (see --batch=, default 50000) in the 'heavy' table by single transaction using DBR query builder
-var TestUpdateHeavyBulkDBR = engine.TestDesc{
-	Name:        "dbr-bulkupdate-heavy",
-	Metric:      "rows/sec",
-	Description: "update N rows (see --update-rows-count= ) in the 'heavy' table by single transaction using DBR query builder",
-	Category:    engine.TestUpdate,
-	IsReadonly:  false,
-	Databases:   engine.RELATIONAL,
-	Table:       TestTableHeavy,
-	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
-		origBatch := b.Vault.(*engine.DBTestData).EffectiveBatch
-		b.Vault.(*engine.DBTestData).EffectiveBatch = 1
-		testBatch := origBatch
-		if b.TestOpts.(*engine.TestOpts).BenchOpts.Batch == 0 {
-			testBatch = 50000
-		}
-
-		engine.TestUpdateGeneric(b, testDesc, uint64(testBatch), nil)
-
-		b.Vault.(*engine.DBTestData).EffectiveBatch = origBatch
-	},
-}
-
 // TestUpdateHeavySameVal updates random row in the 'heavy' table putting the value which already exists
 var TestUpdateHeavySameVal = engine.TestDesc{
 	Name:        "update-heavy-sameval",

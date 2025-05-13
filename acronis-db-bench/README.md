@@ -248,7 +248,6 @@ Acronis Database Benchmark: version v1-main-dev
   -- Advanced tests group ---------------------------------------------------------------------------------------------------------
 
   bulkupdate-heavy                        : [PMWS----] : update N rows (see --batch=, default 50000) in the 'heavy' table by single transaction
-  dbr-bulkupdate-heavy                    : [PMWS----] : update N rows (see --update-rows-count= ) in the 'heavy' table by single transaction using DBR query builder
   insert-json                             : [PMWS----] : insert a row into a table with JSON(b) column
   ping                                    : [PMWSCAEO] : just ping DB
   search-json-by-indexed-value            : [PMWS----] : search a row from the 'json' table using some json condition using LIKE {}

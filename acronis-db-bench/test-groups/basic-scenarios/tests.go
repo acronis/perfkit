@@ -23,7 +23,6 @@ func init() {
 	tg.Add(&TestCopyHeavy)
 	tg.Add(&TestUpdateHeavy)
 	tg.Add(&TestUpdateHeavyBulk)
-	tg.Add(&TestUpdateHeavyBulkDBR)
 	tg.Add(&TestUpdateHeavySameVal)
 	tg.Add(&TestUpdateHeavyPartialSameVal)
 	tg.Add(&TestSelectHeavyLast)
