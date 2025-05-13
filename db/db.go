@@ -1051,11 +1051,147 @@ type databaseQueryPreparer interface {
 	Prepare(query string) (Stmt, error)
 }
 
+// UpdateCtrl is a struct for storing update control information
+type UpdateCtrl struct {
+	// Set contains the values to update in the format map[columnName][]string{value}
+	// Example:
+	//   Set: map[string][]string{
+	//       "status": {"active"},
+	//       "updated_at": {"now()"},
+	//   }
+	Set map[string][]string
+
+	// Where contains filter conditions for the update operation
+	// The map key is the column name and the value array contains one or more conditions
+	// Supported filter functions:
+	// - No function: exact match (e.g. "value")
+	// - lt: less than (e.g. "lt(5)")
+	// - le: less than or equal (e.g. "le(5)")
+	// - gt: greater than (e.g. "gt(5)")
+	// - ge: greater than or equal (e.g. "ge(5)")
+	// - ne: not equal (e.g. "ne(value)")
+	// - like: contains substring (e.g. "like(value)")
+	// - hlike: starts with (e.g. "hlike(value)")
+	// - tlike: ends with (e.g. "tlike(value)")
+	// Special conditions:
+	// - "isnull()": matches NULL values
+	// - "notnull()": matches non-NULL values
+	Where map[string][]string
+
+	// OptimizeConditions enables query optimization for better performance.
+	// When enabled, the following optimizations are applied:
+	//
+	// 1. Integer Field Optimization:
+	//    - Combines multiple range conditions into a single range
+	//    - Example: ["gt(123)", "lt(129)", "124"] -> only keeps "124" as it satisfies both conditions
+	//    - Example: ["gt(123)", "le(129)"] -> converts to range min=123, max=130
+	//    - Eliminates redundant conditions
+	//    - Returns empty result if conditions are contradictory (e.g., "gt(129)", "le(121)")
+	//
+	// 2. Enum String Optimization:
+	//    - Converts string-based enum values to their integer representations
+	//    - Combines multiple conditions into a minimal set
+	//    - Example: ["normal", "high"] -> converts to [0, 20] (internal enum values)
+	//    - Example: ["gt(normal)", "le(belowNormal)"] -> returns empty as conditions contradict
+	//    - Optimizes range queries on enum values
+	//
+	// 3. Time Field Optimization:
+	//    - Normalizes time values to UTC
+	//    - Combines overlapping time ranges
+	//    - Example: ["gt(2023-03-28)", "lt(2023-03-29)"] -> converts to min/max time range
+	//    - Example: ["2023-03-28", "lt(2023-03-29)"] -> keeps only exact match if within range
+	//    - Supports various time formats (RFC3339, Unix timestamp, etc.)
+	//    - Returns empty result for impossible time ranges
+	OptimizeConditions bool
+}
+
+// Examples:
+//
+// 1. Simple update with exact match:
+//    ```go
+//    ctrl := &UpdateCtrl{
+//        Set: map[string][]string{
+//            "status": {"active"},
+//        },
+//        Where: map[string][]string{
+//            "id": {"1"},
+//        },
+//    }
+//    ```
+//
+// 2. Update with multiple conditions:
+//    ```go
+//    ctrl := &UpdateCtrl{
+//        Set: map[string][]string{
+//            "status": {"inactive"},
+//            "updated_at": {"now()"},
+//        },
+//        Where: map[string][]string{
+//            "status": {"active"},
+//            "last_login": {"lt(2023-01-01)"},
+//        },
+//    }
+//    ```
+//
+// 3. Update with range conditions:
+//    ```go
+//    ctrl := &UpdateCtrl{
+//        Set: map[string][]string{
+//            "priority": {"high"},
+//        },
+//        Where: map[string][]string{
+//            "priority": {"gt(normal)", "le(high)"},
+//        },
+//    }
+//    ```
+
+// databaseUpdater provides methods for updating data in the database
+type databaseUpdater interface {
+	// Update modifies existing records in a table using the provided update control parameters.
+	// It supports filtering through the Where clause and setting new values through the Set clause.
+	//
+	// Example usage:
+	//   ```go
+	//   ctrl := &UpdateCtrl{
+	//       Set: map[string][]string{
+	//           "status": {"active"},
+	//           "updated_at": {"now()"},
+	//       },
+	//       Where: map[string][]string{
+	//           "id": {"1"},
+	//       },
+	//   }
+	//   affected, err := db.Update("users", ctrl)
+	//   ```
+	//
+	// The function returns:
+	// - number of affected rows
+	// - error if the update operation fails
+	//
+	// Database-specific behavior:
+	// 1. SQL Databases:
+	//    - Generates UPDATE statement with SET and WHERE clauses
+	//    - Returns number of affected rows
+	//    - Example: "UPDATE users SET status = 'active', updated_at = now() WHERE id = 1"
+	//
+	// 2. Elasticsearch:
+	//    - Uses update_by_query API
+	//    - Returns number of updated documents
+	//    - Example: POST /users/_update_by_query with query and script
+	//
+	// 3. Cassandra:
+	//    - Generates UPDATE statement with SET and WHERE clauses
+	//    - Returns number of affected rows
+	//    - Example: "UPDATE users SET status = 'active', updated_at = toTimestamp(now()) WHERE id = 1"
+	Update(tableName string, c *UpdateCtrl) (int64, error)
+}
+
 // DatabaseAccessor provides core database access operations including selecting data,
 // inserting data, and executing raw queries.
 type DatabaseAccessor interface {
 	databaseSelector
 	databaseInserter
+	databaseUpdater
 	databaseQuerier
 	databaseQueryPreparer
 }
