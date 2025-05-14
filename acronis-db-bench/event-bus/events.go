@@ -91,18 +91,17 @@ func (e *EventBus) MainLoop() {
 			e.logger.Info("stopping main worker loop")
 			return
 		default:
-		}
+			if empty, err := e.QueueIsEmpty(); err != nil {
+				e.logger.Error("cannot check if queue is empty: %v", err)
+				return
+			} else if empty {
+				time.Sleep(time.Duration(e.sleepMsec) * time.Millisecond)
+				continue
+			}
 
-		if empty, err := e.QueueIsEmpty(); err != nil {
-			e.logger.Error("cannot check if queue is empty: %v", err)
-			return
-		} else if empty {
 			time.Sleep(time.Duration(e.sleepMsec) * time.Millisecond)
-			continue
+			e.Work()
 		}
-
-		time.Sleep(time.Duration(e.sleepMsec) * time.Millisecond)
-		e.Work()
 	}
 }
 
@@ -148,6 +147,7 @@ func (e *EventBus) Stop() {
 		return
 	}
 	e.stopCh <- true
+	e.workerStarted = false
 	e.wg.Wait()
 	e.logger.Debug("worker stop")
 }
