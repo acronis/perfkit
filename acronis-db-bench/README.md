@@ -173,6 +173,30 @@ acronis-db-bench --connection-string "es://<USER>::<PASSWORD>@<HOST>:<PORT>"
 acronis-db-bench --connection-string "opensearch://<USER>::<PASSWORD>@<HOST>:<PORT>"
 ```
 
+#### Using DBR
+
+DBR is supported as an adapter and query builder for SQL databases. It provides a more convenient way to build and execute queries with features like:
+- Automatic query building
+- Connection pooling
+- Statement interpolation
+- Transaction management
+
+To use DBR, append `+dbr` to the database scheme in your connection string. Examples:
+
+```bash
+# SQLite with DBR
+acronis-db-bench --connection-string "sqlite+dbr://:memory:"
+
+# MySQL/MariaDB with DBR
+acronis-db-bench --connection-string "mysql+dbr://<USER>:<PASSWORD>@tcp(<HOST>:<PORT>)/<DATABASE NAME>"
+
+# MS SQL Server with DBR
+acronis-db-bench --connection-string "mssql+dbr://<USER>:<PASSWORD>@<HOST>:<PORT>?database=<DATABASE NAME>"
+
+# PostgreSQL with DBR
+acronis-db-bench --connection-string "postgres+dbr://<USER>:<PASSWORD>@<HOST>:<PORT>/<DATABASE NAME>?sslmode=disable"
+```
+
 ### Examples
 
 #### Run all tests
