@@ -112,7 +112,6 @@ var TestInsertLargeObj = engine.TestDesc{
 	Description: "insert a row with large random object into the 'largeobject' table",
 	Category:    engine.TestInsert,
 	IsReadonly:  false,
-	IsDBRTest:   false,
 	Databases:   []db.DialectName{db.POSTGRES},
 	Table:       TestTableLargeObj,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {

@@ -46,7 +46,6 @@ var TestInsertAdvmTasks = engine.TestDesc{
 	Description: "insert into the 'adv monitoring tasks' table",
 	Category:    engine.TestInsert,
 	IsReadonly:  false,
-	IsDBRTest:   false,
 	Databases:   []db.DialectName{db.POSTGRES, db.MSSQL},
 	Table:       TestTableAdvmTasks,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
@@ -61,7 +60,6 @@ var TestSelectAdvmTasksLast = engine.TestDesc{
 	Description: "get number of rows grouped by week+result_code",
 	Category:    engine.TestSelect,
 	IsReadonly:  false,
-	IsDBRTest:   false,
 	Databases:   []db.DialectName{db.POSTGRES, db.MSSQL},
 	Table:       TestTableAdvmTasks,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
@@ -87,7 +85,6 @@ var TestSelectAdvmTasksCodePerWeek = engine.TestDesc{
 	Description: "get number of rows grouped by week+result_code",
 	Category:    engine.TestSelect,
 	IsReadonly:  false,
-	IsDBRTest:   false,
 	Databases:   []db.DialectName{db.POSTGRES, db.MSSQL},
 	Table:       TestTableAdvmTasks,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
@@ -103,7 +100,6 @@ var TestInsertAdvmResources = engine.TestDesc{
 	Description: "insert into the 'adv monitoring resources' table",
 	Category:    engine.TestInsert,
 	IsReadonly:  false,
-	IsDBRTest:   false,
 	Databases:   []db.DialectName{db.POSTGRES, db.MSSQL},
 	Table:       TestTableAdvmResources,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
@@ -118,7 +114,6 @@ var TestInsertAdvmResourcesStatuses = engine.TestDesc{
 	Description: "insert into the 'adv monitoring resources statuses' table",
 	Category:    engine.TestInsert,
 	IsReadonly:  false,
-	IsDBRTest:   false,
 	Databases:   []db.DialectName{db.POSTGRES, db.MSSQL},
 	Table:       TestTableAdvmResourcesStatuses,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
@@ -133,7 +128,6 @@ var TestInsertAdvmAgentResources = engine.TestDesc{
 	Description: "insert into the 'adv monitoring agent resources' table",
 	Category:    engine.TestInsert,
 	IsReadonly:  false,
-	IsDBRTest:   false,
 	Databases:   []db.DialectName{db.POSTGRES, db.MSSQL},
 	Table:       TestTableAdvmAgentsResources,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
@@ -148,7 +142,6 @@ var TestInsertAdvmAgents = engine.TestDesc{
 	Description: "insert into the 'adv monitoring agents' table",
 	Category:    engine.TestInsert,
 	IsReadonly:  false,
-	IsDBRTest:   false,
 	Databases:   []db.DialectName{db.POSTGRES, db.MSSQL},
 	Table:       TestTableAdvmAgents,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
@@ -163,7 +156,6 @@ var TestInsertAdvmBackupResources = engine.TestDesc{
 	Description: "insert into the 'adv monitoring backup resources' table",
 	Category:    engine.TestInsert,
 	IsReadonly:  false,
-	IsDBRTest:   false,
 	Databases:   []db.DialectName{db.POSTGRES, db.MSSQL},
 	Table:       TestTableAdvmBackupResources,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
@@ -178,7 +170,6 @@ var TestInsertAdvmBackups = engine.TestDesc{
 	Description: "insert into the 'adv monitoring backups' table",
 	Category:    engine.TestInsert,
 	IsReadonly:  false,
-	IsDBRTest:   false,
 	Databases:   []db.DialectName{db.POSTGRES, db.MSSQL},
 	Table:       TestTableAdvmBackups,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
@@ -193,7 +184,6 @@ var TestInsertAdvmArchives = engine.TestDesc{
 	Description: "insert into the 'adv monitoring archives' table",
 	Category:    engine.TestInsert,
 	IsReadonly:  false,
-	IsDBRTest:   false,
 	Databases:   []db.DialectName{db.POSTGRES, db.MSSQL},
 	Table:       TestTableAdvmArchives,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
@@ -208,7 +198,6 @@ var TestInsertAdvmVaults = engine.TestDesc{
 	Description: "insert into the 'adv monitoring vaults' table",
 	Category:    engine.TestInsert,
 	IsReadonly:  false,
-	IsDBRTest:   false,
 	Databases:   []db.DialectName{db.POSTGRES, db.MSSQL},
 	Table:       TestTableAdvmVaults,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
@@ -223,7 +212,6 @@ var TestInsertAdvmDevices = engine.TestDesc{
 	Description: "insert into the 'adv monitoring devices' table",
 	Category:    engine.TestInsert,
 	IsReadonly:  false,
-	IsDBRTest:   false,
 	Databases:   []db.DialectName{db.POSTGRES, db.MSSQL},
 	Table:       TestTableAdvmDevices,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {

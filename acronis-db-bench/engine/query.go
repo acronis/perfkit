@@ -15,7 +15,6 @@ var TestRawQuery = TestDesc{
 	Description: "custom DB query execution",
 	Category:    TestOther,
 	IsReadonly:  false,
-	IsDBRTest:   false,
 	Databases:   ALL,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *TestDesc) {
 		query := b.TestOpts.(*TestOpts).BenchOpts.Query

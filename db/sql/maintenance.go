@@ -202,7 +202,7 @@ func constructSQLDDLQuery(d dialect, tableName string, tableDefinition *db.Table
 // 3. Checking if table already exists
 // 4. Constructing DDL query if needed
 // 5. Applying migrations to create the table
-func createTable(q querier, d dialect, name string, tableDefinition *db.TableDefinition, ddlQuery string) error {
+func createTable(q querier, d dialect, qb queryBuilderFactory, name string, tableDefinition *db.TableDefinition, ddlQuery string) error {
 	if name == "" {
 		return nil
 	}
@@ -212,7 +212,7 @@ func createTable(q querier, d dialect, name string, tableDefinition *db.TableDef
 		tableRows = tableDefinition.TableRows
 	}
 
-	if err := createSelectQueryBuilder(name, tableRows); err != nil {
+	if err := createSelectQueryBuilder(qb, name, tableRows); err != nil {
 		return err
 	}
 
@@ -492,7 +492,7 @@ func createSequence(q querier, d dialect, sequenceName string) error {
 		if exists, err := tableExists(q, d, sequenceName); err != nil {
 			return fmt.Errorf("error checking table existence: %v", err)
 		} else if !exists {
-			if err = createTable(q, d, sequenceName, nil, fmt.Sprintf(`
+			if err = createTable(q, d, nil, sequenceName, nil, fmt.Sprintf(`
 				CREATE TABLE %s (value BIGINT NOT NULL, sequence_id INT NOT NULL); 
 				CREATE INDEX %s_value ON %s (value);
 				`,

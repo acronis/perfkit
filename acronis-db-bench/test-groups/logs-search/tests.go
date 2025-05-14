@@ -298,7 +298,6 @@ var TestSelectHeavyRandPageByUUID = engine.TestDesc{
 	Description: "select page from the 'heavy' table WHERE uuid IN (...)",
 	Category:    engine.TestSelect,
 	IsReadonly:  true,
-	IsDBRTest:   false,
 	Databases:   engine.ALL,
 	Table:       TestTableLogs,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
@@ -337,7 +336,6 @@ var TestSelectHeavyRandCustomerRecent = engine.TestDesc{
 	Description: "select first page from the 'heavy' table WHERE tenant_id = {} ORDER BY enqueue_time DESC",
 	Category:    engine.TestSelect,
 	IsReadonly:  true,
-	IsDBRTest:   false,
 	Databases:   engine.ALL,
 	Table:       TestTableLogs,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
@@ -374,7 +372,6 @@ var TestSelectHeavyRandCustomerRecentLike = engine.TestDesc{
 	Description: "select first page from the 'heavy' table WHERE tenant_id = {} AND policy_name LIKE '%k%' ORDER BY enqueue_time DESC",
 	Category:    engine.TestSelect,
 	IsReadonly:  true,
-	IsDBRTest:   false,
 	Databases:   engine.ALL,
 	Table:       TestTableLogs,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
@@ -412,7 +409,6 @@ var TestSelectHeavyRandCustomerUpdateTimePage = engine.TestDesc{
 	Description: "select first page from the 'heavy' table WHERE customer_id = {} AND update_time_ns in 1h interval ORDER BY update_time DESC",
 	Category:    engine.TestSelect,
 	IsReadonly:  true,
-	IsDBRTest:   false,
 	Databases:   engine.ALL,
 	Table:       TestTableLogs,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
@@ -455,7 +451,6 @@ var TestSelectHeavyRandCustomerCount = engine.TestDesc{
 	Description: "select COUNT(0) from the 'heavy' table WHERE tenant_id = {}",
 	Category:    engine.TestSelect,
 	IsReadonly:  true,
-	IsDBRTest:   false,
 	Databases:   engine.ALL,
 	Table:       TestTableLogs,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
@@ -485,7 +480,6 @@ var TestSelectHeavyRandPartnerRecent = engine.TestDesc{
 	Description: "select first page from the 'heavy' table WHERE partner_id = {} ORDER BY enqueue_time DESC",
 	Category:    engine.TestSelect,
 	IsReadonly:  true,
-	IsDBRTest:   false,
 	Databases:   engine.ALL,
 	Table:       TestTableLogs,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
@@ -519,7 +513,6 @@ var TestSelectHeavyRandPartnerStartUpdateTimePage = engine.TestDesc{
 	Description: "select first page from the 'heavy' table WHERE partner_id = {} ORDER BY enqueue_time DESC",
 	Category:    engine.TestSelect,
 	IsReadonly:  true,
-	IsDBRTest:   false,
 	Databases:   engine.ALL,
 	Table:       TestTableLogs,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {

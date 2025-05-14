@@ -6,9 +6,6 @@ import (
 	"regexp"
 	"strings"
 	"sync/atomic"
-	"time"
-
-	"github.com/gocraft/dbr/v2"
 
 	"github.com/acronis/perfkit/benchmark"
 	"github.com/acronis/perfkit/db"
@@ -164,6 +161,7 @@ func TestSelectRun(
 	rowsRequired uint64,
 ) {
 	initCommon(b, testDesc, rowsRequired)
+
 	testOpts, ok := b.TestOpts.(*TestOpts)
 	if !ok {
 		b.Exit("TestOpts type conversion error")
@@ -172,10 +170,6 @@ func TestSelectRun(
 	explain := testOpts.DBOpts.Explain
 
 	batch := b.Vault.(*DBTestData).EffectiveBatch
-
-	type row struct {
-		ID int64 `db:"id"`
-	}
 
 	b.WorkerRunFunc = func(worker *benchmark.BenchmarkWorker) (loops int) {
 		b := worker.Benchmark
@@ -194,34 +188,6 @@ func TestSelectRun(
 		var orderBy []string
 		if orderByFunc != nil {
 			orderBy = orderByFunc(worker)
-		}
-
-		if testDesc.IsDBRTest {
-			if rawSession, casted := c.Database.RawSession().(*dbr.Session); casted {
-				var rows []row
-				if explain {
-					b.Exit("sorry, the 'explain' mode is not supported for DBR SELECT yet")
-				}
-
-				var q = rawSession.Select("*").From(from).Where("id = ?", 1).Limit(uint64(batch))
-
-				/*
-					if orderBy != "" {
-						q = q.OrderBy(orderBy)
-					}
-
-					if where != "" {
-						q = q.Where(where)
-					}
-				*/
-
-				_, err := q.Load(rows)
-				if err != nil {
-					c.Exit("DBRSelect load error: %v: from: %s, what: %s, orderBy: %s, limit: %d", err, from, what, orderBy, batch)
-				}
-
-				return batch
-			}
 		}
 
 		var session = c.Database.Session(c.Database.Context(context.Background(), explain))
@@ -421,47 +387,6 @@ func TestInsertGeneric(b *benchmark.Benchmark, testDesc *TestDesc) {
 
 			return batch
 		}
-	} else if testDesc.IsDBRTest {
-		b.WorkerRunFunc = func(worker *benchmark.BenchmarkWorker) (loops int) {
-			var t time.Time
-			if worker.Logger.GetLevel() >= logger.LevelDebug {
-				t = time.Now()
-			}
-
-			c := worker.Data.(*DBWorkerData).workingConn
-
-			var rawDbrSess = c.Database.RawSession()
-			var dbrSess = rawDbrSess.(*dbr.Session)
-
-			tx, err := dbrSess.Begin()
-			worker.Logger.Debug("BEGIN")
-			if err != nil {
-				worker.Exit(err)
-			}
-			defer tx.RollbackUnlessCommitted() // Rollback in case of error
-
-			for i := 0; i < batch; i++ {
-				columns, values, err := worker.Randomizer.GenFakeData(colConfs, false)
-				if err != nil {
-					b.Exit(err)
-				}
-				_, err = tx.InsertInto(table.TableName).Columns(columns...).Values(values...).Exec()
-				if err != nil {
-					b.Exit(err)
-				}
-			}
-
-			err = tx.Commit()
-			if err != nil {
-				b.Exit("Commit() error: %s", err)
-			}
-
-			if worker.Logger.GetLevel() >= logger.LevelDebug {
-				worker.Logger.Debug(fmt.Sprintf("COMMIT # dur: %.6f", time.Since(t).Seconds()))
-			}
-
-			return batch
-		}
 	} else {
 		b.WorkerRunFunc = func(worker *benchmark.BenchmarkWorker) (loops int) {
 			workerData := worker.Data.(*DBWorkerData)
@@ -547,113 +472,51 @@ func TestUpdateGeneric(b *benchmark.Benchmark, testDesc *TestDesc, updateRows ui
 	batch := b.Vault.(*DBTestData).EffectiveBatch
 	table := &testDesc.Table
 
-	if testDesc.IsDBRTest {
-		b.WorkerRunFunc = func(worker *benchmark.BenchmarkWorker) (loops int) {
-			var t time.Time
-			if worker.Logger.GetLevel() >= logger.LevelDebug {
-				t = time.Now()
-			}
-
-			c := worker.Data.(*DBWorkerData).workingConn
-
-			var rawDbrSess = c.Database.RawSession()
-			var dbrSess = rawDbrSess.(*dbr.Session)
-
-			tx, err := dbrSess.Begin()
-			worker.Logger.Debug("BEGIN")
-			if err != nil {
-				worker.Exit(err)
-			}
-			defer tx.RollbackUnlessCommitted() // Rollback in case of error
-
+	b.WorkerRunFunc = func(worker *benchmark.BenchmarkWorker) (loops int) {
+		var c = worker.Data.(*DBWorkerData).workingConn
+		var session = c.Database.Session(c.Database.Context(context.Background(), false))
+		if txErr := session.Transact(func(tx db.DatabaseAccessor) error {
 			for i := 0; i < batch; i++ {
-				columns, err := worker.Randomizer.GenFakeDataAsMap(colConfs, false)
+				id := int64(worker.Randomizer.Uintn64(table.RowsCount-updateRows) + updateRows)
+				setValues, err := worker.Randomizer.GenFakeDataAsMap(colConfs, false)
 				if err != nil {
-					worker.Exit(err)
+					return err
 				}
-				id := int64(worker.Randomizer.Uintn64(table.RowsCount - updateRows))
 
+				// Create where condition based on updateRows
+				whereCond := make(map[string][]string)
 				if updateRows == 1 {
-					_, err = tx.Update(table.TableName).SetMap(*columns).Where(fmt.Sprintf("id > %d", id)).Exec()
+					whereCond["id"] = []string{fmt.Sprintf("%d", id)}
 				} else {
-					_, err = tx.Update(table.TableName).SetMap(*columns).Where(fmt.Sprintf("id > %d AND id < %d", id, id+int64(updateRows))).Exec()
+					whereCond["id"] = []string{
+						fmt.Sprintf("le(%d)", id),
+						fmt.Sprintf("gt(%d)", id-int64(updateRows)),
+					}
 				}
-				if err != nil {
-					b.Exit("aborting")
+
+				updateCtrl := &db.UpdateCtrl{
+					Set:   *setValues,
+					Where: whereCond,
 				}
-			}
 
-			err = tx.Commit()
-			if err != nil {
-				b.Exit("Commit() error: %s", err)
-			}
+				if _, err = tx.Update(table.TableName, updateCtrl); err != nil {
+					return err
+				}
 
-			if worker.Logger.GetLevel() >= logger.LevelDebug {
-				worker.Logger.Debug(fmt.Sprintf("COMMIT # dur: %.6f", time.Since(t).Seconds()))
-			}
-
-			return batch * int(updateRows)
-		}
-	} else {
-		testOpts, ok := b.TestOpts.(*TestOpts)
-		if !ok {
-			b.Exit("db type conversion error")
-		}
-
-		var dialectName, err = db.GetDialectName(testOpts.DBOpts.ConnString)
-		if err != nil {
-			b.Exit(err)
-		}
-
-		values := make([]string, len(*colConfs))
-		for i := 0; i < len(*colConfs); i++ {
-			values[i] = fmt.Sprintf("%s = $%d", (*colConfs)[i].ColumnName, i+1)
-		}
-		setPart := strings.Join(values, ", ")
-
-		var updateSQLTemplate string
-		if updateRows == 1 {
-			updateSQLTemplate = fmt.Sprintf("UPDATE %s SET %s WHERE id = $%d", table.TableName, setPart, len(*colConfs)+1)
-		} else {
-			updateSQLTemplate = fmt.Sprintf("UPDATE %s SET %s WHERE id <= $%d AND id > $%d", table.TableName, setPart, len(*colConfs)+1, len(*colConfs)+2)
-		}
-		updateSQL := FormatSQL(updateSQLTemplate, dialectName)
-
-		b.WorkerRunFunc = func(worker *benchmark.BenchmarkWorker) (loops int) {
-			var c = worker.Data.(*DBWorkerData).workingConn
-			var session = c.Database.Session(c.Database.Context(context.Background(), false))
-			if txErr := session.Transact(func(tx db.DatabaseAccessor) error {
-				for i := 0; i < batch; i++ {
-					id := int64(worker.Randomizer.Uintn64(table.RowsCount-updateRows) + updateRows)
-					_, fakeDataValues, err := worker.Randomizer.GenFakeData(colConfs, false)
-					if err != nil {
+				if b.TestOpts.(*TestOpts).BenchOpts.Events {
+					rw := worker.Randomizer
+					if err = b.Vault.(*DBTestData).EventBus.InsertEvent(rw, tx, rw.UUID()); err != nil {
 						return err
 					}
-
-					fakeDataValues = append(fakeDataValues, id)
-					if updateRows > 1 {
-						fakeDataValues = append(fakeDataValues, id-int64(updateRows))
-					}
-
-					if _, err = tx.Exec(updateSQL, fakeDataValues...); err != nil {
-						return err
-					}
-
-					if b.TestOpts.(*TestOpts).BenchOpts.Events {
-						rw := worker.Randomizer
-						if err = b.Vault.(*DBTestData).EventBus.InsertEvent(rw, tx, rw.UUID()); err != nil {
-							return err
-						}
-					}
 				}
-
-				return nil
-			}); txErr != nil {
-				b.Exit(txErr.Error())
 			}
 
-			return batch * int(updateRows)
+			return nil
+		}); txErr != nil {
+			b.Exit(txErr.Error())
 		}
+
+		return batch * int(updateRows)
 	}
 
 	b.Run()
@@ -676,89 +539,45 @@ func testDeleteGeneric(b *benchmark.Benchmark, testDesc *TestDesc, deleteRows ui
 		b.Exit(err)
 	}
 
-	if testDesc.IsDBRTest {
-		b.WorkerRunFunc = func(worker *benchmark.BenchmarkWorker) (loops int) {
-			var t time.Time
-			if worker.Logger.GetLevel() >= logger.LevelDebug {
-				t = time.Now()
-			}
-
-			c := worker.Data.(*DBWorkerData).workingConn
-
-			var rawDbrSess = c.Database.RawSession()
-			var dbrSess = rawDbrSess.(*dbr.Session)
-
-			tx, err := dbrSess.Begin()
-			worker.Logger.Debug("BEGIN")
-			if err != nil {
-				b.Exit(err)
-			}
-			defer tx.RollbackUnlessCommitted() // Rollback in case of error
-
-			for i := 0; i < batch; i++ {
-				id := int64(worker.Randomizer.Uintn64(table.RowsCount - deleteRows))
-
-				if deleteRows == 1 {
-					_, err = tx.DeleteFrom(table.TableName).Where(fmt.Sprintf("id > %d", id)).Exec()
-				} else {
-					_, err = tx.DeleteFrom(table.TableName).Where(fmt.Sprintf("id > %d AND id < %d", id, id+int64(deleteRows))).Exec()
-				}
-				if err != nil {
-					b.Exit("aborting")
-				}
-			}
-
-			if err = tx.Commit(); err != nil {
-				b.Exit(err)
-			}
-
-			if worker.Logger.GetLevel() >= logger.LevelDebug {
-				worker.Logger.Debug(fmt.Sprintf("COMMIT # dur: %.6f", time.Since(t).Seconds()))
-			}
-
-			return batch * int(deleteRows)
-		}
+	var deleteSQLTemplate string
+	if deleteRows == 1 {
+		deleteSQLTemplate = fmt.Sprintf("DELETE FROM %s WHERE id = $1", table.TableName)
 	} else {
-		var deleteSQLTemplate string
-		if deleteRows == 1 {
-			deleteSQLTemplate = fmt.Sprintf("DELETE FROM %s WHERE id = $1", table.TableName)
-		} else {
-			deleteSQLTemplate = fmt.Sprintf("DELETE FROM %s WHERE id <= $1 AND id > $2", table.TableName)
-		}
-		deleteSQL := FormatSQL(deleteSQLTemplate, dialectName)
+		deleteSQLTemplate = fmt.Sprintf("DELETE FROM %s WHERE id <= $1 AND id > $2", table.TableName)
+	}
+	deleteSQL := FormatSQL(deleteSQLTemplate, dialectName)
 
-		b.WorkerRunFunc = func(worker *benchmark.BenchmarkWorker) (loops int) {
-			var c = worker.Data.(*DBWorkerData).workingConn
-			var session = c.Database.Session(c.Database.Context(context.Background(), false))
-			if txErr := session.Transact(func(tx db.DatabaseAccessor) error {
-				for i := 0; i < batch; i++ {
-					id := int64(worker.Randomizer.Uintn64(table.RowsCount-deleteRows) + deleteRows)
-					var values []interface{}
+	b.WorkerRunFunc = func(worker *benchmark.BenchmarkWorker) (loops int) {
+		var c = worker.Data.(*DBWorkerData).workingConn
+		var session = c.Database.Session(c.Database.Context(context.Background(), false))
+		if txErr := session.Transact(func(tx db.DatabaseAccessor) error {
+			for i := 0; i < batch; i++ {
+				id := int64(worker.Randomizer.Uintn64(table.RowsCount-deleteRows) + deleteRows)
+				var values []interface{}
 
-					values = append(values, id)
-					if deleteRows > 1 {
-						values = append(values, id-int64(deleteRows))
-					}
+				values = append(values, id)
+				if deleteRows > 1 {
+					values = append(values, id-int64(deleteRows))
+				}
 
-					if _, err := tx.Query(deleteSQL, values...); err != nil {
+				if _, err := tx.Query(deleteSQL, values...); err != nil {
+					return err
+				}
+
+				if b.TestOpts.(*TestOpts).BenchOpts.Events {
+					rw := worker.Randomizer
+					if err := b.Vault.(*DBTestData).EventBus.InsertEvent(rw, tx, rw.UUID()); err != nil {
 						return err
 					}
-
-					if b.TestOpts.(*TestOpts).BenchOpts.Events {
-						rw := worker.Randomizer
-						if err := b.Vault.(*DBTestData).EventBus.InsertEvent(rw, tx, rw.UUID()); err != nil {
-							return err
-						}
-					}
 				}
-
-				return nil
-			}); txErr != nil {
-				b.Exit(txErr.Error())
 			}
 
-			return batch * int(deleteRows)
+			return nil
+		}); txErr != nil {
+			b.Exit(txErr.Error())
 		}
+
+		return batch * int(deleteRows)
 	}
 
 	b.Run()

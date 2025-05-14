@@ -43,7 +43,6 @@ var TestInsertTenant = engine.TestDesc{
 	Databases:   engine.ALL,
 	Table:       TestTableTenants,
 	IsReadonly:  false,
-	IsDBRTest:   false,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
 		engine.TestGeneric(b, testDesc, CreateTenantWorker, 0)
 	},
@@ -83,7 +82,6 @@ var TestInsertCTI = engine.TestDesc{
 	Databases:   engine.ALL,
 	Table:       TestTableCTIEntities,
 	IsReadonly:  false,
-	IsDBRTest:   false,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
 		engine.TestGeneric(b, testDesc, CreateCTIEntityWorker, 0)
 	},

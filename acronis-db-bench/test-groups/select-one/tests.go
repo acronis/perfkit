@@ -28,7 +28,6 @@ var TestSelectOne = engine.TestDesc{
 	Description: "just do 'SELECT 1'",
 	Category:    engine.TestSelect,
 	IsReadonly:  true,
-	IsDBRTest:   false,
 	Databases:   engine.ALL,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
 		worker := func(b *benchmark.Benchmark, c *engine.DBConnector, testDesc *engine.TestDesc, batch int) (loops int) { //nolint:revive

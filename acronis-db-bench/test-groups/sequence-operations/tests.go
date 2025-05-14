@@ -28,7 +28,6 @@ var TestSelectNextVal = engine.TestDesc{
 	Description: "increment a DB sequence in a loop (or use SELECT FOR UPDATE, UPDATE)",
 	Category:    engine.TestOther,
 	IsReadonly:  true,
-	IsDBRTest:   false,
 	Databases:   engine.RELATIONAL,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
 		c := engine.DbConnector(b)

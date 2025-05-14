@@ -16,8 +16,6 @@ require (
 	github.com/acronis/perfkit/logger v0.0.0-20250402063049-20a8306d6a02
 	github.com/apache/arrow-go/v18 v18.0.0
 	github.com/denisenkom/go-mssqldb v0.12.3
-	github.com/elastic/go-elasticsearch/v8 v8.15.0
-	github.com/gocraft/dbr/v2 v2.7.6
 	github.com/google/uuid v1.6.0
 	github.com/lib/pq v1.10.9
 	github.com/stretchr/testify v1.9.0
@@ -33,6 +31,7 @@ require (
 	github.com/apache/thrift v0.21.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/elastic/elastic-transport-go/v8 v8.6.0 // indirect
+	github.com/elastic/go-elasticsearch/v8 v8.15.0 // indirect
 	github.com/fergusstrange/embedded-postgres v1.27.0 // indirect
 	github.com/go-faster/city v1.0.1 // indirect
 	github.com/go-faster/errors v0.7.1 // indirect
@@ -41,6 +40,7 @@ require (
 	github.com/go-sql-driver/mysql v1.8.1 // indirect
 	github.com/goccy/go-json v0.10.3 // indirect
 	github.com/gocql/gocql v1.6.0 // indirect
+	github.com/gocraft/dbr/v2 v2.7.6 // indirect
 	github.com/golang-sql/civil v0.0.0-20220223132316-b832511892a9 // indirect
 	github.com/golang-sql/sqlexp v0.1.0 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
