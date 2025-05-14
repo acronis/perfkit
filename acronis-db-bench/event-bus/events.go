@@ -292,15 +292,35 @@ type stepType func() //nolint:unused
 func (e *EventBus) Work() {
 	e.workerIteration++
 	e.logger.Trace(fmt.Sprintf("worker iteration #%d start", e.workerIteration))
-	if e.Step("phase #1 (aligner)", e.DoAlign) { // perf model: per event
-		e.Step("phase #2 (max seq shifter)", e.DoMaxSeqShifter) // perf model: per batch
-		e.Step("phase #3 (fetcher)", e.DoFetch)                 // perf model: per event, but in a batch
-		// e.Step("phase # (window shift)", e.DoWindowShift)     // perf model: per larger batch, depends on ingest & delivery response
-		// e.Step("phase # (consolidation)", e.DoConsolidate)    // rarely used
-		// e.Step("phase # (fetch consolidated)", e.DoFetchConsolidated) // rarely used
-		e.Step("phase #4 (archive)", e.DoArchive) // perf model: per event, but in a batch
-		// e.Step("phase #5 (delete)", e.DoDelete)               // perf model: per event, but in a larger batch
+
+	// Phase 1: Align events
+	if aligned := e.Step("phase #1 (aligner)", e.DoAlign); aligned {
+		e.logger.Debug("Events aligned, proceeding with processing")
+
+		// Phase 2: Update max sequence
+		if shifted := e.Step("phase #2 (max seq shifter)", e.DoMaxSeqShifter); shifted {
+			e.logger.Debug("Max sequence shifted")
+		} else {
+			e.logger.Debug("Max sequence shift failed or no events to process")
+		}
+
+		// Phase 3: Fetch and process events
+		if fetched := e.Step("phase #3 (fetcher)", e.DoFetch); fetched {
+			e.logger.Debug("Events fetched and processed")
+		} else {
+			e.logger.Debug("No events fetched or processing failed")
+		}
+
+		// Phase 4: Archive processed events
+		if archived := e.Step("phase #4 (archive)", e.DoArchive); archived {
+			e.logger.Debug("Events archived")
+		} else {
+			e.logger.Debug("Archiving failed or no events to archive")
+		}
+	} else {
+		e.logger.Debug("No events to align or alignment failed")
 	}
+
 	e.logger.Trace(fmt.Sprintf("worker iteration #%d end", e.workerIteration))
 }
 
@@ -328,6 +348,7 @@ func (e *EventBus) DoAlign() (bool, error) {
 
 	var session = c.Session(c.Context(context.Background(), false))
 	if txErr := session.Transact(func(tx db.DatabaseAccessor) error {
+		e.logger.Debug("Starting DoAlign transaction")
 
 		/*
 		 * step #1 - get fresh events
@@ -363,6 +384,7 @@ func (e *EventBus) DoAlign() (bool, error) {
 			topOrEmpty,
 			limitOrEmpty))
 		if err != nil {
+			e.logger.Error("Failed to query events: %v", err)
 			return err
 		}
 
@@ -383,7 +405,8 @@ func (e *EventBus) DoAlign() (bool, error) {
 				&unused, // &ed.DataBase64
 				&unused) // &ed.CreatedAt
 			if err != nil {
-				return err
+				e.logger.Error("Failed to scan event: %v", err)
+				return fmt.Errorf("scan failed: %v", err)
 			}
 
 			ids = append(ids, strconv.FormatInt(ed.InternalID, 10))
@@ -397,7 +420,7 @@ func (e *EventBus) DoAlign() (bool, error) {
 			return nil
 		}
 
-		e.logger.Trace(fmt.Sprintf("%d new events found", len(ids)))
+		e.logger.Debug("Found %d new events", len(ids))
 		newEventsFound = true
 
 		/*
@@ -405,6 +428,7 @@ func (e *EventBus) DoAlign() (bool, error) {
 		 */
 
 		if _, err = tx.Exec(fmt.Sprintf("DELETE FROM acronis_db_bench_eventbus_events WHERE internal_id IN (%s);", strings.Join(ids, ","))); err != nil {
+			e.logger.Error("Failed to delete events: %v", err)
 			return err
 		}
 
@@ -417,37 +441,45 @@ func (e *EventBus) DoAlign() (bool, error) {
 		switch c.DialectName() {
 		case db.MSSQL:
 			if err = tx.QueryRow("SELECT sequence + 1 FROM acronis_db_bench_eventbus_sequences WITH (UPDLOCK) WHERE int_id = @p1;", 1).Scan(&seq64); err != nil {
+				e.logger.Error("Failed to get sequence (MSSQL): %v", err)
 				return err
 			}
 
 			if _, err = tx.Exec("UPDATE acronis_db_bench_eventbus_sequences SET sequence = @p1 - 1 WHERE int_id = @p2;", seq64+int64(len(ids)), 1); err != nil {
+				e.logger.Error("Failed to update sequence (MSSQL): %v", err)
 				return err
 			}
 
 		case db.MYSQL:
 			if err = tx.QueryRow("SELECT sequence + 1 FROM acronis_db_bench_eventbus_sequences WHERE int_id = ? FOR UPDATE;", 1).Scan(&seq64); err != nil {
+				e.logger.Error("Failed to get sequence (MySQL): %v", err)
 				return err
 			}
 
 			if _, err = tx.Exec("UPDATE acronis_db_bench_eventbus_sequences SET sequence = ? - 1 WHERE int_id = ?;", seq64+int64(len(ids)), 1); err != nil {
+				e.logger.Error("Failed to update sequence (MySQL): %v", err)
 				return err
 			}
 
 		case db.SQLITE:
 			if err = tx.QueryRow("SELECT sequence + 1 FROM acronis_db_bench_eventbus_sequences WHERE int_id = $1;", 1).Scan(&seq64); err != nil {
+				e.logger.Error("Failed to get sequence (SQLite): %v", err)
 				return err
 			}
 
 			if _, err = tx.Exec("UPDATE acronis_db_bench_eventbus_sequences SET sequence = $1 - 1 WHERE int_id = $2;", seq64+int64(len(ids)), 1); err != nil {
+				e.logger.Error("Failed to update sequence (SQLite): %v", err)
 				return err
 			}
 
 		default:
 			if err = tx.QueryRow("SELECT sequence + 1 FROM acronis_db_bench_eventbus_sequences WHERE int_id = $1 FOR UPDATE;", 1).Scan(&seq64); err != nil {
+				e.logger.Error("Failed to get sequence (default): %v", err)
 				return err
 			}
 
 			if _, err = tx.Exec("UPDATE acronis_db_bench_eventbus_sequences SET sequence = $1 - 1 WHERE int_id = $2;", seq64+int64(len(ids)), 1); err != nil {
+				e.logger.Error("Failed to update sequence (default): %v", err)
 				return err
 			}
 		}
@@ -480,6 +512,7 @@ func (e *EventBus) DoAlign() (bool, error) {
 		}
 
 		if _, err = tx.Exec(fmt.Sprintf("INSERT INTO acronis_db_bench_eventbus_data (int_id, topic_id, type_id, data) VALUES %s;", strings.Join(placeholders, ",")), values...); err != nil {
+			e.logger.Error("Failed to insert into eventbus_data: %v", err)
 			return err
 		}
 
@@ -512,9 +545,11 @@ func (e *EventBus) DoAlign() (bool, error) {
 		}
 
 		if _, err = tx.Exec(fmt.Sprintf("INSERT INTO acronis_db_bench_eventbus_stream (int_id, topic_id, seq, seq_time) VALUES %s;", strings.Join(placeholders, ",")), values...); err != nil {
+			e.logger.Error("Failed to insert into eventbus_stream: %v", err)
 			return err
 		}
 
+		e.logger.Debug("Successfully completed DoAlign transaction")
 		return nil
 	}); txErr != nil {
 		return false, fmt.Errorf("align: %v", txErr)
