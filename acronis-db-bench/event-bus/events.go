@@ -333,8 +333,17 @@ func (e *EventBus) DoAlign() (bool, error) {
 		 * step #1 - get fresh events
 		 */
 
+		var topOrEmpty, limitOrEmpty string
+		if c.DialectName() == db.MSSQL {
+			topOrEmpty = fmt.Sprintf("TOP %d", e.batchSize)
+			limitOrEmpty = ""
+		} else {
+			topOrEmpty = ""
+			limitOrEmpty = fmt.Sprintf("LIMIT %d", e.batchSize)
+		}
+
 		var rows, err = tx.Query(fmt.Sprintf(`
-			SELECT internal_id,
+			SELECT %s internal_id,
 				   topic_internal_id,
 				   event_type_internal_id,
 				   event_id,
@@ -350,7 +359,9 @@ func (e *EventBus) DoAlign() (bool, error) {
 				   created_at
 			FROM acronis_db_bench_eventbus_events
 			ORDER BY internal_id
-			LIMIT %d;`, e.batchSize))
+			%s;`,
+			topOrEmpty,
+			limitOrEmpty))
 		if err != nil {
 			return err
 		}
@@ -405,11 +416,11 @@ func (e *EventBus) DoAlign() (bool, error) {
 
 		switch c.DialectName() {
 		case db.MSSQL:
-			if err = tx.QueryRow("SELECT sequence + 1 FROM acronis_db_bench_eventbus_sequences WITH (UPDLOCK) WHERE int_id = $1;", 1).Scan(&seq64); err != nil {
+			if err = tx.QueryRow("SELECT sequence + 1 FROM acronis_db_bench_eventbus_sequences WITH (UPDLOCK) WHERE int_id = @p1;", 1).Scan(&seq64); err != nil {
 				return err
 			}
 
-			if _, err = tx.Exec("UPDATE acronis_db_bench_eventbus_sequences SET sequence = $1 - 1 WHERE int_id = $2;", seq64+int64(len(ids)), 1); err != nil {
+			if _, err = tx.Exec("UPDATE acronis_db_bench_eventbus_sequences SET sequence = @p1 - 1 WHERE int_id = @p2;", seq64+int64(len(ids)), 1); err != nil {
 				return err
 			}
 
@@ -451,46 +462,56 @@ func (e *EventBus) DoAlign() (bool, error) {
 
 		for n := range data {
 			var rawPlaceholders string
-			if c.DialectName() == db.MYSQL {
-				rawPlaceholders = db.GenDBParameterPlaceholders(n*fields, fields, false)
-			} else {
-				rawPlaceholders = db.GenDBParameterPlaceholders(n*fields, fields, true)
+			start := n * fields
+			switch c.DialectName() {
+			case db.MSSQL:
+				rawPlaceholders = fmt.Sprintf("(@p%d,@p%d,@p%d,@p%d)", start+1, start+2, start+3, start+4)
+			case db.MYSQL:
+				rawPlaceholders = fmt.Sprintf("(?,?,?,?)")
+			default:
+				rawPlaceholders = fmt.Sprintf("($%d,$%d,$%d,$%d)", start+1, start+2, start+3, start+4)
 			}
 
-			placeholders[n] = fmt.Sprintf("(%s)", rawPlaceholders)
+			placeholders[n] = rawPlaceholders
 			values[n*fields+0] = seq64 + int64(n)            // intId: global sequence
 			values[n*fields+1] = data[n].TopicInternalID     // topic_id
 			values[n*fields+2] = data[n].EventTypeInternalID // event type_id
 			values[n*fields+3] = data[n].Data                // event data
 		}
 
-		if _, err = tx.Exec(fmt.Sprintf("INSERT INTO acronis_db_bench_eventbus_data (int_id, topic_id, type_id, data) VALUES%s;", strings.Join(placeholders, ",")), values...); err != nil {
+		if _, err = tx.Exec(fmt.Sprintf("INSERT INTO acronis_db_bench_eventbus_data (int_id, topic_id, type_id, data) VALUES %s;", strings.Join(placeholders, ",")), values...); err != nil {
 			return err
 		}
 
 		/*
-		 * step #4 - create meta data in `acronis_db_bench_eventbus_data`
+		 * step #5 - create meta data in `acronis_db_bench_stream`
 		 */
 
 		fields = 3
 		values = make([]interface{}, fields*len(data))
 
 		for n := range data {
-			if c.DialectName() == db.MSSQL {
-				placeholders[n] = fmt.Sprintf("(%s, GETDATE())", db.GenDBParameterPlaceholders(n*fields, fields, true))
-			} else if c.DialectName() == db.POSTGRES {
-				placeholders[n] = fmt.Sprintf("(%s, NOW())", db.GenDBParameterPlaceholders(n*fields, fields, true))
-			} else if c.DialectName() == db.SQLITE {
-				placeholders[n] = fmt.Sprintf("(%s, datetime('now'))", db.GenDBParameterPlaceholders(n*fields, fields, true))
-			} else {
-				placeholders[n] = fmt.Sprintf("(%s, NOW())", db.GenDBParameterPlaceholders(n*fields, fields, false))
+			var rawPlaceholders string
+			start := n * fields
+
+			switch c.DialectName() {
+			case db.MSSQL:
+				rawPlaceholders = fmt.Sprintf("(@p%d,@p%d,@p%d, GETDATE())", start+1, start+2, start+3)
+			case db.POSTGRES:
+				rawPlaceholders = fmt.Sprintf("($%d,$%d,$%d, NOW())", start+1, start+2, start+3)
+			case db.SQLITE:
+				rawPlaceholders = fmt.Sprintf("($%d,$%d,$%d, datetime('now'))", start+1, start+2, start+3)
+			case db.MYSQL:
+				rawPlaceholders = fmt.Sprintf("(?,?,?,NOW())")
 			}
+
+			placeholders[n] = rawPlaceholders
 			values[n*fields+0] = seq64 + int64(n)        // int_id: global sequence
 			values[n*fields+1] = data[n].TopicInternalID // topic_id
 			values[n*fields+2] = seq64 + int64(n)        // seq: per-topic sequence, currently equals to int_id
 		}
 
-		if _, err = tx.Exec(fmt.Sprintf("INSERT INTO acronis_db_bench_eventbus_stream (int_id, topic_id, seq, seq_time) VALUES%s;", strings.Join(placeholders, ",")), values...); err != nil {
+		if _, err = tx.Exec(fmt.Sprintf("INSERT INTO acronis_db_bench_eventbus_stream (int_id, topic_id, seq, seq_time) VALUES %s;", strings.Join(placeholders, ",")), values...); err != nil {
 			return err
 		}
 
@@ -563,16 +584,27 @@ func (e *EventBus) DoFetch() (bool, error) {
 			}
 		}
 
+		var topOrEmpty, limitOrEmpty string
+		if c.DialectName() == db.MSSQL {
+			topOrEmpty = fmt.Sprintf("TOP %d", e.batchSize)
+			limitOrEmpty = ""
+		} else {
+			topOrEmpty = ""
+			limitOrEmpty = fmt.Sprintf("LIMIT %d", e.batchSize)
+		}
+
 		var rows, err = sess.Query(fmt.Sprintf(`
-			SELECT s.int_id, s.topic_id, d.type_id, s.seq, s.seq_time, d.data
+			SELECT %s s.int_id, s.topic_id, d.type_id, s.seq, s.seq_time, d.data
 			FROM acronis_db_bench_eventbus_stream s
 					 INNER JOIN acronis_db_bench_eventbus_data d ON s.int_id = d.int_id
 			WHERE s.topic_id = %d
 			  AND s.seq IS NOT NULL
 			  AND s.seq > %d
 			ORDER BY s.seq
-			LIMIT %d;`,
-			t, cur64, e.batchSize))
+			%s`,
+			topOrEmpty,
+			t, cur64,
+			limitOrEmpty))
 		if err != nil {
 			return false, err
 		}
