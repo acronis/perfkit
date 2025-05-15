@@ -168,6 +168,9 @@ func (suite *EventBusTestSuite) TestInsertEvent() {
 
 func (suite *EventBusTestSuite) TestStartStop() {
 	require.NoError(suite.T(), suite.eventBus.CreateTables())
+	defer func() {
+		_ = suite.eventBus.DropTables()
+	}()
 
 	// Verify tables exist before proceeding
 	exists, err := suite.conn.TableExists("acronis_db_bench_eventbus_events")
@@ -198,7 +201,10 @@ func (suite *EventBusTestSuite) TestStartStop() {
 
 	// Verify event was processed
 	var count int
-	err = session.QueryRow("SELECT COUNT(*) FROM acronis_db_bench_eventbus_events").Scan(&count)
+	// Re-establish session context for this query to ensure freshness
+	freshCtx := suite.conn.Context(context.Background(), false)
+	freshSession := suite.conn.Session(freshCtx)
+	err = freshSession.QueryRow("SELECT COUNT(*) FROM acronis_db_bench_eventbus_events").Scan(&count)
 	require.NoError(suite.T(), err)
 	assert.Equal(suite.T(), 0, count, "Event should have been processed")
 
@@ -216,11 +222,6 @@ func (suite *EventBusTestSuite) TestStartStop() {
 
 	// Test double stop - should not panic or block
 	suite.eventBus.Stop()
-
-	// Clean up tables at the end
-	defer func() {
-		_ = suite.eventBus.DropTables()
-	}()
 }
 
 func (suite *EventBusTestSuite) TestQueueIsEmpty() {
