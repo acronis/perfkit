@@ -2,6 +2,7 @@ package event_bus
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"strconv"
 	"strings"
@@ -67,7 +68,7 @@ func NewEventBus(conn db.Database, logger logger.Logger) *EventBus {
 	return &EventBus{
 		workerConn:    conn,
 		workerStarted: false,
-		stopCh:        make(chan bool),
+		stopCh:        make(chan bool, 1),
 		batchSize:     500,
 		sleepMsec:     10,
 		logger:        logger,
@@ -85,22 +86,22 @@ func (e *EventBus) MainLoop() {
 	defer e.wg.Done()
 
 	for {
-		if empty, err := e.QueueIsEmpty(); err != nil {
-			e.logger.Error("cannot check if queue is empty: %v", err)
-
+		select {
+		case <-e.stopCh:
+			e.logger.Info("stopping main worker loop")
 			return
-		} else if empty {
-			select {
-			case <-e.stopCh:
-				e.logger.Info("stopping main worker loop")
-
+		default:
+			if empty, err := e.QueueIsEmpty(); err != nil {
+				e.logger.Error("cannot check if queue is empty: %v", err)
 				return
-			default:
+			} else if empty {
+				time.Sleep(time.Duration(e.sleepMsec) * time.Millisecond)
+				continue
 			}
-		}
 
-		time.Sleep(time.Duration(e.sleepMsec) * time.Millisecond)
-		e.Work()
+			time.Sleep(time.Duration(e.sleepMsec) * time.Millisecond)
+			e.Work()
+		}
 	}
 }
 
@@ -146,6 +147,7 @@ func (e *EventBus) Stop() {
 		return
 	}
 	e.stopCh <- true
+	e.workerStarted = false
 	e.wg.Wait()
 	e.logger.Debug("worker stop")
 }
@@ -290,15 +292,35 @@ type stepType func() //nolint:unused
 func (e *EventBus) Work() {
 	e.workerIteration++
 	e.logger.Trace(fmt.Sprintf("worker iteration #%d start", e.workerIteration))
-	if e.Step("phase #1 (aligner)", e.DoAlign) { // perf model: per event
-		e.Step("phase #2 (max seq shifter)", e.DoMaxSeqShifter) // perf model: per batch
-		e.Step("phase #3 (fetcher)", e.DoFetch)                 // perf model: per event, but in a batch
-		// e.Step("phase # (window shift)", e.DoWindowShift)     // perf model: per larger batch, depends on ingest & delivery response
-		// e.Step("phase # (consolidation)", e.DoConsolidate)    // rarely used
-		// e.Step("phase # (fetch consolidated)", e.DoFetchConsolidated) // rarely used
-		e.Step("phase #4 (archive)", e.DoArchive) // perf model: per event, but in a batch
-		// e.Step("phase #5 (delete)", e.DoDelete)               // perf model: per event, but in a larger batch
+
+	// Phase 1: Align events
+	if aligned := e.Step("phase #1 (aligner)", e.DoAlign); aligned {
+		e.logger.Debug("Events aligned, proceeding with processing")
+
+		// Phase 2: Update max sequence
+		if shifted := e.Step("phase #2 (max seq shifter)", e.DoMaxSeqShifter); shifted {
+			e.logger.Debug("Max sequence shifted")
+		} else {
+			e.logger.Debug("Max sequence shift failed or no events to process")
+		}
+
+		// Phase 3: Fetch and process events
+		if fetched := e.Step("phase #3 (fetcher)", e.DoFetch); fetched {
+			e.logger.Debug("Events fetched and processed")
+		} else {
+			e.logger.Debug("No events fetched or processing failed")
+		}
+
+		// Phase 4: Archive processed events
+		if archived := e.Step("phase #4 (archive)", e.DoArchive); archived {
+			e.logger.Debug("Events archived")
+		} else {
+			e.logger.Debug("Archiving failed or no events to archive")
+		}
+	} else {
+		e.logger.Debug("No events to align or alignment failed")
 	}
+
 	e.logger.Trace(fmt.Sprintf("worker iteration #%d end", e.workerIteration))
 }
 
@@ -326,13 +348,23 @@ func (e *EventBus) DoAlign() (bool, error) {
 
 	var session = c.Session(c.Context(context.Background(), false))
 	if txErr := session.Transact(func(tx db.DatabaseAccessor) error {
+		e.logger.Debug("Starting DoAlign transaction")
 
 		/*
 		 * step #1 - get fresh events
 		 */
 
+		var topOrEmpty, limitOrEmpty string
+		if c.DialectName() == db.MSSQL {
+			topOrEmpty = fmt.Sprintf("TOP %d", e.batchSize)
+			limitOrEmpty = ""
+		} else {
+			topOrEmpty = ""
+			limitOrEmpty = fmt.Sprintf("LIMIT %d", e.batchSize)
+		}
+
 		var rows, err = tx.Query(fmt.Sprintf(`
-			SELECT internal_id,
+			SELECT %s internal_id,
 				   topic_internal_id,
 				   event_type_internal_id,
 				   event_id,
@@ -348,8 +380,11 @@ func (e *EventBus) DoAlign() (bool, error) {
 				   created_at
 			FROM acronis_db_bench_eventbus_events
 			ORDER BY internal_id
-			LIMIT %d;`, e.batchSize))
+			%s;`,
+			topOrEmpty,
+			limitOrEmpty))
 		if err != nil {
+			e.logger.Error("Failed to query events: %v", err)
 			return err
 		}
 
@@ -370,7 +405,8 @@ func (e *EventBus) DoAlign() (bool, error) {
 				&unused, // &ed.DataBase64
 				&unused) // &ed.CreatedAt
 			if err != nil {
-				return err
+				e.logger.Error("Failed to scan event: %v", err)
+				return fmt.Errorf("scan failed: %v", err)
 			}
 
 			ids = append(ids, strconv.FormatInt(ed.InternalID, 10))
@@ -384,7 +420,7 @@ func (e *EventBus) DoAlign() (bool, error) {
 			return nil
 		}
 
-		e.logger.Trace(fmt.Sprintf("%d new events found", len(ids)))
+		e.logger.Debug("Found %d new events", len(ids))
 		newEventsFound = true
 
 		/*
@@ -392,6 +428,7 @@ func (e *EventBus) DoAlign() (bool, error) {
 		 */
 
 		if _, err = tx.Exec(fmt.Sprintf("DELETE FROM acronis_db_bench_eventbus_events WHERE internal_id IN (%s);", strings.Join(ids, ","))); err != nil {
+			e.logger.Error("Failed to delete events: %v", err)
 			return err
 		}
 
@@ -403,20 +440,46 @@ func (e *EventBus) DoAlign() (bool, error) {
 
 		switch c.DialectName() {
 		case db.MSSQL:
-			if err = tx.QueryRow("SELECT sequence + 1 FROM acronis_db_bench_eventbus_sequences WITH (UPDLOCK) WHERE int_id = $1;", 1).Scan(&seq64); err != nil {
+			if err = tx.QueryRow("SELECT sequence + 1 FROM acronis_db_bench_eventbus_sequences WITH (UPDLOCK) WHERE int_id = @p1;", 1).Scan(&seq64); err != nil {
+				e.logger.Error("Failed to get sequence (MSSQL): %v", err)
+				return err
+			}
+
+			if _, err = tx.Exec("UPDATE acronis_db_bench_eventbus_sequences SET sequence = @p1 - 1 WHERE int_id = @p2;", seq64+int64(len(ids)), 1); err != nil {
+				e.logger.Error("Failed to update sequence (MSSQL): %v", err)
+				return err
+			}
+
+		case db.MYSQL:
+			if err = tx.QueryRow("SELECT sequence + 1 FROM acronis_db_bench_eventbus_sequences WHERE int_id = ? FOR UPDATE;", 1).Scan(&seq64); err != nil {
+				e.logger.Error("Failed to get sequence (MySQL): %v", err)
+				return err
+			}
+
+			if _, err = tx.Exec("UPDATE acronis_db_bench_eventbus_sequences SET sequence = ? - 1 WHERE int_id = ?;", seq64+int64(len(ids)), 1); err != nil {
+				e.logger.Error("Failed to update sequence (MySQL): %v", err)
+				return err
+			}
+
+		case db.SQLITE:
+			if err = tx.QueryRow("SELECT sequence + 1 FROM acronis_db_bench_eventbus_sequences WHERE int_id = $1;", 1).Scan(&seq64); err != nil {
+				e.logger.Error("Failed to get sequence (SQLite): %v", err)
 				return err
 			}
 
 			if _, err = tx.Exec("UPDATE acronis_db_bench_eventbus_sequences SET sequence = $1 - 1 WHERE int_id = $2;", seq64+int64(len(ids)), 1); err != nil {
+				e.logger.Error("Failed to update sequence (SQLite): %v", err)
 				return err
 			}
 
 		default:
 			if err = tx.QueryRow("SELECT sequence + 1 FROM acronis_db_bench_eventbus_sequences WHERE int_id = $1 FOR UPDATE;", 1).Scan(&seq64); err != nil {
+				e.logger.Error("Failed to get sequence (default): %v", err)
 				return err
 			}
 
 			if _, err = tx.Exec("UPDATE acronis_db_bench_eventbus_sequences SET sequence = $1 - 1 WHERE int_id = $2;", seq64+int64(len(ids)), 1); err != nil {
+				e.logger.Error("Failed to update sequence (default): %v", err)
 				return err
 			}
 		}
@@ -430,39 +493,63 @@ func (e *EventBus) DoAlign() (bool, error) {
 		values := make([]interface{}, fields*len(data))
 
 		for n := range data {
-			placeholders[n] = fmt.Sprintf("(%s)", db.GenDBParameterPlaceholders(n*fields, fields))
+			var rawPlaceholders string
+			start := n * fields
+			switch c.DialectName() {
+			case db.MSSQL:
+				rawPlaceholders = fmt.Sprintf("(@p%d,@p%d,@p%d,@p%d)", start+1, start+2, start+3, start+4)
+			case db.MYSQL:
+				rawPlaceholders = fmt.Sprintf("(?,?,?,?)")
+			default:
+				rawPlaceholders = fmt.Sprintf("($%d,$%d,$%d,$%d)", start+1, start+2, start+3, start+4)
+			}
+
+			placeholders[n] = rawPlaceholders
 			values[n*fields+0] = seq64 + int64(n)            // intId: global sequence
 			values[n*fields+1] = data[n].TopicInternalID     // topic_id
 			values[n*fields+2] = data[n].EventTypeInternalID // event type_id
 			values[n*fields+3] = data[n].Data                // event data
 		}
 
-		if _, err = tx.Exec(fmt.Sprintf("INSERT INTO acronis_db_bench_eventbus_data (int_id, topic_id, type_id, data) VALUES%s;", strings.Join(placeholders, ",")), values...); err != nil {
+		if _, err = tx.Exec(fmt.Sprintf("INSERT INTO acronis_db_bench_eventbus_data (int_id, topic_id, type_id, data) VALUES %s;", strings.Join(placeholders, ",")), values...); err != nil {
+			e.logger.Error("Failed to insert into eventbus_data: %v", err)
 			return err
 		}
 
 		/*
-		 * step #4 - create meta data in `acronis_db_bench_eventbus_data`
+		 * step #5 - create meta data in `acronis_db_bench_stream`
 		 */
 
 		fields = 3
 		values = make([]interface{}, fields*len(data))
 
 		for n := range data {
-			if c.DialectName() == db.MSSQL {
-				placeholders[n] = fmt.Sprintf("(%s, GETDATE())", db.GenDBParameterPlaceholders(n*fields, fields))
-			} else {
-				placeholders[n] = fmt.Sprintf("(%s, NOW())", db.GenDBParameterPlaceholders(n*fields, fields))
+			var rawPlaceholders string
+			start := n * fields
+
+			switch c.DialectName() {
+			case db.MSSQL:
+				rawPlaceholders = fmt.Sprintf("(@p%d,@p%d,@p%d, GETDATE())", start+1, start+2, start+3)
+			case db.POSTGRES:
+				rawPlaceholders = fmt.Sprintf("($%d,$%d,$%d, NOW())", start+1, start+2, start+3)
+			case db.SQLITE:
+				rawPlaceholders = fmt.Sprintf("($%d,$%d,$%d, datetime('now'))", start+1, start+2, start+3)
+			case db.MYSQL:
+				rawPlaceholders = fmt.Sprintf("(?,?,?,NOW())")
 			}
+
+			placeholders[n] = rawPlaceholders
 			values[n*fields+0] = seq64 + int64(n)        // int_id: global sequence
 			values[n*fields+1] = data[n].TopicInternalID // topic_id
 			values[n*fields+2] = seq64 + int64(n)        // seq: per-topic sequence, currently equals to int_id
 		}
 
-		if _, err = tx.Exec(fmt.Sprintf("INSERT INTO acronis_db_bench_eventbus_stream (int_id, topic_id, seq, seq_time) VALUES%s;", strings.Join(placeholders, ",")), values...); err != nil {
+		if _, err = tx.Exec(fmt.Sprintf("INSERT INTO acronis_db_bench_eventbus_stream (int_id, topic_id, seq, seq_time) VALUES %s;", strings.Join(placeholders, ",")), values...); err != nil {
+			e.logger.Error("Failed to insert into eventbus_stream: %v", err)
 			return err
 		}
 
+		e.logger.Debug("Successfully completed DoAlign transaction")
 		return nil
 	}); txErr != nil {
 		return false, fmt.Errorf("align: %v", txErr)
@@ -484,15 +571,24 @@ func (e *EventBus) DoMaxSeqShifter() (bool, error) {
 			switch c.DialectName() {
 			case db.MSSQL:
 				err = tx.QueryRow("SELECT TOP(1) seq FROM acronis_db_bench_eventbus_stream WHERE topic_id = $1 AND seq IS NOT NULL ORDER BY seq DESC;", t).Scan(&seq64)
+			case db.MYSQL:
+				err = tx.QueryRow("SELECT seq FROM acronis_db_bench_eventbus_stream WHERE topic_id = ? AND seq IS NOT NULL ORDER BY seq DESC LIMIT 1;", t).Scan(&seq64)
 			default:
 				err = tx.QueryRow("SELECT seq FROM acronis_db_bench_eventbus_stream WHERE topic_id = $1 AND seq IS NOT NULL ORDER BY seq DESC LIMIT 1;", t).Scan(&seq64)
 			}
 
-			if err != nil {
+			if err != nil && err.Error() != sql.ErrNoRows.Error() {
 				return err
 			}
 
-			if _, err = tx.Exec("UPDATE acronis_db_bench_eventbus_topics SET max_seq = $1, acked_cursor = $2 WHERE internal_id = $3 AND max_seq < $4", seq64, seq64, t, seq64); err != nil {
+			switch c.DialectName() {
+			case db.MYSQL:
+				_, err = tx.Exec("UPDATE acronis_db_bench_eventbus_topics SET max_seq = ?, acked_cursor = ? WHERE internal_id = ? AND max_seq < ?;", seq64, seq64, t, seq64)
+			default:
+				_, err = tx.Exec("UPDATE acronis_db_bench_eventbus_topics SET max_seq = $1, acked_cursor = $2 WHERE internal_id = $3 AND max_seq < $4;", seq64, seq64, t, seq64)
+			}
+
+			if err != nil {
 				return err
 			}
 
@@ -512,20 +608,38 @@ func (e *EventBus) DoFetch() (bool, error) {
 
 	for t := 1; t < MaxTopics+1; t++ {
 		var cur64 int64
-		if err := sess.QueryRow("SELECT sent_cursor FROM acronis_db_bench_eventbus_topics WHERE internal_id = $1", t).Scan(&cur64); err != nil {
-			return false, err
+		switch c.DialectName() {
+		case db.MYSQL:
+			if err := sess.QueryRow("SELECT sent_cursor FROM acronis_db_bench_eventbus_topics WHERE internal_id = ?;", t).Scan(&cur64); err != nil {
+				return false, err
+			}
+		default:
+			if err := sess.QueryRow("SELECT sent_cursor FROM acronis_db_bench_eventbus_topics WHERE internal_id = $1;", t).Scan(&cur64); err != nil {
+				return false, err
+			}
+		}
+
+		var topOrEmpty, limitOrEmpty string
+		if c.DialectName() == db.MSSQL {
+			topOrEmpty = fmt.Sprintf("TOP %d", e.batchSize)
+			limitOrEmpty = ""
+		} else {
+			topOrEmpty = ""
+			limitOrEmpty = fmt.Sprintf("LIMIT %d", e.batchSize)
 		}
 
 		var rows, err = sess.Query(fmt.Sprintf(`
-			SELECT s.int_id, s.topic_id, d.type_id, s.seq, s.seq_time, d.data
+			SELECT %s s.int_id, s.topic_id, d.type_id, s.seq, s.seq_time, d.data
 			FROM acronis_db_bench_eventbus_stream s
 					 INNER JOIN acronis_db_bench_eventbus_data d ON s.int_id = d.int_id
 			WHERE s.topic_id = %d
 			  AND s.seq IS NOT NULL
 			  AND s.seq > %d
 			ORDER BY s.seq
-			LIMIT %d;`,
-			t, cur64, e.batchSize))
+			%s`,
+			topOrEmpty,
+			t, cur64,
+			limitOrEmpty))
 		if err != nil {
 			return false, err
 		}
@@ -545,7 +659,13 @@ func (e *EventBus) DoFetch() (bool, error) {
 			}
 		}
 
-		_, err = sess.Exec("UPDATE acronis_db_bench_eventbus_topics SET sent_cursor = $1 WHERE internal_id = $2", sentCursor, t)
+		switch c.DialectName() {
+		case db.MYSQL:
+			_, err = sess.Exec("UPDATE acronis_db_bench_eventbus_topics SET sent_cursor = ? WHERE internal_id = ?;", sentCursor, t)
+		default:
+			_, err = sess.Exec("UPDATE acronis_db_bench_eventbus_topics SET sent_cursor = $1 WHERE internal_id = $2;", sentCursor, t)
+		}
+
 		return false, err
 	}
 
@@ -575,8 +695,15 @@ func (e *EventBus) DoArchive() (bool, error) {
 	for t := 1; t < MaxTopics+1; t++ {
 		if txErr := sess.Transact(func(tx db.DatabaseAccessor) error {
 			var cur64 int64
-			if err := tx.QueryRow("SELECT acked_cursor FROM acronis_db_bench_eventbus_topics WHERE internal_id = $1", t).Scan(&cur64); err != nil {
-				return err
+			switch c.DialectName() {
+			case db.MYSQL:
+				if err := tx.QueryRow("SELECT acked_cursor FROM acronis_db_bench_eventbus_topics WHERE internal_id = ?;", t).Scan(&cur64); err != nil {
+					return err
+				}
+			default:
+				if err := tx.QueryRow("SELECT acked_cursor FROM acronis_db_bench_eventbus_topics WHERE internal_id = $1;", t).Scan(&cur64); err != nil {
+					return err
+				}
 			}
 
 			var err error
@@ -585,6 +712,10 @@ func (e *EventBus) DoArchive() (bool, error) {
 				_, err = tx.Exec(fmt.Sprintf("INSERT INTO acronis_db_bench_eventbus_archive (int_id, topic_id, seq, seq_time) SELECT TOP %d int_id, topic_id, seq, seq_time "+
 					"FROM acronis_db_bench_eventbus_stream WHERE topic_id = %d AND seq IS NOT NULL AND seq <= %d ORDER BY seq ;",
 					e.batchSize, t, cur64))
+			case db.MYSQL:
+				_, err = tx.Exec("INSERT INTO acronis_db_bench_eventbus_archive (int_id, topic_id, seq, seq_time) SELECT int_id, topic_id, seq, seq_time "+
+					"FROM acronis_db_bench_eventbus_stream WHERE topic_id = ? AND seq IS NOT NULL AND seq <= ? ORDER BY seq LIMIT ?;",
+					t, cur64, e.batchSize)
 			default:
 				_, err = tx.Exec("INSERT INTO acronis_db_bench_eventbus_archive (int_id, topic_id, seq, seq_time) SELECT int_id, topic_id, seq, seq_time "+
 					"FROM acronis_db_bench_eventbus_stream WHERE topic_id = $1 AND seq IS NOT NULL AND seq <= $2 ORDER BY seq LIMIT $3;",
@@ -593,7 +724,7 @@ func (e *EventBus) DoArchive() (bool, error) {
 
 			switch c.DialectName() {
 			case db.MYSQL:
-				_, err = tx.Exec("DELETE FROM acronis_db_bench_eventbus_stream WHERE topic_id = $1 AND seq <= $2 ORDER BY seq ASC LIMIT $3;", t, cur64, e.batchSize)
+				_, err = tx.Exec("DELETE FROM acronis_db_bench_eventbus_stream WHERE topic_id = ? AND seq <= ? ORDER BY seq ASC LIMIT ?;", t, cur64, e.batchSize)
 			case db.MSSQL:
 				_, err = tx.Exec(fmt.Sprintf(`DELETE x
 						FROM acronis_db_bench_eventbus_stream x

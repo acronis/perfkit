@@ -352,11 +352,16 @@ func SortFields(fields map[string][]string) []Cond {
 }
 
 // GenDBParameterPlaceholders generates placeholders for given start and count
-func GenDBParameterPlaceholders(start int, count int) string {
+func GenDBParameterPlaceholders(start int, count int, numeric bool) string {
 	var ret = make([]string, count)
 	end := start + count
 	for i := start; i < end; i++ {
-		ret[i-start] = fmt.Sprintf("$%d", i+1)
+		if numeric {
+			ret[i-start] = fmt.Sprintf("$%d", i+1)
+		} else {
+			ret[i-start] = fmt.Sprintf("?")
+		}
+
 	}
 
 	return strings.Join(ret, ",")

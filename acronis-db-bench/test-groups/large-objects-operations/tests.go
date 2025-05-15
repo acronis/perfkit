@@ -46,7 +46,15 @@ var TestTableLargeObj = engine.TestTable{
 // createLargeObjectWorker inserts a row with large random object into the 'largeobject' table
 func createLargeObjectWorker(b *benchmark.Benchmark, c *engine.DBConnector, testDesc *engine.TestDesc, batch int) (loops int) {
 	colConfs := testDesc.Table.GetColumnsForInsert(db.WithAutoInc(c.Database.DialectName()))
-	parametersPlaceholder := db.GenDBParameterPlaceholders(0, len(*colConfs))
+
+	var numericPlaceholders bool
+	if c.Database.DialectName() == db.POSTGRES {
+		numericPlaceholders = true
+	} else {
+		numericPlaceholders = false
+	}
+
+	parametersPlaceholder := db.GenDBParameterPlaceholders(0, len(*colConfs), numericPlaceholders)
 
 	var session = c.Database.Session(c.Database.Context(context.Background(), false))
 
