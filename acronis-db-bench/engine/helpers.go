@@ -166,12 +166,12 @@ func FormatSQL(sqlTemlate string, dialectName db.DialectName) string {
 }
 
 // NewParquetFileDataSourceForRandomizer creates a new parquet DataSetSource instance and register as plugin for Randomizer
-func NewParquetFileDataSourceForRandomizer(bench *benchmark.Benchmark, filePath string) error {
+func NewParquetFileDataSourceForRandomizer(bench *benchmark.Benchmark, filePath string, offset int64) error {
 	if bench.Randomizer == nil {
 		bench.Randomizer = benchmark.NewRandomizer(bench.CommonOpts.RandSeed, bench.CommonOpts.Workers)
 	}
 
-	var source, err = dataset.NewParquetFileDataSource(filePath, 0)
+	var source, err = dataset.NewParquetFileDataSource(filePath, offset)
 	if err != nil {
 		return err
 	}

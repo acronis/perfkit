@@ -14,6 +14,7 @@ import (
 	"github.com/acronis/perfkit/db"
 	"github.com/acronis/perfkit/logger"
 
+	events "github.com/acronis/perfkit/acronis-db-bench/event-bus"
 	tenants "github.com/acronis/perfkit/acronis-db-bench/tenants-cache"
 )
 
@@ -21,7 +22,104 @@ import (
  * Worker initialization
  */
 
-func initWorker(worker *benchmark.BenchmarkWorker, testDesc *TestDesc, rowsRequired uint64) {
+func initGeneric(b *benchmark.Benchmark, testDesc *TestDesc, rowsRequired uint64) {
+	b.Vault.(*DBTestData).TenantsCache = tenants.NewTenantsCache(b)
+
+	b.Vault.(*DBTestData).TenantsCache.SetTenantsWorkingSet(b.TestOpts.(*TestOpts).BenchOpts.TenantsWorkingSet)
+	b.Vault.(*DBTestData).TenantsCache.SetCTIsWorkingSet(b.TestOpts.(*TestOpts).BenchOpts.CTIsWorkingSet)
+
+	var tenantCacheDBOpts = b.TestOpts.(*TestOpts).DBOpts
+	if b.TestOpts.(*TestOpts).BenchOpts.TenantConnString != "" {
+		tenantCacheDBOpts.ConnString = b.TestOpts.(*TestOpts).BenchOpts.TenantConnString
+	}
+
+	var tenantCacheDatabase, err = NewDBConnector(&tenantCacheDBOpts, -1, true, b.Logger, 1)
+	if err != nil {
+		b.Exit("db: cannot create tenants cache connection: %v", err)
+		return
+	}
+
+	if err = b.Vault.(*DBTestData).TenantsCache.Init(tenantCacheDatabase.Database); err != nil {
+		b.Exit("db: cannot initialize tenants cache: %v", err)
+	}
+
+	tenantCacheDatabase.Release()
+
+	if b.TestOpts.(*TestOpts).BenchOpts.Events {
+		var workingConn *DBConnector
+		if workingConn, err = NewDBConnector(&b.TestOpts.(*TestOpts).DBOpts, -1, true, b.Logger, 1); err != nil {
+			return
+		}
+
+		b.Vault.(*DBTestData).EventBus = events.NewEventBus(workingConn.Database, b.Logger)
+		b.Vault.(*DBTestData).EventBus.CreateTables()
+	}
+
+	tableName := testDesc.Table.TableName
+	if tableName == "" {
+		testDesc.Table.RowsCount = 0
+		return
+	}
+
+	var ddlConnDatabase *DBConnector
+	if ddlConnDatabase, err = NewDBConnector(&tenantCacheDBOpts, -1, true, b.Logger, 1); err != nil {
+		b.Exit("db: cannot create connection for DDL: %v", err)
+		return
+	}
+
+	conn := ddlConnDatabase
+	testData := b.Vault.(*DBTestData)
+	testData.TestDesc = testDesc
+
+	t := testRegistry.GetTableByName(tableName)
+
+	b.Logger.Debug("initializing table '%s'", tableName)
+	if testDesc.IsReadonly {
+		t.Create(conn, b)
+		b.Logger.Debug("readonly test, skipping table '%s' initialization", tableName)
+		if exists, err := conn.Database.TableExists(tableName); err != nil {
+			b.Exit(fmt.Sprintf("db: cannot check if table '%s' exists: %v", tableName, err))
+		} else if !exists {
+			b.Exit("The '%s' table doesn't exist, please create tables using -I option, or use individual insert test using the -t `insert-***`", tableName)
+		}
+	} else {
+		b.Logger.Debug("creating table '%s'", tableName)
+		t.Create(conn, b)
+	}
+
+	var session = conn.Database.Session(conn.Database.Context(context.Background(), false))
+	var rowNum int64
+	if rows, err := session.Select(tableName, &db.SelectCtrl{Fields: []string{"COUNT(0)"}}); err != nil {
+		b.Exit(fmt.Sprintf("db: cannot get rows count in table '%s': %v", tableName, err))
+	} else {
+		for rows.Next() {
+			if scanErr := rows.Scan(&rowNum); scanErr != nil {
+				b.Exit(fmt.Sprintf("db: cannot get rows count in table '%s': %v", tableName, scanErr))
+			}
+		}
+		rows.Close()
+	}
+
+	testDesc.Table.RowsCount = uint64(rowNum)
+	b.Logger.Debug("table '%s' has %d rows", tableName, testDesc.Table.RowsCount)
+
+	if rowsRequired > 0 {
+		if testDesc.Table.RowsCount < rowsRequired {
+			b.Exit(fmt.Sprintf("table '%s' has %d rows, but this test requires at least %d rows, please insert it first and then re-run the test",
+				testDesc.Table.TableName, testDesc.Table.RowsCount, rowsRequired))
+		}
+	}
+
+	ddlConnDatabase.Release()
+
+	if b.TestOpts.(*TestOpts).BenchOpts.ParquetDataSource != "" {
+		if err = NewParquetFileDataSourceForRandomizer(b, b.TestOpts.(*TestOpts).BenchOpts.ParquetDataSource, rowNum); err != nil {
+			b.Exit("failed to create parquet data source: %v", err)
+		}
+	}
+}
+
+func initWorker(worker *benchmark.BenchmarkWorker) {
 	b := worker.Benchmark
 	workerID := worker.WorkerID
 
@@ -36,68 +134,16 @@ func initWorker(worker *benchmark.BenchmarkWorker, testDesc *TestDesc, rowsRequi
 		worker.Data = &workerData
 	}
 
-	if workerID == 0 {
-		conn := worker.Data.(*DBWorkerData).workingConn
-		testData := b.Vault.(*DBTestData)
-		testData.TestDesc = testDesc
-
-		// Initialize TenantsCache if it's nil
-		if testData.TenantsCache == nil {
-			testData.TenantsCache = tenants.NewTenantsCache(b)
-		}
-		worker.Randomizer.RegisterPlugin("tenant", testData.TenantsCache)
-
-		tableName := testDesc.Table.TableName
-
-		t := testRegistry.GetTableByName(tableName)
-
-		if tableName == "" {
-			testDesc.Table.RowsCount = 0
-		} else {
-			b.Logger.Debug("initializing table '%s'", tableName)
-			if testDesc.IsReadonly {
-				t.Create(conn, b)
-				b.Logger.Debug("readonly test, skipping table '%s' initialization", tableName)
-				if exists, err := conn.Database.TableExists(tableName); err != nil {
-					b.Exit(fmt.Sprintf("db: cannot check if table '%s' exists: %v", tableName, err))
-				} else if !exists {
-					b.Exit("The '%s' table doesn't exist, please create tables using -I option, or use individual insert test using the -t `insert-***`", tableName)
-				}
-			} else {
-				b.Logger.Debug("creating table '%s'", tableName)
-				t.Create(conn, b)
-			}
-
-			var session = conn.Database.Session(conn.Database.Context(context.Background(), false))
-			var rowNum int64
-			if rows, err := session.Select(tableName, &db.SelectCtrl{Fields: []string{"COUNT(0)"}}); err != nil {
-				b.Exit(fmt.Sprintf("db: cannot get rows count in table '%s': %v", tableName, err))
-			} else {
-				for rows.Next() {
-					if scanErr := rows.Scan(&rowNum); scanErr != nil {
-						b.Exit(fmt.Sprintf("db: cannot get rows count in table '%s': %v", tableName, scanErr))
-					}
-				}
-				rows.Close()
-			}
-
-			testDesc.Table.RowsCount = uint64(rowNum)
-			b.Logger.Debug("table '%s' has %d rows", tableName, testDesc.Table.RowsCount)
-
-			if rowsRequired > 0 {
-				if testDesc.Table.RowsCount < rowsRequired {
-					b.Exit(fmt.Sprintf("table '%s' has %d rows, but this test requires at least %d rows, please insert it first and then re-run the test",
-						testDesc.Table.TableName, testDesc.Table.RowsCount, rowsRequired))
-				}
-			}
-		}
-	}
 	worker.Logger.Trace("worker is initialized")
 }
 
 func initCommon(b *benchmark.Benchmark, testDesc *TestDesc, rowsRequired uint64) {
+	b.Init = func() {
+		initGeneric(b, testDesc, rowsRequired)
+	}
+
 	b.WorkerInitFunc = func(worker *benchmark.BenchmarkWorker) {
-		initWorker(worker, testDesc, rowsRequired)
+		initWorker(worker)
 	}
 
 	b.Metric = func() (metric string) {
