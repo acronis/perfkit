@@ -21,9 +21,11 @@ type ParquetFileDataSource struct {
 
 	currentRecord arrow.Record
 	currentOffset int
+	globalOffset  int64
+	rowsToSkip    int64
 }
 
-func NewParquetFileDataSource(filePath string) (*ParquetFileDataSource, error) {
+func NewParquetFileDataSource(filePath string, offset int64) (*ParquetFileDataSource, error) {
 	var rdr, err = file.OpenParquetFile(filePath, true)
 	if err != nil {
 		return nil, fmt.Errorf("error opening parquet file: %v", err)
@@ -62,6 +64,7 @@ func NewParquetFileDataSource(filePath string) (*ParquetFileDataSource, error) {
 		columns:      columnNames,
 		fileReader:   rdr,
 		recordReader: recordReader,
+		rowsToSkip:   offset,
 	}, nil
 }
 
@@ -70,6 +73,27 @@ func (ds *ParquetFileDataSource) GetColumnNames() []string {
 }
 
 func (ds *ParquetFileDataSource) GetNextRow() ([]interface{}, error) {
+	for ds.globalOffset < ds.rowsToSkip {
+		if ds.currentRecord == nil {
+			if !ds.recordReader.Next() {
+				return nil, nil
+			}
+			ds.currentRecord = ds.recordReader.Record()
+		}
+
+		remainingInRecord := ds.currentRecord.NumRows() - int64(ds.currentOffset)
+		skipCount := min(ds.rowsToSkip-ds.globalOffset, remainingInRecord)
+
+		ds.currentOffset += int(skipCount)
+		ds.globalOffset += skipCount
+
+		if int64(ds.currentOffset) >= ds.currentRecord.NumRows() {
+			ds.currentRecord.Release()
+			ds.currentRecord = nil
+			ds.currentOffset = 0
+		}
+	}
+
 	if ds.currentRecord == nil {
 		if ds.recordReader.Next() {
 			ds.currentRecord = ds.recordReader.Record()
@@ -117,4 +141,11 @@ func (ds *ParquetFileDataSource) GetNextRow() ([]interface{}, error) {
 func (ds *ParquetFileDataSource) Close() {
 	ds.recordReader.Release()
 	ds.fileReader.Close()
+}
+
+func min(a, b int64) int64 {
+	if a < b {
+		return a
+	}
+	return b
 }

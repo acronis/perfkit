@@ -171,7 +171,7 @@ func NewParquetFileDataSourceForRandomizer(bench *benchmark.Benchmark, filePath 
 		bench.Randomizer = benchmark.NewRandomizer(bench.CommonOpts.RandSeed, bench.CommonOpts.Workers)
 	}
 
-	var source, err = dataset.NewParquetFileDataSource(filePath)
+	var source, err = dataset.NewParquetFileDataSource(filePath, 0)
 	if err != nil {
 		return err
 	}
