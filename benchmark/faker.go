@@ -339,11 +339,16 @@ func (rz *Randomizer) GenFakeData(colConfs *[]DBFakeColumnConf, WithAutoInc bool
 	var preGenerated map[string]interface{}
 	for _, plugin := range rz.plugins {
 		for _, c := range *colConfs {
-			if exists, value := plugin.GenCommonFakeValue(c.ColumnType, rz, c.Cardinality); exists {
-				if preGenerated == nil {
-					preGenerated = make(map[string]interface{})
+			if shouldStop, value := plugin.GenCommonFakeValue(c.ColumnType, rz, c.Cardinality); !shouldStop {
+				if value != nil {
+					if preGenerated == nil {
+						preGenerated = make(map[string]interface{})
+					}
+					preGenerated[c.ColumnType] = value
 				}
-				preGenerated[c.ColumnType] = value
+			} else {
+				// End of generation
+				return nil, nil, nil
 			}
 		}
 	}
@@ -372,11 +377,16 @@ func (rz *Randomizer) GenFakeDataAsMap(colConfs *[]DBFakeColumnConf, WithAutoInc
 	var preGenerated map[string]interface{}
 	for _, plugin := range rz.plugins {
 		for _, c := range *colConfs {
-			if exists, value := plugin.GenCommonFakeValue(c.ColumnType, rz, c.Cardinality); exists {
-				if preGenerated == nil {
-					preGenerated = make(map[string]interface{})
+			if shouldStop, value := plugin.GenCommonFakeValue(c.ColumnType, rz, c.Cardinality); !shouldStop {
+				if value != nil {
+					if preGenerated == nil {
+						preGenerated = make(map[string]interface{})
+					}
+					preGenerated[c.ColumnType] = value
 				}
-				preGenerated[c.ColumnType] = value
+			} else {
+				// End of generation
+				return nil, nil
 			}
 		}
 	}

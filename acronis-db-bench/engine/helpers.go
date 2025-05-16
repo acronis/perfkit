@@ -219,7 +219,7 @@ func (p *DataSetSourcePlugin) GenCommonFakeValue(columnType string, rz *benchmar
 	}
 
 	if row == nil {
-		return false, nil
+		return true, nil
 	}
 
 	p.currentValues = make(map[string]interface{}, len(row))
@@ -227,7 +227,7 @@ func (p *DataSetSourcePlugin) GenCommonFakeValue(columnType string, rz *benchmar
 		p.currentValues[p.columns[i]] = value
 	}
 
-	return true, p.currentValues[columnType]
+	return false, p.currentValues[columnType]
 }
 
 func (p *DataSetSourcePlugin) GenFakeValue(columnType string, rz *benchmark.Randomizer, cardinality int, preGenerated map[string]interface{}) (bool, interface{}) {
