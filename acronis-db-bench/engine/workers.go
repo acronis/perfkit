@@ -559,10 +559,19 @@ func InsertMultiValueDataWorker(b *benchmark.Benchmark, c *DBConnector, testDesc
 		if err != nil {
 			b.Exit(err)
 		}
+
+		if genColumns == nil {
+			break
+		}
+
 		values = append(values, vals)
 		if i == 0 {
 			columns = genColumns
 		}
+	}
+
+	if len(values) == 0 {
+		return
 	}
 
 	var session = c.Database.Session(c.Database.Context(context.Background(), false))
