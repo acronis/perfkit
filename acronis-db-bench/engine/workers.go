@@ -113,7 +113,12 @@ func initGeneric(b *benchmark.Benchmark, testDesc *TestDesc, rowsRequired uint64
 	ddlConnDatabase.Release()
 
 	if b.TestOpts.(*TestOpts).BenchOpts.ParquetDataSource != "" {
-		if err = NewParquetFileDataSourceForRandomizer(b, b.TestOpts.(*TestOpts).BenchOpts.ParquetDataSource, rowNum); err != nil {
+		var offset int64
+		if !testDesc.IsReadonly {
+			offset = rowNum
+		}
+
+		if err = NewParquetFileDataSourceForRandomizer(b, b.TestOpts.(*TestOpts).BenchOpts.ParquetDataSource, offset); err != nil {
 			b.Exit("failed to create parquet data source: %v", err)
 		}
 	}
