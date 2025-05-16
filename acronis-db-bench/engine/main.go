@@ -201,13 +201,18 @@ func Main() {
 
 	if testOpts.DBOpts.Reconnect {
 		b.WorkerPreRunFunc = func(worker *benchmark.BenchmarkWorker) {
-			var workerData = worker.Data.(*DBWorkerData)
-
-			if workerData.workingConn != nil {
+			if workerData, ok := worker.Data.(*DBWorkerData); ok && workerData.workingConn != nil {
 				workerData.workingConn.Close()
 			}
-
 			worker.Data = nil
+
+			// Reinitialize the worker
+			var workerData DBWorkerData
+			var err error
+			if workerData.workingConn, err = NewDBConnector(&b.TestOpts.(*TestOpts).DBOpts, worker.WorkerID, false, worker.Logger, 1); err != nil {
+				b.Exit(fmt.Sprintf("Failed to reinitialize database connection for worker %d: %v", worker.WorkerID, err))
+			}
+			worker.Data = &workerData
 		}
 	}
 
