@@ -57,7 +57,7 @@ var TestInsertVector768MultiValue = engine.TestDesc{
 	Description: "insert a 768-dim vectors with ids into the 'vector' table by batches",
 	Category:    engine.TestInsert,
 	IsReadonly:  false,
-	Databases:   []db.DialectName{db.ELASTICSEARCH, db.OPENSEARCH},
+	Databases:   []db.DialectName{db.POSTGRES, db.ELASTICSEARCH, db.OPENSEARCH},
 	Table:       TestTableVector768,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
 		engine.TestGeneric(b, testDesc, engine.InsertMultiValueDataWorker, 0)
