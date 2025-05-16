@@ -30,7 +30,7 @@ func initWorker(worker *benchmark.BenchmarkWorker, testDesc *TestDesc, rowsRequi
 		var err error
 
 		if workerData.workingConn, err = NewDBConnector(&b.TestOpts.(*TestOpts).DBOpts, workerID, false, worker.Logger, 1); err != nil {
-			return
+			b.Exit(fmt.Sprintf("Failed to initialize database connection for worker %d: %v", workerID, err))
 		}
 
 		worker.Data = &workerData
