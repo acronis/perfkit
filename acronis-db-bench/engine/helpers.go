@@ -166,12 +166,12 @@ func FormatSQL(sqlTemlate string, dialectName db.DialectName) string {
 }
 
 // NewParquetFileDataSourceForRandomizer creates a new parquet DataSetSource instance and register as plugin for Randomizer
-func NewParquetFileDataSourceForRandomizer(bench *benchmark.Benchmark, filePath string) error {
+func NewParquetFileDataSourceForRandomizer(bench *benchmark.Benchmark, filePath string, offset int64, circular bool) error {
 	if bench.Randomizer == nil {
 		bench.Randomizer = benchmark.NewRandomizer(bench.CommonOpts.RandSeed, bench.CommonOpts.Workers)
 	}
 
-	var source, err = dataset.NewParquetFileDataSource(filePath)
+	var source, err = dataset.NewParquetFileDataSource(filePath, offset, circular)
 	if err != nil {
 		return err
 	}
@@ -219,7 +219,7 @@ func (p *DataSetSourcePlugin) GenCommonFakeValue(columnType string, rz *benchmar
 	}
 
 	if row == nil {
-		return false, nil
+		return true, nil
 	}
 
 	p.currentValues = make(map[string]interface{}, len(row))
@@ -227,7 +227,7 @@ func (p *DataSetSourcePlugin) GenCommonFakeValue(columnType string, rz *benchmar
 		p.currentValues[p.columns[i]] = value
 	}
 
-	return true, p.currentValues[columnType]
+	return false, p.currentValues[columnType]
 }
 
 func (p *DataSetSourcePlugin) GenFakeValue(columnType string, rz *benchmark.Randomizer, cardinality int, preGenerated map[string]interface{}) (bool, interface{}) {

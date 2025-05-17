@@ -1003,7 +1003,7 @@ func (tc *TenantsCache) GenCommonFakeValue(columnType string, rz *benchmark.Rand
 		tc.benchmark.Exit(err.Error())
 	}
 
-	return true, tenantUUID
+	return false, tenantUUID
 }
 
 func (tc *TenantsCache) GenFakeValue(columnType string, rz *benchmark.Randomizer, cardinality int, preGenerated map[string]interface{}) (bool, interface{}) {
