@@ -23,9 +23,10 @@ type ParquetFileDataSource struct {
 	currentOffset int
 	globalOffset  int64
 	rowsToSkip    int64
+	circular      bool
 }
 
-func NewParquetFileDataSource(filePath string, offset int64) (*ParquetFileDataSource, error) {
+func NewParquetFileDataSource(filePath string, offset int64, circular bool) (*ParquetFileDataSource, error) {
 	var rdr, err = file.OpenParquetFile(filePath, true)
 	if err != nil {
 		return nil, fmt.Errorf("error opening parquet file: %v", err)
@@ -65,6 +66,7 @@ func NewParquetFileDataSource(filePath string, offset int64) (*ParquetFileDataSo
 		fileReader:   rdr,
 		recordReader: recordReader,
 		rowsToSkip:   offset,
+		circular:     circular,
 	}, nil
 }
 
@@ -76,7 +78,17 @@ func (ds *ParquetFileDataSource) GetNextRow() ([]interface{}, error) {
 	for ds.globalOffset < ds.rowsToSkip {
 		if ds.currentRecord == nil {
 			if !ds.recordReader.Next() {
-				return nil, nil
+				if ds.circular {
+					ds.resetReader()
+					if !ds.recordReader.Next() {
+						return nil, fmt.Errorf("failed to read after reset")
+					}
+					ds.globalOffset = 0
+					ds.rowsToSkip = 0
+					continue
+				} else {
+					return nil, nil
+				}
 			}
 			ds.currentRecord = ds.recordReader.Record()
 		}
@@ -97,6 +109,14 @@ func (ds *ParquetFileDataSource) GetNextRow() ([]interface{}, error) {
 	if ds.currentRecord == nil {
 		if ds.recordReader.Next() {
 			ds.currentRecord = ds.recordReader.Record()
+		} else if ds.circular {
+			ds.resetReader()
+			if !ds.recordReader.Next() {
+				return nil, fmt.Errorf("failed to read after reset")
+			}
+			ds.currentRecord = ds.recordReader.Record()
+			ds.globalOffset = 0
+			ds.rowsToSkip = 0
 		} else {
 			return nil, nil
 		}
@@ -148,4 +168,39 @@ func min(a, b int64) int64 {
 		return a
 	}
 	return b
+}
+
+func (ds *ParquetFileDataSource) resetReader() {
+	if ds.currentRecord != nil {
+		ds.currentRecord.Release()
+		ds.currentRecord = nil
+	}
+	ds.recordReader.Release()
+
+	mem := memory.NewGoAllocator()
+	reader, err := pqarrow.NewFileReader(ds.fileReader, pqarrow.ArrowReadProperties{
+		BatchSize: defaultBatchSize,
+	}, mem)
+	if err != nil {
+		panic(fmt.Sprintf("error creating Arrow file reader: %v", err))
+	}
+
+	var columns []int
+	for i := 0; i < ds.fileReader.MetaData().Schema.NumColumns(); i++ {
+		columns = append(columns, i)
+	}
+
+	var rgrs []int
+	for r := 0; r < ds.fileReader.NumRowGroups(); r++ {
+		rgrs = append(rgrs, r)
+	}
+
+	recordReader, err := reader.GetRecordReader(context.Background(), columns, rgrs)
+	if err != nil {
+		panic(fmt.Sprintf("error creating record reader: %v", err))
+	}
+
+	ds.recordReader = recordReader
+	ds.currentOffset = 0
+	ds.globalOffset = 0
 }
