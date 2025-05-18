@@ -20,8 +20,7 @@ type ParquetFileDataSource struct {
 	recordReader pqarrow.RecordReader
 
 	currentRecord arrow.Record
-	currentOffset int
-	globalOffset  int64
+	currentOffset int64
 	circular      bool
 }
 
@@ -82,7 +81,9 @@ func min(a, b int64) int64 {
 }
 
 func (ds *ParquetFileDataSource) skipUntilOffset(rowsToSkip int64) error {
-	for ds.globalOffset < rowsToSkip {
+	var skipCount int64 = 0
+
+	for ds.currentOffset < rowsToSkip {
 		if ds.currentRecord == nil {
 			if !ds.recordReader.Next() {
 				if ds.circular {
@@ -90,9 +91,7 @@ func (ds *ParquetFileDataSource) skipUntilOffset(rowsToSkip int64) error {
 					if !ds.recordReader.Next() {
 						return fmt.Errorf("failed to read after reset")
 					}
-					ds.globalOffset = 0
-					rowsToSkip = 0
-					continue
+					rowsToSkip -= skipCount
 				} else {
 					return nil
 				}
@@ -100,13 +99,12 @@ func (ds *ParquetFileDataSource) skipUntilOffset(rowsToSkip int64) error {
 			ds.currentRecord = ds.recordReader.Record()
 		}
 
-		remainingInRecord := ds.currentRecord.NumRows() - int64(ds.currentOffset)
-		skipCount := min(rowsToSkip-ds.globalOffset, remainingInRecord)
+		remainingInRecord := ds.currentRecord.NumRows() - ds.currentOffset
+		skipCount = min(rowsToSkip-ds.currentOffset, remainingInRecord)
 
-		ds.currentOffset += int(skipCount)
-		ds.globalOffset += skipCount
+		ds.currentOffset += skipCount
 
-		if int64(ds.currentOffset) >= ds.currentRecord.NumRows() {
+		if ds.currentOffset >= ds.currentRecord.NumRows() {
 			ds.currentRecord.Release()
 			ds.currentRecord = nil
 			ds.currentOffset = 0
@@ -130,7 +128,6 @@ func (ds *ParquetFileDataSource) GetNextRow() ([]interface{}, error) {
 				return nil, fmt.Errorf("failed to read after reset")
 			}
 			ds.currentRecord = ds.recordReader.Record()
-			ds.globalOffset = 0
 		} else {
 			return nil, nil
 		}
@@ -142,15 +139,15 @@ func (ds *ParquetFileDataSource) GetNextRow() ([]interface{}, error) {
 		var colData interface{}
 		switch specificArray := col.(type) {
 		case *array.Int64:
-			colData = specificArray.Value(ds.currentOffset)
+			colData = specificArray.Value(int(ds.currentOffset))
 		case *array.Float64:
-			colData = specificArray.Value(ds.currentOffset)
+			colData = specificArray.Value(int(ds.currentOffset))
 		case *array.String:
-			colData = specificArray.Value(ds.currentOffset)
+			colData = specificArray.Value(int(ds.currentOffset))
 		case *array.Binary:
-			colData = specificArray.Value(ds.currentOffset)
+			colData = specificArray.Value(int(ds.currentOffset))
 		case *array.List:
-			var beg, end = specificArray.ValueOffsets(ds.currentOffset)
+			var beg, end = specificArray.ValueOffsets(int(ds.currentOffset))
 			var values = array.NewSlice(specificArray.ListValues(), beg, end)
 			switch specificNestedArray := values.(type) {
 			case *array.Float32:
@@ -163,7 +160,7 @@ func (ds *ParquetFileDataSource) GetNextRow() ([]interface{}, error) {
 	}
 	ds.currentOffset++
 
-	if int64(ds.currentOffset) >= ds.currentRecord.NumRows() {
+	if ds.currentOffset >= ds.currentRecord.NumRows() {
 		ds.currentRecord.Release()
 		ds.currentRecord = nil
 		ds.currentOffset = 0
@@ -209,5 +206,4 @@ func (ds *ParquetFileDataSource) resetReader() {
 
 	ds.recordReader = recordReader
 	ds.currentOffset = 0
-	ds.globalOffset = 0
 }
