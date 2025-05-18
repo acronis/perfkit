@@ -65,28 +65,32 @@ func TestReadParquetWithOffset(t *testing.T) {
 func TestReadParquetWithOffsetAndLimit(t *testing.T) {
 	// Test cases combining offset and limit
 	testCases := []struct {
-		name     string
-		offset   int64
-		limit    int64
-		expected int64
+		name          string
+		offset        int64
+		limit         int64
+		expectedFirst int64
+		expected      int64
 	}{
 		{
-			name:     "Read first 10 records",
-			offset:   0,
-			limit:    10,
-			expected: 10,
+			name:          "Read first 10 records",
+			offset:        0,
+			limit:         10,
+			expectedFirst: 1,
+			expected:      10,
 		},
 		{
-			name:     "Read 20 records from middle",
-			offset:   40,
-			limit:    20,
-			expected: 20,
+			name:          "Read 20 records from middle",
+			offset:        40,
+			limit:         20,
+			expectedFirst: 41,
+			expected:      20,
 		},
 		{
-			name:     "Read beyond file size",
-			offset:   90,
-			limit:    20,
-			expected: 10, // Only 10 records left from offset 90
+			name:          "Read beyond file size",
+			offset:        90,
+			limit:         20,
+			expectedFirst: 91,
+			expected:      10, // Only 10 records left from offset 90
 		},
 	}
 
@@ -108,6 +112,18 @@ func TestReadParquetWithOffsetAndLimit(t *testing.T) {
 				if count >= tc.limit {
 					break
 				}
+
+				assert.Equal(t, 1, len(row))
+
+				if castedRow, casted := row[0].(int64); casted {
+					if count == 0 {
+						assert.Equal(t, tc.expectedFirst, castedRow)
+					}
+				} else {
+					t.Error("wrong data type")
+					return
+				}
+
 				count++
 			}
 
@@ -120,25 +136,36 @@ func TestReadParquetCircular(t *testing.T) {
 	testCases := []struct {
 		name           string
 		offset         int64
-		expectedRounds int   // Number of complete file reads to perform
+		expectedRounds int // Number of complete file reads to perform
+		expectedFirst  int64
 		expectedTotal  int64 // Total number of records to read
 	}{
 		{
 			name:           "Read file twice",
 			offset:         0,
 			expectedRounds: 2,
+			expectedFirst:  1,
 			expectedTotal:  201, // 100 records + 101 records (including the first record of the second round)
 		},
 		{
 			name:           "Read file twice from middle",
 			offset:         50,
 			expectedRounds: 2,
+			expectedFirst:  51,
 			expectedTotal:  201, // 50 records + 100 records + 51 records (including the first record of the second round)
 		},
 		{
 			name:           "Read file twice from middle, skipping file once",
 			offset:         150,
 			expectedRounds: 2,
+			expectedFirst:  51,
+			expectedTotal:  201, // 50 records + 100 records + 51 records (including the first record of the second round)
+		},
+		{
+			name:           "Read file twice from middle, skipping file twice",
+			offset:         250,
+			expectedRounds: 2,
+			expectedFirst:  51,
 			expectedTotal:  201, // 50 records + 100 records + 51 records (including the first record of the second round)
 		},
 	}
@@ -176,6 +203,17 @@ func TestReadParquetCircular(t *testing.T) {
 					if rounds > 1 {
 						assert.Equal(t, firstRow, row, "Row should match after completing a round")
 					}
+				}
+
+				assert.Equal(t, 1, len(row))
+
+				if castedRow, casted := row[0].(int64); casted {
+					if count == 0 {
+						assert.Equal(t, tc.expectedFirst, castedRow)
+					}
+				} else {
+					t.Error("wrong data type")
+					return
 				}
 
 				count++
