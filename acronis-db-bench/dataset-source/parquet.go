@@ -22,7 +22,6 @@ type ParquetFileDataSource struct {
 	currentRecord arrow.Record
 	currentOffset int
 	globalOffset  int64
-	rowsToSkip    int64
 	circular      bool
 }
 
@@ -65,11 +64,10 @@ func NewParquetFileDataSource(filePath string, offset int64, circular bool) (*Pa
 		columns:      columnNames,
 		fileReader:   rdr,
 		recordReader: recordReader,
-		rowsToSkip:   offset,
 		circular:     circular,
 	}
 
-	if skipErr := source.skipUntilOffset(); skipErr != nil {
+	if skipErr := source.skipUntilOffset(offset); skipErr != nil {
 		return nil, skipErr
 	}
 
@@ -83,8 +81,8 @@ func min(a, b int64) int64 {
 	return b
 }
 
-func (ds *ParquetFileDataSource) skipUntilOffset() error {
-	for ds.globalOffset < ds.rowsToSkip {
+func (ds *ParquetFileDataSource) skipUntilOffset(rowsToSkip int64) error {
+	for ds.globalOffset < rowsToSkip {
 		if ds.currentRecord == nil {
 			if !ds.recordReader.Next() {
 				if ds.circular {
@@ -93,7 +91,7 @@ func (ds *ParquetFileDataSource) skipUntilOffset() error {
 						return fmt.Errorf("failed to read after reset")
 					}
 					ds.globalOffset = 0
-					ds.rowsToSkip = 0
+					rowsToSkip = 0
 					continue
 				} else {
 					return nil
@@ -103,7 +101,7 @@ func (ds *ParquetFileDataSource) skipUntilOffset() error {
 		}
 
 		remainingInRecord := ds.currentRecord.NumRows() - int64(ds.currentOffset)
-		skipCount := min(ds.rowsToSkip-ds.globalOffset, remainingInRecord)
+		skipCount := min(rowsToSkip-ds.globalOffset, remainingInRecord)
 
 		ds.currentOffset += int(skipCount)
 		ds.globalOffset += skipCount
@@ -133,7 +131,6 @@ func (ds *ParquetFileDataSource) GetNextRow() ([]interface{}, error) {
 			}
 			ds.currentRecord = ds.recordReader.Record()
 			ds.globalOffset = 0
-			ds.rowsToSkip = 0
 		} else {
 			return nil, nil
 		}
