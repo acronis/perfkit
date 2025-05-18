@@ -61,33 +61,42 @@ func NewParquetFileDataSource(filePath string, offset int64, circular bool) (*Pa
 		return nil, fmt.Errorf("error creating record reader: %v", err)
 	}
 
-	return &ParquetFileDataSource{
+	var source = &ParquetFileDataSource{
 		columns:      columnNames,
 		fileReader:   rdr,
 		recordReader: recordReader,
 		rowsToSkip:   offset,
 		circular:     circular,
-	}, nil
+	}
+
+	if skipErr := source.skipUntilOffset(); skipErr != nil {
+		return nil, skipErr
+	}
+
+	return source, nil
 }
 
-func (ds *ParquetFileDataSource) GetColumnNames() []string {
-	return ds.columns
+func min(a, b int64) int64 {
+	if a < b {
+		return a
+	}
+	return b
 }
 
-func (ds *ParquetFileDataSource) GetNextRow() ([]interface{}, error) {
+func (ds *ParquetFileDataSource) skipUntilOffset() error {
 	for ds.globalOffset < ds.rowsToSkip {
 		if ds.currentRecord == nil {
 			if !ds.recordReader.Next() {
 				if ds.circular {
 					ds.resetReader()
 					if !ds.recordReader.Next() {
-						return nil, fmt.Errorf("failed to read after reset")
+						return fmt.Errorf("failed to read after reset")
 					}
 					ds.globalOffset = 0
 					ds.rowsToSkip = 0
 					continue
 				} else {
-					return nil, nil
+					return nil
 				}
 			}
 			ds.currentRecord = ds.recordReader.Record()
@@ -106,6 +115,14 @@ func (ds *ParquetFileDataSource) GetNextRow() ([]interface{}, error) {
 		}
 	}
 
+	return nil
+}
+
+func (ds *ParquetFileDataSource) GetColumnNames() []string {
+	return ds.columns
+}
+
+func (ds *ParquetFileDataSource) GetNextRow() ([]interface{}, error) {
 	if ds.currentRecord == nil {
 		if ds.recordReader.Next() {
 			ds.currentRecord = ds.recordReader.Record()
@@ -161,13 +178,6 @@ func (ds *ParquetFileDataSource) GetNextRow() ([]interface{}, error) {
 func (ds *ParquetFileDataSource) Close() {
 	ds.recordReader.Release()
 	ds.fileReader.Close()
-}
-
-func min(a, b int64) int64 {
-	if a < b {
-		return a
-	}
-	return b
 }
 
 func (ds *ParquetFileDataSource) resetReader() {
