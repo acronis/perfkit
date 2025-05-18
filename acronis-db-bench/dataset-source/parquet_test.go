@@ -135,6 +135,12 @@ func TestReadParquetCircular(t *testing.T) {
 			expectedRounds: 2,
 			expectedTotal:  201, // 50 records + 100 records + 51 records (including the first record of the second round)
 		},
+		{
+			name:           "Read file twice from middle, skipping file once",
+			offset:         150,
+			expectedRounds: 2,
+			expectedTotal:  201, // 50 records + 100 records + 51 records (including the first record of the second round)
+		},
 	}
 
 	for _, tc := range testCases {
