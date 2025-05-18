@@ -25,7 +25,7 @@ func init() {
 // TestTableVector768 is table to store 768-dimensions vector objects
 var TestTableVector768 = engine.TestTable{
 	TableName: "acronis_db_bench_vector_768",
-	Databases: []db.DialectName{db.ELASTICSEARCH, db.OPENSEARCH},
+	Databases: []db.DialectName{db.POSTGRES, db.ELASTICSEARCH, db.OPENSEARCH},
 	Columns: [][]interface{}{
 		{"id", "dataset.id"},
 		{"embedding", "dataset.emb.list.item"},
@@ -70,7 +70,7 @@ var TestSelectVector768NearestL2 = engine.TestDesc{
 	Metric:      "rows/sec",
 	Description: "selects k nearest vectors by L2 norm from the 'vector' table to the given 768-dim vector",
 	Category:    engine.TestSelect,
-	IsReadonly:  false,
+	IsReadonly:  true,
 	Databases:   []db.DialectName{db.POSTGRES, db.ELASTICSEARCH, db.OPENSEARCH},
 	Table:       TestTableVector768,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
