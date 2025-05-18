@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/acronis/perfkit/benchmark"
 	"github.com/acronis/perfkit/db"
@@ -186,6 +187,7 @@ func NewParquetFileDataSourceForRandomizer(bench *benchmark.Benchmark, filePath 
 	var dataSourcePlugin = &DataSetSourcePlugin{
 		source:  source,
 		columns: registeredColumns,
+		mx:      sync.Mutex{},
 	}
 
 	bench.Randomizer.RegisterPlugin("dataset", dataSourcePlugin)
@@ -200,6 +202,8 @@ type DataSetSourcePlugin struct {
 	source dataset.DataSetSource
 
 	columns []string
+
+	mx sync.Mutex
 }
 
 func (p *DataSetSourcePlugin) GenCommonFakeValues(columnType string, rz *benchmark.Randomizer, cardinality int) (bool, map[string]interface{}) {
@@ -211,6 +215,9 @@ func (p *DataSetSourcePlugin) GenCommonFakeValues(columnType string, rz *benchma
 	if columnType != p.columns[0] {
 		return false, nil
 	}
+
+	p.mx.Lock()
+	defer p.mx.Unlock()
 
 	var row, err = p.source.GetNextRow()
 	if err != nil {
