@@ -199,11 +199,10 @@ func NewParquetFileDataSourceForRandomizer(bench *benchmark.Benchmark, filePath 
 type DataSetSourcePlugin struct {
 	source dataset.DataSetSource
 
-	columns       []string
-	currentValues map[string]interface{}
+	columns []string
 }
 
-func (p *DataSetSourcePlugin) GenCommonFakeValue(columnType string, rz *benchmark.Randomizer, cardinality int) (bool, interface{}) {
+func (p *DataSetSourcePlugin) GenCommonFakeValues(columnType string, rz *benchmark.Randomizer, cardinality int) (bool, map[string]interface{}) {
 	if len(p.columns) == 0 {
 		return false, nil
 	}
@@ -222,12 +221,12 @@ func (p *DataSetSourcePlugin) GenCommonFakeValue(columnType string, rz *benchmar
 		return true, nil
 	}
 
-	p.currentValues = make(map[string]interface{}, len(row))
+	var currentValues = make(map[string]interface{}, len(row))
 	for i, value := range row {
-		p.currentValues[p.columns[i]] = value
+		currentValues[p.columns[i]] = value
 	}
 
-	return false, p.currentValues[columnType]
+	return false, currentValues
 }
 
 func (p *DataSetSourcePlugin) GenFakeValue(columnType string, rz *benchmark.Randomizer, cardinality int, preGenerated map[string]interface{}) (bool, interface{}) {
@@ -235,7 +234,7 @@ func (p *DataSetSourcePlugin) GenFakeValue(columnType string, rz *benchmark.Rand
 		return false, nil
 	}
 
-	var value, ok = p.currentValues[columnType]
+	var value, ok = preGenerated[columnType]
 	if !ok {
 		return false, nil
 	}
