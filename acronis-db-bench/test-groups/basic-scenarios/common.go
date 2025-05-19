@@ -29,7 +29,14 @@ func insertByPreparedDataWorker(b *benchmark.Benchmark, c *engine.DBConnector, t
 			b.Exit(err)
 		}
 
-		parametersPlaceholder := db.GenDBParameterPlaceholders(0, len(*colConfs))
+		var numericPlaceholders bool
+		if c.Database.DialectName() == db.POSTGRES {
+			numericPlaceholders = true
+		} else {
+			numericPlaceholders = false
+		}
+
+		parametersPlaceholder := db.GenDBParameterPlaceholders(0, len(*colConfs), numericPlaceholders)
 		sql := fmt.Sprintf("INSERT INTO %s (%s) VALUES(%s)", testDesc.Table.TableName, strings.Join(columns, ","), parametersPlaceholder)
 		sql = engine.FormatSQL(sql, c.Database.DialectName())
 
