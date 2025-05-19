@@ -2,7 +2,6 @@ package basic_scenarios
 
 import (
 	"github.com/acronis/perfkit/acronis-db-bench/engine"
-	tenants "github.com/acronis/perfkit/acronis-db-bench/tenants-cache"
 	"github.com/acronis/perfkit/benchmark"
 )
 
@@ -54,7 +53,8 @@ func (suite *TestingSuite) TestMediumTableTests() {
 
 	b.AddOpts = func() benchmark.TestOpts {
 		var testOpts = engine.TestOpts{
-			DBOpts: engine.DatabaseOpts{ConnString: suite.ConnString},
+			DBOpts:    engine.DatabaseOpts{ConnString: suite.ConnString},
+			BenchOpts: engine.BenchOpts{TenantsWorkingSet: 50},
 		}
 
 		b.Cli.AddFlagGroup("Database options", "", &testOpts.DBOpts)
@@ -62,7 +62,7 @@ func (suite *TestingSuite) TestMediumTableTests() {
 		b.Cli.AddFlagGroup("Testcase specific options", "", &testOpts.TestcaseOpts)
 		b.Cli.AddFlagGroup("CTI-pattern simulation test options", "", &testOpts.CTIOpts)
 
-		return &testOpts
+		return mediumTestOpts
 	}
 
 	b.InitOpts()
@@ -78,23 +78,7 @@ func (suite *TestingSuite) TestMediumTableTests() {
 		d.Scores[s] = []benchmark.Score{}
 	}
 
-	b.Init = func() {
-		b.Vault.(*engine.DBTestData).TenantsCache = tenants.NewTenantsCache(b)
-
-		var tenantCacheDatabase, err = engine.NewDBConnector(&b.TestOpts.(*engine.TestOpts).DBOpts, -1, true, b.Logger, 1)
-		if err != nil {
-			b.Exit("db: cannot create tenants cache connection: %v", err)
-			return
-		}
-
-		if err = b.Vault.(*engine.DBTestData).TenantsCache.Init(tenantCacheDatabase.Database); err != nil {
-			b.Exit("db: cannot initialize tenants cache: %v", err)
-		}
-	}
-
-	mediumTableTestSuite.Execute(b, &engine.TestOpts{
-		DBOpts: engine.DatabaseOpts{ConnString: suite.ConnString},
-	}, 1)
+	mediumTableTestSuite.Execute(b, nil, 1)
 
 	// Clear tables
 	engine.CleanupTables(b)

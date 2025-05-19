@@ -198,7 +198,7 @@ func NewRandomizer(seed int64, workerID int) *Randomizer {
 
 // RandomizerPlugin is a
 type RandomizerPlugin interface {
-	GenCommonFakeValue(columnType string, rz *Randomizer, cardinality int) (bool, interface{})
+	GenCommonFakeValues(columnType string, rz *Randomizer, cardinality int) (bool, map[string]interface{})
 	GenFakeValue(columnType string, rz *Randomizer, cardinality int, preGenerated map[string]interface{}) (bool, interface{})
 }
 
@@ -339,11 +339,18 @@ func (rz *Randomizer) GenFakeData(colConfs *[]DBFakeColumnConf, WithAutoInc bool
 	var preGenerated map[string]interface{}
 	for _, plugin := range rz.plugins {
 		for _, c := range *colConfs {
-			if exists, value := plugin.GenCommonFakeValue(c.ColumnType, rz, c.Cardinality); exists {
-				if preGenerated == nil {
-					preGenerated = make(map[string]interface{})
+			if shouldStop, commonValues := plugin.GenCommonFakeValues(c.ColumnType, rz, c.Cardinality); !shouldStop {
+				if commonValues != nil {
+					if preGenerated == nil {
+						preGenerated = make(map[string]interface{})
+					}
+					for colType, val := range commonValues {
+						preGenerated[colType] = val
+					}
 				}
-				preGenerated[c.ColumnType] = value
+			} else {
+				// End of generation
+				return nil, nil, nil
 			}
 		}
 	}
@@ -372,11 +379,18 @@ func (rz *Randomizer) GenFakeDataAsMap(colConfs *[]DBFakeColumnConf, WithAutoInc
 	var preGenerated map[string]interface{}
 	for _, plugin := range rz.plugins {
 		for _, c := range *colConfs {
-			if exists, value := plugin.GenCommonFakeValue(c.ColumnType, rz, c.Cardinality); exists {
-				if preGenerated == nil {
-					preGenerated = make(map[string]interface{})
+			if shouldStop, commonValues := plugin.GenCommonFakeValues(c.ColumnType, rz, c.Cardinality); !shouldStop {
+				if commonValues != nil {
+					if preGenerated == nil {
+						preGenerated = make(map[string]interface{})
+					}
+					for colType, val := range commonValues {
+						preGenerated[colType] = val
+					}
 				}
-				preGenerated[c.ColumnType] = value
+			} else {
+				// End of generation
+				return nil, nil
 			}
 		}
 	}

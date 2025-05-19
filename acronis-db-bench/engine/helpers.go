@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/acronis/perfkit/benchmark"
 	"github.com/acronis/perfkit/db"
@@ -166,12 +167,12 @@ func FormatSQL(sqlTemlate string, dialectName db.DialectName) string {
 }
 
 // NewParquetFileDataSourceForRandomizer creates a new parquet DataSetSource instance and register as plugin for Randomizer
-func NewParquetFileDataSourceForRandomizer(bench *benchmark.Benchmark, filePath string) error {
+func NewParquetFileDataSourceForRandomizer(bench *benchmark.Benchmark, filePath string, offset int64, circular bool) error {
 	if bench.Randomizer == nil {
 		bench.Randomizer = benchmark.NewRandomizer(bench.CommonOpts.RandSeed, bench.CommonOpts.Workers)
 	}
 
-	var source, err = dataset.NewParquetFileDataSource(filePath)
+	var source, err = dataset.NewParquetFileDataSource(filePath, offset, circular)
 	if err != nil {
 		return err
 	}
@@ -186,6 +187,7 @@ func NewParquetFileDataSourceForRandomizer(bench *benchmark.Benchmark, filePath 
 	var dataSourcePlugin = &DataSetSourcePlugin{
 		source:  source,
 		columns: registeredColumns,
+		mx:      sync.Mutex{},
 	}
 
 	bench.Randomizer.RegisterPlugin("dataset", dataSourcePlugin)
@@ -199,11 +201,12 @@ func NewParquetFileDataSourceForRandomizer(bench *benchmark.Benchmark, filePath 
 type DataSetSourcePlugin struct {
 	source dataset.DataSetSource
 
-	columns       []string
-	currentValues map[string]interface{}
+	columns []string
+
+	mx sync.Mutex
 }
 
-func (p *DataSetSourcePlugin) GenCommonFakeValue(columnType string, rz *benchmark.Randomizer, cardinality int) (bool, interface{}) {
+func (p *DataSetSourcePlugin) GenCommonFakeValues(columnType string, rz *benchmark.Randomizer, cardinality int) (bool, map[string]interface{}) {
 	if len(p.columns) == 0 {
 		return false, nil
 	}
@@ -213,21 +216,24 @@ func (p *DataSetSourcePlugin) GenCommonFakeValue(columnType string, rz *benchmar
 		return false, nil
 	}
 
+	p.mx.Lock()
+	defer p.mx.Unlock()
+
 	var row, err = p.source.GetNextRow()
 	if err != nil {
 		return false, nil
 	}
 
 	if row == nil {
-		return false, nil
+		return true, nil
 	}
 
-	p.currentValues = make(map[string]interface{}, len(row))
+	var currentValues = make(map[string]interface{}, len(row))
 	for i, value := range row {
-		p.currentValues[p.columns[i]] = value
+		currentValues[p.columns[i]] = value
 	}
 
-	return true, p.currentValues[columnType]
+	return false, currentValues
 }
 
 func (p *DataSetSourcePlugin) GenFakeValue(columnType string, rz *benchmark.Randomizer, cardinality int, preGenerated map[string]interface{}) (bool, interface{}) {
@@ -235,7 +241,7 @@ func (p *DataSetSourcePlugin) GenFakeValue(columnType string, rz *benchmark.Rand
 		return false, nil
 	}
 
-	var value, ok = p.currentValues[columnType]
+	var value, ok = preGenerated[columnType]
 	if !ok {
 		return false, nil
 	}

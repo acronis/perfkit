@@ -234,6 +234,10 @@ func Main() {
 	// Has to be returned back to connection pool because it is not used anywhere else
 	c.Release()
 
+	if b.Logger.GetLevel() > logger.LevelInfo && !testOpts.BenchOpts.Info {
+		b.Log(logger.LevelTrace, 0, getDBInfo(b, content))
+	}
+
 	if testOpts.BenchOpts.Info || b.Logger.GetLevel() > logger.LevelInfo {
 		if testOpts.BenchOpts.Info {
 			fmt.Printf(getDBInfo(b, content)) //nolint:staticcheck
@@ -255,50 +259,6 @@ func Main() {
 		}()
 		fmt.Printf("running profiler endpoint @ http://localhost:%d/debug/pprof/\n", testOpts.BenchOpts.ProfilerPort)
 		fmt.Printf("to collect the profiler log run: go tool pprof 'http://localhost:%d/debug/pprof/profile?seconds=10'\n", testOpts.BenchOpts.ProfilerPort)
-	}
-
-	b.Init = func() {
-		b.Vault.(*DBTestData).TenantsCache = tenants.NewTenantsCache(b)
-
-		b.Vault.(*DBTestData).TenantsCache.SetTenantsWorkingSet(b.TestOpts.(*TestOpts).BenchOpts.TenantsWorkingSet)
-		b.Vault.(*DBTestData).TenantsCache.SetCTIsWorkingSet(b.TestOpts.(*TestOpts).BenchOpts.CTIsWorkingSet)
-
-		var tenantCacheDBOpts = b.TestOpts.(*TestOpts).DBOpts
-		if b.TestOpts.(*TestOpts).BenchOpts.TenantConnString != "" {
-			tenantCacheDBOpts.ConnString = b.TestOpts.(*TestOpts).BenchOpts.TenantConnString
-		}
-
-		var tenantCacheDatabase *DBConnector
-		if tenantCacheDatabase, err = NewDBConnector(&tenantCacheDBOpts, -1, true, b.Logger, 1); err != nil {
-			b.Exit("db: cannot create tenants cache connection: %v", err)
-			return
-		}
-
-		if err = b.Vault.(*DBTestData).TenantsCache.Init(tenantCacheDatabase.Database); err != nil {
-			b.Exit("db: cannot initialize tenants cache: %v", err)
-		}
-
-		if b.Logger.GetLevel() > logger.LevelInfo && !testOpts.BenchOpts.Info {
-			b.Log(logger.LevelTrace, 0, getDBInfo(b, content))
-		}
-
-		tenantCacheDatabase.Release()
-
-		if b.TestOpts.(*TestOpts).BenchOpts.Events {
-			var workingConn *DBConnector
-			if workingConn, err = NewDBConnector(&b.TestOpts.(*TestOpts).DBOpts, -1, true, b.Logger, 1); err != nil {
-				return
-			}
-
-			b.Vault.(*DBTestData).EventBus = events.NewEventBus(workingConn.Database, b.Logger)
-			b.Vault.(*DBTestData).EventBus.CreateTables()
-		}
-
-		if b.TestOpts.(*TestOpts).BenchOpts.ParquetDataSource != "" {
-			if err = NewParquetFileDataSourceForRandomizer(b, b.TestOpts.(*TestOpts).BenchOpts.ParquetDataSource); err != nil {
-				b.Exit("failed to create parquet data source: %v", err)
-			}
-		}
 	}
 
 	b.Finish = func() {

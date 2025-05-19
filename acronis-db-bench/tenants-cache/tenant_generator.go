@@ -985,7 +985,7 @@ func (tc *TenantsCache) GetRandomCTIUUID(rz *benchmark.Randomizer, testCardinali
 	return tc.ctiUuids[rz.IntnExp(cardinality)], nil
 }
 
-func (tc *TenantsCache) GenCommonFakeValue(columnType string, rz *benchmark.Randomizer, cardinality int) (bool, interface{}) {
+func (tc *TenantsCache) GenCommonFakeValues(columnType string, rz *benchmark.Randomizer, cardinality int) (bool, map[string]interface{}) {
 	if columnType != "tenant_uuid" && columnType != "customer_uuid" && columnType != "partner_uuid" {
 		return false, nil
 	}
@@ -1003,7 +1003,10 @@ func (tc *TenantsCache) GenCommonFakeValue(columnType string, rz *benchmark.Rand
 		tc.benchmark.Exit(err.Error())
 	}
 
-	return true, tenantUUID
+	var currentValues = make(map[string]interface{}, 1)
+	currentValues[columnType] = tenantUUID
+
+	return false, currentValues
 }
 
 func (tc *TenantsCache) GenFakeValue(columnType string, rz *benchmark.Randomizer, cardinality int, preGenerated map[string]interface{}) (bool, interface{}) {
