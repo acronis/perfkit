@@ -173,6 +173,30 @@ acronis-db-bench --connection-string "es://<USER>::<PASSWORD>@<HOST>:<PORT>"
 acronis-db-bench --connection-string "opensearch://<USER>::<PASSWORD>@<HOST>:<PORT>"
 ```
 
+#### Using DBR
+
+DBR is supported as an adapter and query builder for SQL databases. It provides a more convenient way to build and execute queries with features like:
+- Automatic query building
+- Connection pooling
+- Statement interpolation
+- Transaction management
+
+To use DBR, append `+dbr` to the database scheme in your connection string. Examples:
+
+```bash
+# SQLite with DBR
+acronis-db-bench --connection-string "sqlite+dbr://:memory:"
+
+# MySQL/MariaDB with DBR
+acronis-db-bench --connection-string "mysql+dbr://<USER>:<PASSWORD>@tcp(<HOST>:<PORT>)/<DATABASE NAME>"
+
+# MS SQL Server with DBR
+acronis-db-bench --connection-string "mssql+dbr://<USER>:<PASSWORD>@<HOST>:<PORT>?database=<DATABASE NAME>"
+
+# PostgreSQL with DBR
+acronis-db-bench --connection-string "postgres+dbr://<USER>:<PASSWORD>@<HOST>:<PORT>/<DATABASE NAME>?sslmode=disable"
+```
+
 ### Examples
 
 #### Run all tests
@@ -248,7 +272,6 @@ Acronis Database Benchmark: version v1-main-dev
   -- Advanced tests group ---------------------------------------------------------------------------------------------------------
 
   bulkupdate-heavy                        : [PMWS----] : update N rows (see --batch=, default 50000) in the 'heavy' table by single transaction
-  dbr-bulkupdate-heavy                    : [PMWS----] : update N rows (see --update-rows-count= ) in the 'heavy' table by single transaction using DBR query builder
   insert-json                             : [PMWS----] : insert a row into a table with JSON(b) column
   ping                                    : [PMWSCAEO] : just ping DB
   search-json-by-indexed-value            : [PMWS----] : search a row from the 'json' table using some json condition using LIKE {}
@@ -276,19 +299,6 @@ Acronis Database Benchmark: version v1-main-dev
 
   insert-ts-sql                           : [PMWS-A--] : batch insert into the 'timeseries' SQL table
   select-ts-sql                           : [PMWS-A--] : batch select from the 'timeseries' SQL table
-
-  -- Golang DBR query builder tests -----------------------------------------------------------------------------------------------
-
-  dbr-insert-heavy                        : [PMWS----] : insert a row into the 'heavy' table using golang DB query builder
-  dbr-insert-json                         : [PMWS----] : insert a row into a table with JSON(b) column using golang DBR driver
-  dbr-insert-light                        : [PMWS----] : insert a row into the 'light' table using goland DBR query builder
-  dbr-insert-medium                       : [PMWS----] : insert a row into the 'medium' table using goland DBR query builder
-  dbr-select-heavy-last                   : [PMWS----] : select last row from the 'heavy' table using golang DBR driver
-  dbr-select-heavy-rand                   : [PMWS----] : select random row from the 'heavy' table using golang DBR query builder
-  dbr-select-medium-last                  : [PMWS----] : select last row from the 'medium' table with few columns and 1 index
-  dbr-select-medium-rand                  : [PMWS----] : select random row from the 'medium' table using golang DBR query builder
-  dbr-update-heavy                        : [PMWS----] : update random row in the 'heavy' table using golang DB driver
-  dbr-update-medium                       : [PMWS----] : update random row in the 'medium' table using golang DB driver
 
   -- Advanced monitoring tests ----------------------------------------------------------------------------------------------------
 

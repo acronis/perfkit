@@ -281,7 +281,6 @@ var TestInsertHeavy = engine.TestDesc{
 	Description: "insert a row into the 'heavy' table",
 	Category:    engine.TestInsert,
 	IsReadonly:  false,
-	IsDBRTest:   false,
 	Databases:   engine.ALL,
 	Table:       TestTableHeavy,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
@@ -296,7 +295,6 @@ var TestInsertHeavyPrepared = engine.TestDesc{
 	Description: "insert a row into the 'heavy' table using prepared statement for the batch",
 	Category:    engine.TestInsert,
 	IsReadonly:  false,
-	IsDBRTest:   false,
 	Databases:   engine.RELATIONAL,
 	Table:       TestTableHeavy,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
@@ -311,7 +309,6 @@ var TestInsertHeavyMultivalue = engine.TestDesc{
 	Description: "insert a row into the 'heavy' table using INSERT INTO t (x, y, z) VALUES (..., ..., ...) ",
 	Category:    engine.TestInsert,
 	IsReadonly:  false,
-	IsDBRTest:   false,
 	Databases:   engine.ALL,
 	Table:       TestTableHeavy,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
@@ -326,26 +323,10 @@ var TestCopyHeavy = engine.TestDesc{
 	Description: "copy a row into the 'heavy' table",
 	Category:    engine.TestInsert,
 	IsReadonly:  false,
-	IsDBRTest:   false,
 	Databases:   []db.DialectName{db.POSTGRES, db.MSSQL},
 	Table:       TestTableHeavy,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
 		engine.TestGeneric(b, testDesc, copyDataWorker, 0)
-	},
-}
-
-// TestInsertHeavyDBR inserts a row into the 'heavy' table using golang DB query builder
-var TestInsertHeavyDBR = engine.TestDesc{
-	Name:        "dbr-insert-heavy",
-	Metric:      "rows/sec",
-	Description: "insert a row into the 'heavy' table using golang DB query builder",
-	Category:    engine.TestInsert,
-	IsReadonly:  false,
-	IsDBRTest:   true,
-	Databases:   []db.DialectName{db.POSTGRES, db.ELASTICSEARCH, db.OPENSEARCH},
-	Table:       TestTableHeavy,
-	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
-		engine.TestInsertGeneric(b, testDesc)
 	},
 }
 
@@ -356,22 +337,6 @@ var TestUpdateHeavy = engine.TestDesc{
 	Description: "update random row in the 'heavy' table",
 	Category:    engine.TestUpdate,
 	IsReadonly:  false,
-	IsDBRTest:   false,
-	Databases:   engine.RELATIONAL,
-	Table:       TestTableHeavy,
-	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
-		engine.TestUpdateGeneric(b, testDesc, 1, nil)
-	},
-}
-
-// TestUpdateHeavyDBR updates random row in the 'heavy' table using golang DBR query builder
-var TestUpdateHeavyDBR = engine.TestDesc{
-	Name:        "dbr-update-heavy",
-	Metric:      "rows/sec",
-	Description: "update random row in the 'heavy' table using golang DB driver",
-	Category:    engine.TestUpdate,
-	IsReadonly:  false,
-	IsDBRTest:   true,
 	Databases:   engine.RELATIONAL,
 	Table:       TestTableHeavy,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
@@ -386,7 +351,6 @@ var TestUpdateHeavyBulk = engine.TestDesc{
 	Description: "update N rows (see --batch=, default 50000) in the 'heavy' table by single transaction",
 	Category:    engine.TestUpdate,
 	IsReadonly:  false,
-	IsDBRTest:   false,
 	Databases:   engine.RELATIONAL,
 	Table:       TestTableHeavy,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
@@ -396,30 +360,6 @@ var TestUpdateHeavyBulk = engine.TestDesc{
 			testBatch = 50000
 		}
 		b.Vault.(*engine.DBTestData).EffectiveBatch = 1
-
-		engine.TestUpdateGeneric(b, testDesc, uint64(testBatch), nil)
-
-		b.Vault.(*engine.DBTestData).EffectiveBatch = origBatch
-	},
-}
-
-// TestUpdateHeavyBulkDBR updates N rows (see --batch=, default 50000) in the 'heavy' table by single transaction using DBR query builder
-var TestUpdateHeavyBulkDBR = engine.TestDesc{
-	Name:        "dbr-bulkupdate-heavy",
-	Metric:      "rows/sec",
-	Description: "update N rows (see --update-rows-count= ) in the 'heavy' table by single transaction using DBR query builder",
-	Category:    engine.TestUpdate,
-	IsReadonly:  false,
-	IsDBRTest:   true,
-	Databases:   engine.RELATIONAL,
-	Table:       TestTableHeavy,
-	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
-		origBatch := b.Vault.(*engine.DBTestData).EffectiveBatch
-		b.Vault.(*engine.DBTestData).EffectiveBatch = 1
-		testBatch := origBatch
-		if b.TestOpts.(*engine.TestOpts).BenchOpts.Batch == 0 {
-			testBatch = 50000
-		}
 
 		engine.TestUpdateGeneric(b, testDesc, uint64(testBatch), nil)
 
@@ -434,7 +374,6 @@ var TestUpdateHeavySameVal = engine.TestDesc{
 	Description: "update random row in the 'heavy' table putting the value which already exists",
 	Category:    engine.TestUpdate,
 	IsReadonly:  false,
-	IsDBRTest:   false,
 	Databases:   engine.RELATIONAL,
 	Table:       TestTableHeavy,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
@@ -450,7 +389,6 @@ var TestUpdateHeavyPartialSameVal = engine.TestDesc{
 	Description: "update random row in the 'heavy' table putting two values, where one of them is already exists in this row",
 	Category:    engine.TestUpdate,
 	IsReadonly:  false,
-	IsDBRTest:   false,
 	Databases:   engine.RELATIONAL,
 	Table:       TestTableHeavy,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
@@ -466,24 +404,6 @@ var TestSelectHeavyLast = engine.TestDesc{
 	Description: "select last row from the 'heavy' table",
 	Category:    engine.TestSelect,
 	IsReadonly:  true,
-	IsDBRTest:   false,
-	Databases:   engine.RELATIONAL,
-	Table:       TestTableHeavy,
-	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
-		var idToRead int64
-		var orderBy = func(worker *benchmark.BenchmarkWorker) []string { return []string{"desc(id)"} } //nolint:revive
-		engine.TestSelectRun(b, testDesc, nil, []string{"id"}, []interface{}{&idToRead}, nil, orderBy, 1)
-	},
-}
-
-// TestSelectHeavyLastDBR selects last row from the 'heavy' table using golang DBR driver
-var TestSelectHeavyLastDBR = engine.TestDesc{
-	Name:        "dbr-select-heavy-last",
-	Metric:      "rows/sec",
-	Description: "select last row from the 'heavy' table using golang DBR driver",
-	Category:    engine.TestSelect,
-	IsReadonly:  true,
-	IsDBRTest:   true,
 	Databases:   engine.RELATIONAL,
 	Table:       TestTableHeavy,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
@@ -500,33 +420,6 @@ var TestSelectHeavyRand = engine.TestDesc{
 	Description: "select random row from the 'heavy' table",
 	Category:    engine.TestSelect,
 	IsReadonly:  true,
-	IsDBRTest:   false,
-	Databases:   engine.RELATIONAL,
-	Table:       TestTableHeavy,
-	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
-		var idToRead int64
-
-		var where = func(worker *benchmark.BenchmarkWorker) map[string][]string {
-			id := worker.Randomizer.Uintn64(testDesc.Table.RowsCount - 1)
-
-			return map[string][]string{"id": {fmt.Sprintf("gt(%d)", id)}}
-		}
-
-		var orderBy = func(worker *benchmark.BenchmarkWorker) []string { //nolint:revive
-			return []string{"asc(id)"}
-		}
-		engine.TestSelectRun(b, testDesc, nil, []string{"id"}, []interface{}{&idToRead}, where, orderBy, 1)
-	},
-}
-
-// TestSelectHeavyRandDBR selects random row from the 'heavy' table using golang DBR query builder
-var TestSelectHeavyRandDBR = engine.TestDesc{
-	Name:        "dbr-select-heavy-rand",
-	Metric:      "rows/sec",
-	Description: "select random row from the 'heavy' table using golang DBR query builder",
-	Category:    engine.TestSelect,
-	IsReadonly:  true,
-	IsDBRTest:   true,
 	Databases:   engine.RELATIONAL,
 	Table:       TestTableHeavy,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
@@ -552,7 +445,6 @@ var TestSelectHeavyRandTenantLike = engine.TestDesc{
 	Description: "select random row from the 'heavy' table WHERE tenant_id = {} AND resource_name LIKE {}",
 	Category:    engine.TestSelect,
 	IsReadonly:  true,
-	IsDBRTest:   false,
 	Databases:   engine.RELATIONAL,
 	Table:       TestTableHeavy,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
@@ -591,7 +483,6 @@ var TestSelectHeavyMinMaxTenant = engine.TestDesc{
 	Description: "select min(completion_time_ns) and max(completion_time_ns) value from the 'heavy' table WHERE tenant_id = {}",
 	Category:    engine.TestSelect,
 	IsReadonly:  true,
-	IsDBRTest:   false,
 	Databases:   engine.RELATIONAL,
 	Table:       TestTableHeavy,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
@@ -619,7 +510,6 @@ var TestSelectHeavyMinMaxTenantAndState = engine.TestDesc{
 	Description: "select min(completion_time) and max(completion_time) value from the 'heavy' table WHERE tenant_id = {} AND state = {}",
 	Category:    engine.TestSelect,
 	IsReadonly:  true,
-	IsDBRTest:   false,
 	Databases:   engine.RELATIONAL,
 	Table:       TestTableHeavy,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
@@ -652,7 +542,6 @@ var TestSelectHeavyForUpdateSkipLocked = engine.TestDesc{
 	Description: "do SELECT FOR UPDATE SKIP LOCKED and then UPDATE",
 	Category:    engine.TestOther,
 	IsReadonly:  false,
-	IsDBRTest:   false,
 	Databases:   engine.RELATIONAL,
 	Table:       TestTableHeavy,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
@@ -707,7 +596,6 @@ var TestSelectHeavyLastTenant = engine.TestDesc{
 	Description: "select the last row from the 'heavy' table WHERE tenant_id = {random tenant uuid}",
 	Category:    engine.TestSelect,
 	IsReadonly:  true,
-	IsDBRTest:   false,
 	Databases:   engine.RELATIONAL,
 	Table:       TestTableHeavy,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
@@ -725,7 +613,6 @@ var TestSelectHeavyLastTenantCTI = engine.TestDesc{
 	Description: "select the last row from the 'heavy' table WHERE tenant_id = {} AND cti = {}",
 	Category:    engine.TestSelect,
 	IsReadonly:  true,
-	IsDBRTest:   false,
 	Databases:   engine.RELATIONAL,
 	Table:       TestTableHeavy,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {

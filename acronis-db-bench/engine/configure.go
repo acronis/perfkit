@@ -43,7 +43,11 @@ func constructConnStringFromOpts(connString, driver, dsn string) (string, error)
 				"  ClickHouse:    clickhouse://user:password@localhost:9000/database\n" +
 				"  Cassandra:     cql://user:password@localhost:9042?keyspace=database\n" +
 				"  ElasticSearch: es://user::password@localhost:9200\n" +
-				"  OpenSearch:    opensearch://user::password@localhost:9200")
+				"  OpenSearch:    opensearch://user::password@localhost:9200\n" +
+				"  SQLite+DBR:    sqlite+dbr://:memory:\n" +
+				"  MySQL+DBR:     mysql+dbr://user:password@tcp(localhost:3306)/database\n" +
+				"  MSSQL+DBR:     mssql+dbr://user:password@localhost:1433?database=database\n" +
+				"  Postgres+DBR:  postgres+dbr://user:password@localhost:5432/database?sslmode=disable")
 		}
 	}
 }

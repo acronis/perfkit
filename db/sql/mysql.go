@@ -31,6 +31,10 @@ func (d *mysqlDialect) name() db.DialectName {
 	return db.MYSQL
 }
 
+func (d *mysqlDialect) argumentPlaceholder(index int) string {
+	return "?"
+}
+
 func (d *mysqlDialect) encodeString(s string) string {
 	// borrowed from dbr
 	buf := new(bytes.Buffer)
@@ -329,6 +333,7 @@ func (c *mysqlConnector) ConnectionPool(cfg db.Config) (db.Database, error) {
 	}
 
 	dbo.dialect = &mysqlDialect{}
+	dbo.qbs = newDefaultQueryBuildersFactory()
 	dbo.useTruncate = cfg.UseTruncate
 	dbo.queryStringInterpolation = cfg.QueryStringInterpolation
 	dbo.dryRun = cfg.DryRun

@@ -13,9 +13,11 @@ import (
 )
 
 const (
-	sqliteConnString     = "sqlite://:memory:"
-	mariaDBConnString    = "mysql://user:password@tcp(localhost:3306)/perfkit_db_ci"
-	postgresqlConnString = "postgresql://root:password@localhost:5432/perfkit_pg_vector_db_ci?sslmode=disable"
+	sqliteConnString        = "sqlite://:memory:"
+	mariaDBConnString       = "mysql://user:password@tcp(localhost:3306)/perfkit_db_ci"                             // example value of a secret
+	postgresqlConnString    = "postgresql://root:password@localhost:5432/perfkit_pg_vector_db_ci?sslmode=disable"   // example value of a secret
+	dbrMariaDBConnString    = "mysql+dbr://user:password@tcp(localhost:3306)/perfkit_db_ci"                         // example value of a secret
+	dbrPGVectorDBConnString = "postgres+dbr://root:password@localhost:5432/perfkit_pg_vector_db_ci?sslmode=disable" // example value of a secret
 )
 
 type TestingSuite struct {
@@ -35,4 +37,12 @@ func TestDatabaseSuiteMariaDB(t *testing.T) {
 
 func TestDatabaseSuitePostgreSQL(t *testing.T) {
 	suite.Run(t, &TestingSuite{ConnString: postgresqlConnString})
+}
+
+func TestDatabaseSuiteDBRMariaDB(t *testing.T) {
+	suite.Run(t, &TestingSuite{ConnString: dbrMariaDBConnString})
+}
+
+func TestDatabaseSuiteDBRPostgreSQL(t *testing.T) {
+	suite.Run(t, &TestingSuite{ConnString: dbrPGVectorDBConnString})
 }

@@ -16,7 +16,6 @@ func init() {
 
 	// JSON insert tests
 	tg.Add(&TestInsertJSON)
-	tg.Add(&TestInsertJSONDBR)
 
 	// JSON select tests with indexed values
 	tg.Add(&TestSelectJSONByIndexedValue)
@@ -111,23 +110,7 @@ var TestInsertJSON = engine.TestDesc{
 	Description: "insert a row into a table with JSON(b) column",
 	Category:    engine.TestInsert,
 	IsReadonly:  false,
-	IsDBRTest:   false,
 	Databases:   []db.DialectName{db.MYSQL, db.POSTGRES},
-	Table:       TestTableJSON,
-	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
-		engine.TestInsertGeneric(b, testDesc)
-	},
-}
-
-// TestInsertJSONDBR inserts a row into a table with JSON(b) column using golang DBR driver
-var TestInsertJSONDBR = engine.TestDesc{
-	Name:        "dbr-insert-json",
-	Metric:      "rows/sec",
-	Description: "insert a row into a table with JSON(b) column using golang DBR driver",
-	Category:    engine.TestInsert,
-	IsReadonly:  false,
-	IsDBRTest:   true,
-	Databases:   engine.RELATIONAL,
 	Table:       TestTableJSON,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
 		engine.TestInsertGeneric(b, testDesc)
@@ -141,7 +124,6 @@ var TestSelectJSONByIndexedValue = engine.TestDesc{
 	Description: "select a row from the 'json' table by some json condition",
 	Category:    engine.TestSelect,
 	IsReadonly:  true,
-	IsDBRTest:   false,
 	Databases:   []db.DialectName{db.MYSQL, db.POSTGRES},
 	Table:       TestTableJSON,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
@@ -178,7 +160,6 @@ var TestSearchJSONByIndexedValue = engine.TestDesc{
 	Description: "search a row from the 'json' table using some json condition using LIKE {}",
 	Category:    engine.TestSelect,
 	IsReadonly:  true,
-	IsDBRTest:   false,
 	Databases:   []db.DialectName{db.MYSQL, db.POSTGRES},
 	Table:       TestTableJSON,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
@@ -215,7 +196,6 @@ var TestSelectJSONByNonIndexedValue = engine.TestDesc{
 	Description: "select a row from the 'json' table by some json condition",
 	Category:    engine.TestSelect,
 	IsReadonly:  true,
-	IsDBRTest:   false,
 	Databases:   []db.DialectName{db.MYSQL, db.POSTGRES},
 	Table:       TestTableJSON,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
@@ -252,7 +232,6 @@ var TestSearchJSONByNonIndexedValue = engine.TestDesc{
 	Description: "search a row from the 'json' table using some json condition using LIKE {}",
 	Category:    engine.TestSelect,
 	IsReadonly:  true,
-	IsDBRTest:   false,
 	Databases:   []db.DialectName{db.MYSQL, db.POSTGRES},
 	Table:       TestTableJSON,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {

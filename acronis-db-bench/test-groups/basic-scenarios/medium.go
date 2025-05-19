@@ -50,7 +50,6 @@ var TestInsertMedium = engine.TestDesc{
 	Description: "insert a row into the 'medium' table",
 	Category:    engine.TestInsert,
 	IsReadonly:  false,
-	IsDBRTest:   false,
 	Databases:   engine.ALL,
 	Table:       TestTableMedium,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
@@ -65,7 +64,6 @@ var TestInsertMediumPrepared = engine.TestDesc{
 	Description: "insert a row into the 'medium' table using prepared statement for the batch",
 	Category:    engine.TestInsert,
 	IsReadonly:  false,
-	IsDBRTest:   false,
 	Databases:   engine.RELATIONAL,
 	Table:       TestTableMedium,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
@@ -80,7 +78,6 @@ var TestInsertMediumMultiValue = engine.TestDesc{
 	Description: "insert a row into the 'medium' table using INSERT INTO t (x, y, z) VALUES (..., ..., ...) ",
 	Category:    engine.TestInsert,
 	IsReadonly:  false,
-	IsDBRTest:   false,
 	Databases:   engine.PMWSA,
 	Table:       TestTableMedium,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
@@ -95,26 +92,10 @@ var TestCopyMedium = engine.TestDesc{
 	Description: "copy a row into the 'medium' table",
 	Category:    engine.TestInsert,
 	IsReadonly:  false,
-	IsDBRTest:   false,
 	Databases:   []db.DialectName{db.POSTGRES, db.MSSQL},
 	Table:       TestTableMedium,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
 		engine.TestGeneric(b, testDesc, copyDataWorker, 0)
-	},
-}
-
-// TestInsertMediumDBR inserts a row into the 'medium' table using goland DBR query builder
-var TestInsertMediumDBR = engine.TestDesc{
-	Name:        "dbr-insert-medium",
-	Metric:      "rows/sec",
-	Description: "insert a row into the 'medium' table using goland DBR query builder",
-	Category:    engine.TestInsert,
-	IsReadonly:  false,
-	IsDBRTest:   true,
-	Databases:   engine.RELATIONAL,
-	Table:       TestTableMedium,
-	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
-		engine.TestInsertGeneric(b, testDesc)
 	},
 }
 
@@ -125,22 +106,6 @@ var TestUpdateMedium = engine.TestDesc{
 	Description: "update random row in the 'medium' table",
 	Category:    engine.TestUpdate,
 	IsReadonly:  false,
-	IsDBRTest:   false,
-	Databases:   engine.RELATIONAL,
-	Table:       TestTableMedium,
-	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
-		engine.TestUpdateGeneric(b, testDesc, 1, nil)
-	},
-}
-
-// TestUpdateMediumDBR updates random row in the 'medium' table using golang DBR query builder
-var TestUpdateMediumDBR = engine.TestDesc{
-	Name:        "dbr-update-medium",
-	Metric:      "rows/sec",
-	Description: "update random row in the 'medium' table using golang DB driver",
-	Category:    engine.TestUpdate,
-	IsReadonly:  false,
-	IsDBRTest:   true,
 	Databases:   engine.RELATIONAL,
 	Table:       TestTableMedium,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
@@ -155,7 +120,6 @@ var TestSelectMediumLastTenant = engine.TestDesc{
 	Description: "select the last row from the 'medium' table WHERE tenant_id = {random tenant uuid}",
 	Category:    engine.TestSelect,
 	IsReadonly:  true,
-	IsDBRTest:   false,
 	Databases:   engine.ALL,
 	Table:       TestTableMedium,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
@@ -173,25 +137,7 @@ var TestSelectMediumLast = engine.TestDesc{
 	Description: "select last row from the 'medium' table with few columns and 1 index",
 	Category:    engine.TestSelect,
 	IsReadonly:  true,
-	IsDBRTest:   false,
 	Databases:   engine.ALL,
-	Table:       TestTableMedium,
-	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
-		var idToRead int64
-		var orderBy = func(worker *benchmark.BenchmarkWorker) []string { return []string{"desc(id)"} } //nolint:revive
-		engine.TestSelectRun(b, testDesc, nil, []string{"id"}, []interface{}{&idToRead}, nil, orderBy, 1)
-	},
-}
-
-// TestSelectMediumLastDBR tests select last row from the 'medium' table with few columns and 1 index using golang DBR query builder
-var TestSelectMediumLastDBR = engine.TestDesc{
-	Name:        "dbr-select-medium-last",
-	Metric:      "rows/sec",
-	Description: "select last row from the 'medium' table with few columns and 1 index",
-	Category:    engine.TestSelect,
-	IsReadonly:  true,
-	IsDBRTest:   true,
-	Databases:   engine.RELATIONAL,
 	Table:       TestTableMedium,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
 		var idToRead int64
@@ -207,7 +153,6 @@ var TestSelectMediumRand = engine.TestDesc{
 	Description: "select random row from the 'medium' table with few columns and 1 index",
 	Category:    engine.TestSelect,
 	IsReadonly:  true,
-	IsDBRTest:   false,
 	Databases:   engine.ALL,
 	Table:       TestTableMedium,
 	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
@@ -223,32 +168,6 @@ var TestSelectMediumRand = engine.TestDesc{
 			return []string{"asc(id)"}
 		}
 
-		engine.TestSelectRun(b, testDesc, nil, []string{"id"}, []interface{}{&idToRead}, where, orderBy, 1)
-	},
-}
-
-// TestSelectMediumRandDBR selects random row from the 'medium' table using golang DBR query builder
-var TestSelectMediumRandDBR = engine.TestDesc{
-	Name:        "dbr-select-medium-rand",
-	Metric:      "rows/sec",
-	Description: "select random row from the 'medium' table using golang DBR query builder",
-	Category:    engine.TestSelect,
-	IsReadonly:  true,
-	IsDBRTest:   true,
-	Databases:   engine.RELATIONAL,
-	Table:       TestTableMedium,
-	LauncherFunc: func(b *benchmark.Benchmark, testDesc *engine.TestDesc) {
-		var idToRead int64
-
-		var where = func(worker *benchmark.BenchmarkWorker) map[string][]string {
-			var id = worker.Randomizer.Uintn64(testDesc.Table.RowsCount - 1)
-
-			return map[string][]string{"id": {fmt.Sprintf("gt(%d)", id)}}
-		}
-
-		var orderBy = func(worker *benchmark.BenchmarkWorker) []string { //nolint:revive
-			return []string{"asc(id)"}
-		}
 		engine.TestSelectRun(b, testDesc, nil, []string{"id"}, []interface{}{&idToRead}, where, orderBy, 1)
 	},
 }

@@ -1,8 +1,6 @@
 package sql
 
 import (
-	"database/sql"
-
 	"github.com/acronis/perfkit/db"
 )
 
@@ -13,9 +11,7 @@ func (suite *TestingSuite) TestPrepareStatement() {
 
 	var qry string
 	switch d.DialectName() {
-	case db.MSSQL:
-		qry = "INSERT INTO perf_table (origin, type, name) VALUES (@Origin, @Type, @Name);"
-	case db.POSTGRES:
+	case db.MSSQL, db.POSTGRES:
 		qry = "INSERT INTO perf_table (origin, type, name) VALUES ($1, $2, $3);"
 	default:
 		qry = "INSERT INTO perf_table (origin, type, name) VALUES (?, ?, ?);"
@@ -23,8 +19,6 @@ func (suite *TestingSuite) TestPrepareStatement() {
 
 	var args = []interface{}{}
 	switch d.DialectName() {
-	case db.MSSQL:
-		args = []interface{}{sql.Named("Origin", 2), sql.Named("Type", 2), sql.Named("Name", "test")}
 	default:
 		args = []interface{}{2, 2, "test"}
 	}

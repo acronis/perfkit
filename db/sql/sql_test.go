@@ -3,6 +3,7 @@ package sql
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -23,6 +24,11 @@ const (
 	pgVectorConnString   = "postgresql://root:password@localhost:5432/perfkit_pg_vector_db_ci?sslmode=disable"   // example value of a secret
 	clickHouseConnString = "clickhouse://username:password@localhost:9000/perfkit_db_ci"                         // example value of a secret
 	cassandraConnString  = "cql://admin:password@localhost:9042?keyspace=perfkit_db_ci"                          // example value of a secret
+
+	dbrSQLiteConnString      = "sqlite+dbr://:memory:"
+	dbrMariaDBConnString     = "mysql+dbr://user:password@tcp(localhost:3306)/perfkit_db_ci"                         // example value of a secret
+	dbrSQLServerDBConnString = "mssql+dbr://perfkit_db_runner:MyP%40ssw0rd123@localhost:1433?database=perfkit_db_ci" // example value of a secret
+	dbrPGVectorDBConnString  = "postgres+dbr://root:password@localhost:5432/perfkit_pg_vector_db_ci?sslmode=disable" // example value of a secret
 )
 
 type TestingSuite struct {
@@ -52,6 +58,22 @@ func TestDatabaseSuiteClickHouse(t *testing.T) {
 
 func TestDatabaseSuiteCassandra(t *testing.T) {
 	suite.Run(t, &TestingSuite{ConnString: cassandraConnString})
+}
+
+func TestDatabaseSuiteDBRSQLite(t *testing.T) {
+	suite.Run(t, &TestingSuite{ConnString: dbrSQLiteConnString})
+}
+
+func TestDatabaseSuiteDBRMariaDB(t *testing.T) {
+	suite.Run(t, &TestingSuite{ConnString: dbrMariaDBConnString})
+}
+
+func TestDatabaseSuiteDBRSQLServer(t *testing.T) {
+	suite.Run(t, &TestingSuite{ConnString: dbrSQLServerDBConnString})
+}
+
+func TestDatabaseSuiteDBRPGVector(t *testing.T) {
+	suite.Run(t, &TestingSuite{ConnString: dbrPGVectorDBConnString})
 }
 
 type testLogger struct {
@@ -146,6 +168,10 @@ func dbDialect(connString string) (dialect, error) {
 	if err != nil {
 		return nil, fmt.Errorf("cannot parse connection string scheme '%v', error: %v", connString, err)
 	}
+
+	// Split scheme on '+' delimiter to handle cases like "mysql+dbr"
+	parts := strings.Split(scheme, "+")
+	scheme = parts[0] // Use the first part as the actual database scheme
 
 	switch scheme {
 	case "sqlite":

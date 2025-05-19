@@ -28,12 +28,21 @@ func init() {
 }
 
 type pgDialect struct {
-	schemaName string
-	embedded   bool
+	standardArgumentPlaceholder bool
+	schemaName                  string
+	embedded                    bool
 }
 
 func (d *pgDialect) name() db.DialectName {
 	return db.POSTGRES
+}
+
+func (d *pgDialect) argumentPlaceholder(index int) string {
+	if d.standardArgumentPlaceholder {
+		return "?"
+	} else {
+		return fmt.Sprintf("$%d", index+1)
+	}
 }
 
 func (d *pgDialect) encodeString(s string) string {
@@ -323,6 +332,7 @@ func (c *pgConnector) ConnectionPool(cfg db.Config) (db.Database, error) {
 	rwc.SetConnMaxLifetime(cfg.MaxConnLifetime)
 
 	dbo.dialect = dia
+	dbo.qbs = newDefaultQueryBuildersFactory()
 	dbo.useTruncate = cfg.UseTruncate
 	dbo.queryStringInterpolation = cfg.QueryStringInterpolation
 	dbo.dryRun = cfg.DryRun

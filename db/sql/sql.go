@@ -100,6 +100,8 @@ type sqlGateway struct {
 	rw      querier         // Query executor
 	dialect dialect         // SQL dialect being used
 
+	qbs queryBuilderFactory
+
 	InsideTX                 bool // Indicates if running within transaction
 	MaxRetries               int  // Maximum number of retry attempts
 	QueryStringInterpolation bool // Whether to interpolate query strings
@@ -130,6 +132,7 @@ func (s *sqlSession) Transact(fn func(tx db.DatabaseAccessor) error) error {
 				s.ctx,
 				q,
 				dl,
+				s.qbs,
 				true,
 				s.MaxRetries,
 				s.QueryStringInterpolation,
@@ -153,6 +156,8 @@ type sqlDatabase struct {
 	rw      accessor
 	t       transactor
 	dialect dialect
+
+	qbs queryBuilderFactory
 
 	useTruncate              bool
 	queryStringInterpolation bool
@@ -233,7 +238,7 @@ func (d *sqlDatabase) TableExists(tableName string) (bool, error) {
 
 func (d *sqlDatabase) CreateTable(tableName string, tableDefinition *db.TableDefinition, tableMigrationDDL string) error {
 	return inTx(context.Background(), d.systemTransactor(), d.dialect, func(q querier, dia dialect) error {
-		return createTable(q, dia, tableName, tableDefinition, tableMigrationDDL)
+		return createTable(q, dia, d.qbs, tableName, tableDefinition, tableMigrationDDL)
 	})
 }
 
@@ -323,6 +328,7 @@ func (d *sqlDatabase) Session(c *db.Context) db.Session {
 				queryLogger: d.queryLogger,
 			},
 			dialect:                  d.dialect,
+			qbs:                      d.qbs,
 			InsideTX:                 false,
 			QueryStringInterpolation: d.queryStringInterpolation,
 			LogTime:                  d.logTime,
@@ -375,6 +381,8 @@ func (d *sqlDatabase) Close() error {
 type dialect interface {
 	// name returns the dialect name
 	name() db.DialectName
+	// argumentPlaceholder returns the placeholder for query arguments
+	argumentPlaceholder(index int) string
 	// encodeString converts a string to dialect-specific format
 	encodeString(s string) string
 	// encodeUUID converts a UUID to dialect-specific format
@@ -407,6 +415,16 @@ type dialect interface {
 	recommendations() []db.Recommendation
 	// close cleans up any dialect-specific resources
 	close() error
+}
+
+// queryBuilderFactory defines the interface for creating query builders
+type queryBuilderFactory interface {
+	// newSelectQueryBuilder creates a new select query builder
+	newSelectQueryBuilder(tableName string, queryable map[string]filterFunction) selectQueryBuilder
+	// newInsertQueryBuilder creates a new insert query builder
+	newInsertQueryBuilder(tableName string) insertQueryBuilder
+	// newUpdateQueryBuilder creates a new update query builder
+	newUpdateQueryBuilder(tableName string, queryable map[string]filterFunction) updateQueryBuilder
 }
 
 // sanitizeConn removes sensitive information from connection string

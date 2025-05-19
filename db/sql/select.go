@@ -19,26 +19,35 @@ func init() {
 	tableQueryBuilders[""] = selectBuilder{tableName: ""}
 }
 
+// selectQueryBuilder is an interface for generating SQL queries
+// It defines the methods required for building SQL SELECT queries
+type selectQueryBuilder interface {
+	sql(d dialect, c *db.SelectCtrl) (string, bool, error) // Generates SQL query
+}
+
 // tableQueryBuilders maps table names to their corresponding query builders
 // Used to cache query builders for better performance
-var tableQueryBuilders = make(map[string]selectBuilder)
+var tableQueryBuilders = make(map[string]selectQueryBuilder)
 
 // createSelectQueryBuilder creates a new query builder for a table
 // Parameters:
+// - queryBuilders: factory for creating query builders
 // - tableName: name of the table to create builder for
 // - tableRows: schema definition of the table columns
 // Returns error if builder creation fails
-func createSelectQueryBuilder(tableName string, tableRows []db.TableRow) error {
+func createSelectQueryBuilder(queryBuilders queryBuilderFactory, tableName string, tableRows []db.TableRow) error {
 	// Skip if builder already exists for this table
 	if _, ok := tableQueryBuilders[tableName]; ok {
 		return nil
 	}
 
-	// Create new builder with table name and empty queryable map
-	var queryBuilder = selectBuilder{
-		tableName: tableName,
-		queryable: make(map[string]filterFunction),
+	// Skip if no query builders are provided
+	if queryBuilders == nil {
+		return nil
 	}
+
+	// Create empty queryable map
+	var queryable = map[string]filterFunction{}
 
 	// Add filter functions for each column based on its data type
 	// These filter functions implement the query building logic for WHERE clauses
@@ -46,22 +55,31 @@ func createSelectQueryBuilder(tableName string, tableRows []db.TableRow) error {
 		switch row.Type {
 		case db.DataTypeInt, db.DataTypeBigInt, db.DataTypeBigIntAutoIncPK,
 			db.DataTypeBigIntAutoInc, db.DataTypeSmallInt, db.DataTypeTinyInt:
-			queryBuilder.queryable[row.Name] = idCond() // Numeric ID conditions
+			queryable[row.Name] = idCond() // Numeric ID conditions
 		case db.DataTypeUUID, db.DataTypeVarCharUUID:
-			queryBuilder.queryable[row.Name] = uuidCond() // UUID conditions
+			queryable[row.Name] = uuidCond() // UUID conditions
 		case db.DataTypeVarChar, db.DataTypeVarChar32, db.DataTypeVarChar36,
 			db.DataTypeVarChar64, db.DataTypeVarChar128, db.DataTypeVarChar256,
 			db.DataTypeText, db.DataTypeLongText:
-			queryBuilder.queryable[row.Name] = stringCond(256, true) // String conditions with LIKE support
+			queryable[row.Name] = stringCond(256, true) // String conditions with LIKE support
 		case db.DataTypeDateTime, db.DataTypeDateTime6,
 			db.DataTypeTimestamp, db.DataTypeTimestamp6,
 			db.DataTypeCurrentTimeStamp6:
-			queryBuilder.queryable[row.Name] = timeCond() // Timestamp conditions
+			queryable[row.Name] = timeCond() // Timestamp conditions
 		}
 	}
 
-	// Cache the builder for future use
+	// Create new builder with table name and set of queryable columns
+	var queryBuilder = queryBuilders.newSelectQueryBuilder(tableName, queryable)
+
+	// Create new update query builder with table name and set of queryable columns
+	var updQueryBuilder = queryBuilders.newUpdateQueryBuilder(tableName, queryable)
+
+	// Cache select builder for future use
 	tableQueryBuilders[tableName] = queryBuilder
+
+	// Cache update query builder for future use
+	updateQueryBuilders[tableName] = updQueryBuilder
 
 	return nil
 }
@@ -69,6 +87,19 @@ func createSelectQueryBuilder(tableName string, tableRows []db.TableRow) error {
 // minTime and maxTime define the supported timestamp range
 var minTime = time.Unix(-2208988800, 0) // Jan 1, 1900
 var maxTime = time.Unix(1<<63-62135596801, 999999999)
+
+type defaultQueryBuildersFactory struct{}
+
+func newDefaultQueryBuildersFactory() queryBuilderFactory {
+	return &defaultQueryBuildersFactory{}
+}
+
+func (queryBuildersFactory *defaultQueryBuildersFactory) newSelectQueryBuilder(tableName string, queryable map[string]filterFunction) selectQueryBuilder {
+	return selectBuilder{
+		tableName: tableName,
+		queryable: queryable,
+	}
+}
 
 // filterFunction is a function type that generates SQL conditions
 // Parameters:
@@ -193,7 +224,7 @@ func (b selectBuilder) sqlSelectionAlias(fields []string, alias string) (string,
 // - optimizeConditions: whether to use optimized condition building
 // - fields: map of column names to filter values
 // Returns WHERE clause, arguments, and error
-func (b selectBuilder) sqlConditions(d dialect, optimizeConditions bool, fields map[string][]string) (string, []interface{}, bool, error) {
+func sqlConditions(d dialect, tableName string, queryable map[string]filterFunction, optimizeConditions bool, fields map[string][]string) (string, []interface{}, bool, error) {
 	var fmtString = ""
 	var fmtArgs []interface{}
 
@@ -214,7 +245,7 @@ func (b selectBuilder) sqlConditions(d dialect, optimizeConditions bool, fields 
 			return "", nil, false, fmt.Errorf("empty condition field")
 		}
 
-		condgen, ok := b.queryable[c.Col]
+		condgen, ok := queryable[c.Col]
 		if !ok {
 			return "", nil, false, fmt.Errorf("bad condition field '%v'", c.Col)
 		}
@@ -222,11 +253,11 @@ func (b selectBuilder) sqlConditions(d dialect, optimizeConditions bool, fields 
 		if len(c.Vals) == 1 {
 			// generic special cases
 			if c.Vals[0] == db.SpecialConditionIsNull {
-				addFmt(fmt.Sprintf("%v.%v IS %%v", b.tableName, c.Col), sql.NullString{})
+				addFmt(fmt.Sprintf("%v.%v IS %%v", tableName, c.Col), sql.NullString{})
 				continue
 			}
 			if c.Vals[0] == db.SpecialConditionIsNotNull {
-				addFmt(fmt.Sprintf("%v.%v IS NOT %%v", b.tableName, c.Col), sql.NullString{})
+				addFmt(fmt.Sprintf("%v.%v IS NOT %%v", tableName, c.Col), sql.NullString{})
 				continue
 			}
 		}
@@ -235,7 +266,7 @@ func (b selectBuilder) sqlConditions(d dialect, optimizeConditions bool, fields 
 		if d.name() == db.CASSANDRA {
 			fieldName = c.Col
 		} else {
-			fieldName = fmt.Sprintf("%v.%v", b.tableName, c.Col)
+			fieldName = fmt.Sprintf("%v.%v", tableName, c.Col)
 		}
 
 		fmts, args, err := condgen(d, optimizeConditions, fieldName, c.Vals)
@@ -362,7 +393,7 @@ func (b selectBuilder) sql(d dialect, c *db.SelectCtrl) (string, bool, error) {
 		return selectWhat, false, nil
 	}
 
-	if where, args, empty, err = b.sqlConditions(d, c.OptimizeConditions, c.Where); err != nil {
+	if where, args, empty, err = sqlConditions(d, b.tableName, b.queryable, c.OptimizeConditions, c.Where); err != nil {
 		return "", false, err
 	}
 
