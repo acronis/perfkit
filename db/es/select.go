@@ -35,15 +35,15 @@ func createSearchQueryBuilder(idxName string, tableRows []db.TableRow) error {
 	}
 
 	for _, row := range tableRows {
-		switch row.Type {
+		switch row.GetType() {
 		case db.DataTypeId:
-			queryBuilder.queryable[row.Name] = idCond()
+			queryBuilder.queryable[row.GetName()] = idCond()
 		case db.DataTypeUUID:
-			queryBuilder.queryable[row.Name] = uuidCond()
+			queryBuilder.queryable[row.GetName()] = uuidCond()
 		case db.DataTypeVarChar:
-			queryBuilder.queryable[row.Name] = stringCond(256, true)
+			queryBuilder.queryable[row.GetName()] = stringCond(256, true)
 		case db.DataTypeDateTime:
-			queryBuilder.queryable[row.Name] = timeCond()
+			queryBuilder.queryable[row.GetName()] = timeCond()
 		}
 	}
 

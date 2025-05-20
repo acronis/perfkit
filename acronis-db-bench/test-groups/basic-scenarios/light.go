@@ -18,8 +18,8 @@ var TestTableLight = engine.TestTable{
 	TableDefinition: func(dialect db.DialectName) *db.TableDefinition {
 		return &db.TableDefinition{
 			TableRows: []db.TableRow{
-				{Name: "id", Type: db.DataTypeBigIntAutoIncPK},
-				{Name: "uuid", Type: db.DataTypeUUID, NotNull: true, Indexed: true},
+				db.TableRowItem{Name: "id", Type: db.DataTypeBigIntAutoIncPK},
+				db.TableRowItem{Name: "uuid", Type: db.DataTypeUUID, NotNull: true, Indexed: true},
 			},
 		}
 	},

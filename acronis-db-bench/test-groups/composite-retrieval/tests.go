@@ -38,13 +38,13 @@ var TestTableEmailSecurity = engine.TestTable{
 		var tableRows []db.TableRow
 
 		tableRows = append(tableRows,
-			db.TableRow{Name: "id", Type: db.DataTypeBigInt, Indexed: true},
-			db.TableRow{Name: "date", Type: db.DataTypeDateTime, Indexed: true},
-			db.TableRow{Name: "sender", Type: db.DataTypeVarChar, Indexed: true},
-			db.TableRow{Name: "recipient", Type: db.DataTypeVarChar, Indexed: true},
-			db.TableRow{Name: "subject", Type: db.DataTypeVarChar, Indexed: true},
-			db.TableRow{Name: "body", Type: db.DataTypeText, Indexed: true},
-			db.TableRow{Name: "embedding", Type: db.DataTypeVector768Float32, Indexed: true},
+			db.TableRowItem{Name: "id", Type: db.DataTypeBigInt, Indexed: true},
+			db.TableRowItem{Name: "date", Type: db.DataTypeDateTime, Indexed: true},
+			db.TableRowItem{Name: "sender", Type: db.DataTypeVarChar, Indexed: true},
+			db.TableRowItem{Name: "recipient", Type: db.DataTypeVarChar, Indexed: true},
+			db.TableRowItem{Name: "subject", Type: db.DataTypeVarChar, Indexed: true},
+			db.TableRowItem{Name: "body", Type: db.DataTypeText, Indexed: true},
+			db.TableRowItem{Name: "embedding", Type: db.DataTypeVector768Float32, Indexed: true},
 		)
 
 		var tableDef = &db.TableDefinition{

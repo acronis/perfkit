@@ -1,6 +1,7 @@
 package es
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"github.com/acronis/perfkit/db"
@@ -64,20 +65,43 @@ const (
 	fieldTypeBoolean     fieldType = "boolean"
 	fieldTypeDateNano    fieldType = "date_nanos"
 	fieldTypeDenseVector fieldType = "dense_vector"
+	fieldTypeObject      fieldType = "object"
 )
 
-type fieldSpec struct {
+type fieldSpec interface {
+	MarshalJSON() ([]byte, error)
+}
+
+type fieldSpecItem struct {
 	Type    fieldType
 	Dims    int
 	Indexed bool
 }
 
 func convertToEsType(d dialect, t db.TableRow) fieldSpec {
-	var spec = fieldSpec{
-		Indexed: t.Indexed,
+	if t.GetType() == db.DataTypeObject || t.GetType() == db.DataTypeNested {
+		subFieldSpec := make(map[string]fieldSpec, len(t.GetSubtable()))
+		for _, subTable := range t.GetSubtable() {
+			subFieldSpec[subTable.GetName()] = convertToEsType(d, subTable)
+		}
+
+		specObj := fieldSpecObject{
+			Type:       fieldTypeObject,
+			fieldSpecs: subFieldSpec,
+		}
+
+		if t.GetType() == db.DataTypeNested {
+			specObj.IsNested = true
+		}
+
+		return specObj
 	}
 
-	switch t.Type {
+	var spec = fieldSpecItem{
+		Indexed: t.IsIndexed(),
+	}
+
+	switch t.GetType() {
 	case db.DataTypeBigIntAutoInc, db.DataTypeId, db.DataTypeInt:
 		spec.Type = fieldTypeLong
 	case db.DataTypeUUID:
@@ -103,7 +127,7 @@ func convertToEsType(d dialect, t db.TableRow) fieldSpec {
 	return spec
 }
 
-func (s fieldSpec) MarshalJSON() ([]byte, error) {
+func (s fieldSpecItem) MarshalJSON() ([]byte, error) {
 	if s.Dims > 0 {
 		if s.Indexed {
 			return []byte(fmt.Sprintf(`{"type":%q, "dims":%d}`, s.Type, s.Dims)), nil
@@ -115,7 +139,32 @@ func (s fieldSpec) MarshalJSON() ([]byte, error) {
 	if s.Indexed {
 		return []byte(fmt.Sprintf(`{"type":%q}`, s.Type)), nil
 	}
+
 	return []byte(fmt.Sprintf(`{"type":%q, "index": false}`, s.Type)), nil
+}
+
+type fieldSpecObject struct {
+	Type       fieldType
+	IsNested   bool
+	fieldSpecs map[string]fieldSpec
+}
+
+func (fsn fieldSpecObject) MarshalJSON() ([]byte, error) {
+	var fields = make(map[string]any, 2)
+
+	if fsn.IsNested {
+		fields["type"] = "nested"
+	}
+
+	properties := make(map[string]any, len(fsn.fieldSpecs)+1)
+
+	for name, f := range fsn.fieldSpecs {
+		properties[name] = f
+	}
+
+	fields["properties"] = properties
+
+	return json.Marshal(fields)
 }
 
 type mapping map[string]fieldSpec
@@ -213,11 +262,11 @@ func createIndex(d dialect, mig migrator, indexName string, indexDefinition *db.
 
 	var mp = make(mapping)
 	for _, row := range indexDefinition.TableRows {
-		if row.Name == "id" {
+		if row.GetName() == "id" {
 			continue
 		}
 
-		mp[row.Name] = convertToEsType(d, row)
+		mp[row.GetName()] = convertToEsType(d, row)
 	}
 
 	if err := mig.initComponentTemplate(mappingTemplateName, componentTemplate{

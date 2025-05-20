@@ -52,20 +52,20 @@ func createSelectQueryBuilder(queryBuilders queryBuilderFactory, tableName strin
 	// Add filter functions for each column based on its data type
 	// These filter functions implement the query building logic for WHERE clauses
 	for _, row := range tableRows {
-		switch row.Type {
+		switch row.GetType() {
 		case db.DataTypeInt, db.DataTypeBigInt, db.DataTypeBigIntAutoIncPK,
 			db.DataTypeBigIntAutoInc, db.DataTypeSmallInt, db.DataTypeTinyInt:
-			queryable[row.Name] = idCond() // Numeric ID conditions
+			queryable[row.GetName()] = idCond() // Numeric ID conditions
 		case db.DataTypeUUID, db.DataTypeVarCharUUID:
-			queryable[row.Name] = uuidCond() // UUID conditions
+			queryable[row.GetName()] = uuidCond() // UUID conditions
 		case db.DataTypeVarChar, db.DataTypeVarChar32, db.DataTypeVarChar36,
 			db.DataTypeVarChar64, db.DataTypeVarChar128, db.DataTypeVarChar256,
 			db.DataTypeText, db.DataTypeLongText:
-			queryable[row.Name] = stringCond(256, true) // String conditions with LIKE support
+			queryable[row.GetName()] = stringCond(256, true) // String conditions with LIKE support
 		case db.DataTypeDateTime, db.DataTypeDateTime6,
 			db.DataTypeTimestamp, db.DataTypeTimestamp6,
 			db.DataTypeCurrentTimeStamp6:
-			queryable[row.Name] = timeCond() // Timestamp conditions
+			queryable[row.GetName()] = timeCond() // Timestamp conditions
 		}
 	}
 

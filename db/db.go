@@ -1230,12 +1230,75 @@ type Session interface {
 //	    },
 //	}
 //	```
-type TableRow struct {
+type TableRow interface {
+	GetName() string
+	GetType() DataType
+	IsPrimaryKey() bool
+	IsNotNull() bool
+	IsIndexed() bool
+	GetSubtable() []TableRow
+}
+
+type TableRowItem struct {
 	Name       string
 	Type       DataType
 	PrimaryKey bool
 	NotNull    bool
 	Indexed    bool // only for Elasticsearch
+}
+
+func (tri TableRowItem) GetName() string {
+	return tri.Name
+}
+
+func (tri TableRowItem) GetType() DataType {
+	return tri.Type
+}
+
+func (tri TableRowItem) IsPrimaryKey() bool {
+	return tri.PrimaryKey
+}
+
+func (tri TableRowItem) IsNotNull() bool {
+	return tri.NotNull
+}
+
+func (tri TableRowItem) IsIndexed() bool {
+	return tri.Indexed
+}
+
+func (tri TableRowItem) GetSubtable() []TableRow {
+	return nil
+}
+
+// TableRowSubtable is a struct for storing nested fields in NoSQL databases
+type TableRowSubtable struct {
+	Name     string
+	Type     DataType
+	Subtable []TableRow
+}
+
+func (trst TableRowSubtable) GetName() string {
+	return trst.Name
+}
+
+func (trst TableRowSubtable) GetType() DataType {
+	return trst.Type
+}
+
+func (trst TableRowSubtable) IsPrimaryKey() bool {
+	return false
+}
+
+func (trst TableRowSubtable) IsNotNull() bool {
+	return false
+}
+
+func (trst TableRowSubtable) IsIndexed() bool {
+	return false
+}
+func (trst TableRowSubtable) GetSubtable() []TableRow {
+	return trst.Subtable
 }
 
 // ResilienceSettings defines database replication and sharding configuration
@@ -1825,6 +1888,8 @@ const (
 	DataTypeEngine  DataType = "{$engine}"  // Storage engine specification
 	DataTypeNotNull DataType = "{$notnull}" // NOT NULL constraint
 	DataTypeNull    DataType = "{$null}"    // NULL allowed
+	DataTypeObject  DataType = "{$object}"  // Only supported for nosql databases
+	DataTypeNested  DataType = "{$nested}"  // Only supported for vector databases
 )
 
 // Dialect is an interface for database dialects

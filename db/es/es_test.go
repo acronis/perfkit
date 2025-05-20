@@ -45,14 +45,14 @@ func (l *testLogger) Log(format string, args ...interface{}) {
 func testTableDefinition() *db.TableDefinition {
 	return &db.TableDefinition{
 		TableRows: []db.TableRow{
-			{Name: "@timestamp", Type: db.DataTypeDateTime, Indexed: true},
-			{Name: "id", Type: db.DataTypeId, Indexed: true},
-			{Name: "uuid", Type: db.DataTypeUUID, Indexed: true},
-			{Name: "type", Type: db.DataTypeVarChar, Indexed: true},
-			{Name: "policy_name", Type: db.DataTypeVarChar, Indexed: true},
-			{Name: "resource_name", Type: db.DataTypeVarChar, Indexed: true},
-			{Name: "accessors", Type: db.DataTypeVarChar, Indexed: true},
-			{Name: "start_time", Type: db.DataTypeDateTime, Indexed: true},
+			db.TableRowItem{Name: "@timestamp", Type: db.DataTypeDateTime, Indexed: true},
+			db.TableRowItem{Name: "id", Type: db.DataTypeId, Indexed: true},
+			db.TableRowItem{Name: "uuid", Type: db.DataTypeUUID, Indexed: true},
+			db.TableRowItem{Name: "type", Type: db.DataTypeVarChar, Indexed: true},
+			db.TableRowItem{Name: "policy_name", Type: db.DataTypeVarChar, Indexed: true},
+			db.TableRowItem{Name: "resource_name", Type: db.DataTypeVarChar, Indexed: true},
+			db.TableRowItem{Name: "accessors", Type: db.DataTypeVarChar, Indexed: true},
+			db.TableRowItem{Name: "start_time", Type: db.DataTypeDateTime, Indexed: true},
 		},
 	}
 }

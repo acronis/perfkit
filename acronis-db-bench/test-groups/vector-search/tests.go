@@ -34,8 +34,8 @@ var TestTableVector768 = engine.TestTable{
 		var tableRows []db.TableRow
 
 		tableRows = append(tableRows,
-			db.TableRow{Name: "id", Type: db.DataTypeBigInt, Indexed: true},
-			db.TableRow{Name: "embedding", Type: db.DataTypeVector768Float32, Indexed: true},
+			db.TableRowItem{Name: "id", Type: db.DataTypeBigInt, Indexed: true},
+			db.TableRowItem{Name: "embedding", Type: db.DataTypeVector768Float32, Indexed: true},
 		)
 
 		var tableDef = &db.TableDefinition{
