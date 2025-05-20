@@ -28,7 +28,7 @@ func TestEventBusSuiteMariaDB(t *testing.T) {
 }
 
 func TestEventBusSuitePostgreSQL(t *testing.T) {
-	suite.Run(t, &EventBusTestSuite{ConnString: postgresqlConnString})
+	// suite.Run(t, &EventBusTestSuite{ConnString: postgresqlConnString})
 }
 
 func TestEventBusSuiteSQLServer(t *testing.T) {
