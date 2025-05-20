@@ -52,6 +52,8 @@ func initGeneric(b *benchmark.Benchmark, testDesc *TestDesc, rowsRequired uint64
 		b.Vault.(*DBTestData).EventBus.CreateTables()
 	}
 
+	testData := b.Vault.(*DBTestData)
+	testData.TestDesc = testDesc
 	tableName := testDesc.Table.TableName
 	if tableName == "" {
 		testDesc.Table.RowsCount = 0
@@ -65,8 +67,6 @@ func initGeneric(b *benchmark.Benchmark, testDesc *TestDesc, rowsRequired uint64
 	}
 
 	conn := ddlConnDatabase
-	testData := b.Vault.(*DBTestData)
-	testData.TestDesc = testDesc
 
 	t := testRegistry.GetTableByName(tableName)
 
