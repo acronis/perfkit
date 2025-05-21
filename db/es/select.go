@@ -900,7 +900,9 @@ func (g *esGateway) Select(idxName string, sc *db.SelectCtrl) (db.Rows, error) {
 
 	var queryBuilder, ok = indexQueryBuilders[index]
 	if !ok {
-		return nil, fmt.Errorf("index %s is not supported", index)
+		queryBuilder = searchQueryBuilder{
+			queryable: make(map[string]filterFunction),
+		}
 	}
 
 	var query, qType, empty, err = queryBuilder.searchRequest(index, sc)

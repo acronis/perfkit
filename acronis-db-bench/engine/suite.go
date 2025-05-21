@@ -79,7 +79,7 @@ func (s suiteStepTestExecute) Execute(b *benchmark.Benchmark, testOpts *TestOpts
 	}
 
 	// Get current dialect
-	var dialectName = getDBDriver(b)
+	var dialectName = GetDBDriver(b)
 
 	// Skip if current dialect is not supported by this test
 	dialectSupported := false
