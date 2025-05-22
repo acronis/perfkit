@@ -110,8 +110,8 @@ func vectorCleanup(t *testing.T, dbo db.Database) {
 func testVectorTableDefinition(dia db.DialectName) *db.TableDefinition {
 	return &db.TableDefinition{
 		TableRows: []db.TableRow{
-			{Name: "id", Type: db.DataTypeBigIntAutoIncPK},
-			{Name: "embedding", Type: db.DataTypeVector3Float32},
+			db.TableRowItem{Name: "id", Type: db.DataTypeBigIntAutoIncPK},
+			db.TableRowItem{Name: "embedding", Type: db.DataTypeVector3Float32},
 		},
 	}
 }

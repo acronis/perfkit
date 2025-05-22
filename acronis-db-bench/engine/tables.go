@@ -24,6 +24,7 @@ type TestTable struct {
 	CreateQuery           string
 	CreateQueryPatchFuncs []CreateQueryPatchFunc
 	Indexes               [][]string
+	DisableAutoCreation   bool
 
 	// runtime information
 	RowsCount uint64

@@ -153,6 +153,10 @@ type DBWorkerData struct {
 	workingConn *DBConnector
 }
 
+func (d *DBWorkerData) WorkingConn() *DBConnector {
+	return d.workingConn
+}
+
 func (d *DBWorkerData) release() {
 	if d.workingConn != nil {
 		d.workingConn.Release()

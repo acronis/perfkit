@@ -38,12 +38,12 @@ var TestTableTimeSeriesSQL = engine.TestTable{
 	TableDefinition: func(dialect db.DialectName) *db.TableDefinition {
 		return &db.TableDefinition{
 			TableRows: []db.TableRow{
-				{Name: "id", Type: db.DataTypeBigIntAutoIncPK},
-				{Name: "tenant_id", Type: db.DataTypeVarCharUUID, NotNull: true, Indexed: true},
-				{Name: "device_id", Type: db.DataTypeVarCharUUID, NotNull: true, Indexed: true},
-				{Name: "metric_id", Type: db.DataTypeVarCharUUID, NotNull: true, Indexed: true},
-				{Name: "ts", Type: db.DataTypeTimestamp, NotNull: true, Indexed: true},
-				{Name: "value", Type: db.DataTypeInt, NotNull: true},
+				db.TableRowItem{Name: "id", Type: db.DataTypeBigIntAutoIncPK},
+				db.TableRowItem{Name: "tenant_id", Type: db.DataTypeVarCharUUID, NotNull: true, Indexed: true},
+				db.TableRowItem{Name: "device_id", Type: db.DataTypeVarCharUUID, NotNull: true, Indexed: true},
+				db.TableRowItem{Name: "metric_id", Type: db.DataTypeVarCharUUID, NotNull: true, Indexed: true},
+				db.TableRowItem{Name: "ts", Type: db.DataTypeTimestamp, NotNull: true, Indexed: true},
+				db.TableRowItem{Name: "value", Type: db.DataTypeInt, NotNull: true},
 			},
 		}
 	},

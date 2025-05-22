@@ -94,18 +94,18 @@ func testTableDefinition(dia db.DialectName) *db.TableDefinition {
 	if dia == db.CASSANDRA {
 		tableSpec = &db.TableDefinition{
 			TableRows: []db.TableRow{
-				{Name: "origin", Type: db.DataTypeInt},
-				{Name: "type", Type: db.DataTypeInt},
-				{Name: "name", Type: db.DataTypeLongText},
+				db.TableRowItem{Name: "origin", Type: db.DataTypeInt},
+				db.TableRowItem{Name: "type", Type: db.DataTypeInt},
+				db.TableRowItem{Name: "name", Type: db.DataTypeLongText},
 			},
 			PrimaryKey: []string{"origin", "type", "name"},
 		}
 	} else {
 		tableSpec = &db.TableDefinition{
 			TableRows: []db.TableRow{
-				{Name: "origin", Type: db.DataTypeInt, NotNull: true},
-				{Name: "type", Type: db.DataTypeInt, NotNull: true},
-				{Name: "name", Type: db.DataTypeVarChar256, NotNull: false},
+				db.TableRowItem{Name: "origin", Type: db.DataTypeInt, NotNull: true},
+				db.TableRowItem{Name: "type", Type: db.DataTypeInt, NotNull: true},
+				db.TableRowItem{Name: "name", Type: db.DataTypeVarChar256, NotNull: false},
 			},
 			PrimaryKey: []string{"origin", "type", "name"},
 		}

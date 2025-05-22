@@ -164,8 +164,8 @@ func constructSQLDDLQuery(d dialect, tableName string, tableDefinition *db.Table
 
 	var query = fmt.Sprintf("CREATE TABLE %v (", d.table(tableName))
 	for i, row := range tableDefinition.TableRows {
-		query += fmt.Sprintf("%v %v", row.Name, d.getType(row.Type))
-		if row.NotNull {
+		query += fmt.Sprintf("%v %v", row.GetName(), d.getType(row.GetType()))
+		if row.IsNotNull() {
 			if d.name() != db.CASSANDRA {
 				query += " NOT NULL"
 			}

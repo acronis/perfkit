@@ -60,54 +60,57 @@ func initGeneric(b *benchmark.Benchmark, testDesc *TestDesc, rowsRequired uint64
 		return
 	}
 
-	var ddlConnDatabase *DBConnector
-	if ddlConnDatabase, err = NewDBConnector(&tenantCacheDBOpts, -1, true, b.Logger, 1); err != nil {
-		b.Exit("db: cannot create connection for DDL: %v", err)
-		return
-	}
-
-	conn := ddlConnDatabase
-
-	t := testRegistry.GetTableByName(tableName)
-
-	b.Logger.Debug("initializing table '%s'", tableName)
-	if testDesc.IsReadonly {
-		t.Create(conn, b)
-		b.Logger.Debug("readonly test, skipping table '%s' initialization", tableName)
-		if exists, err := conn.Database.TableExists(tableName); err != nil {
-			b.Exit(fmt.Sprintf("db: cannot check if table '%s' exists: %v", tableName, err))
-		} else if !exists {
-			b.Exit("The '%s' table doesn't exist, please create tables using -I option, or use individual insert test using the -t `insert-***`", tableName)
-		}
-	} else {
-		b.Logger.Debug("creating table '%s'", tableName)
-		t.Create(conn, b)
-	}
-
-	var session = conn.Database.Session(conn.Database.Context(context.Background(), false))
 	var rowNum int64
-	if rows, err := session.Select(tableName, &db.SelectCtrl{Fields: []string{"COUNT(0)"}}); err != nil {
-		b.Exit(fmt.Sprintf("db: cannot get rows count in table '%s': %v", tableName, err))
-	} else {
-		for rows.Next() {
-			if scanErr := rows.Scan(&rowNum); scanErr != nil {
-				b.Exit(fmt.Sprintf("db: cannot get rows count in table '%s': %v", tableName, scanErr))
+
+	if !testDesc.Table.DisableAutoCreation {
+		var ddlConnDatabase *DBConnector
+		if ddlConnDatabase, err = NewDBConnector(&b.TestOpts.(*TestOpts).DBOpts, -1, true, b.Logger, 1); err != nil {
+			b.Exit("db: cannot create connection for DDL: %v", err)
+			return
+		}
+
+		conn := ddlConnDatabase
+
+		t := testRegistry.GetTableByName(tableName)
+
+		b.Logger.Debug("initializing table '%s'", tableName)
+		if testDesc.IsReadonly {
+			t.Create(conn, b)
+			b.Logger.Debug("readonly test, skipping table '%s' initialization", tableName)
+			if exists, err := conn.Database.TableExists(tableName); err != nil {
+				b.Exit(fmt.Sprintf("db: cannot check if table '%s' exists: %v", tableName, err))
+			} else if !exists {
+				b.Exit("The '%s' table doesn't exist, please create tables using -I option, or use individual insert test using the -t `insert-***`", tableName)
+			}
+		} else {
+			b.Logger.Debug("creating table '%s'", tableName)
+			t.Create(conn, b)
+		}
+
+		var session = conn.Database.Session(conn.Database.Context(context.Background(), false))
+		if rows, err := session.Select(tableName, &db.SelectCtrl{Fields: []string{"COUNT(0)"}}); err != nil {
+			b.Exit(fmt.Sprintf("db: cannot get rows count in table '%s': %v", tableName, err))
+		} else {
+			for rows.Next() {
+				if scanErr := rows.Scan(&rowNum); scanErr != nil {
+					b.Exit(fmt.Sprintf("db: cannot get rows count in table '%s': %v", tableName, scanErr))
+				}
+			}
+			rows.Close()
+		}
+
+		testDesc.Table.RowsCount = uint64(rowNum)
+		b.Logger.Debug("table '%s' has %d rows", tableName, testDesc.Table.RowsCount)
+
+		if rowsRequired > 0 {
+			if testDesc.Table.RowsCount < rowsRequired {
+				b.Exit(fmt.Sprintf("table '%s' has %d rows, but this test requires at least %d rows, please insert it first and then re-run the test",
+					testDesc.Table.TableName, testDesc.Table.RowsCount, rowsRequired))
 			}
 		}
-		rows.Close()
+
+		ddlConnDatabase.Release()
 	}
-
-	testDesc.Table.RowsCount = uint64(rowNum)
-	b.Logger.Debug("table '%s' has %d rows", tableName, testDesc.Table.RowsCount)
-
-	if rowsRequired > 0 {
-		if testDesc.Table.RowsCount < rowsRequired {
-			b.Exit(fmt.Sprintf("table '%s' has %d rows, but this test requires at least %d rows, please insert it first and then re-run the test",
-				testDesc.Table.TableName, testDesc.Table.RowsCount, rowsRequired))
-		}
-	}
-
-	ddlConnDatabase.Release()
 
 	if b.TestOpts.(*TestOpts).BenchOpts.ParquetDataSource != "" {
 		var offset int64
@@ -144,7 +147,7 @@ func initWorker(worker *benchmark.BenchmarkWorker) {
 	worker.Logger.Trace("worker is initialized")
 }
 
-func initCommon(b *benchmark.Benchmark, testDesc *TestDesc, rowsRequired uint64) {
+func InitCommon(b *benchmark.Benchmark, testDesc *TestDesc, rowsRequired uint64) {
 	b.Init = func() {
 		initGeneric(b, testDesc, rowsRequired)
 	}
@@ -192,7 +195,7 @@ func initCommon(b *benchmark.Benchmark, testDesc *TestDesc, rowsRequired uint64)
  */
 
 func TestGeneric(b *benchmark.Benchmark, testDesc *TestDesc, workerFunc TestWorkerFunc, rowsRequired uint64) {
-	initCommon(b, testDesc, rowsRequired)
+	InitCommon(b, testDesc, rowsRequired)
 
 	b.WorkerRunFunc = func(worker *benchmark.BenchmarkWorker) (loops int) {
 		c := worker.Data.(*DBWorkerData).workingConn
@@ -216,7 +219,7 @@ func TestSelectRun(
 	orderByFunc func(worker *benchmark.BenchmarkWorker) []string,
 	rowsRequired uint64,
 ) {
-	initCommon(b, testDesc, rowsRequired)
+	InitCommon(b, testDesc, rowsRequired)
 
 	testOpts, ok := b.TestOpts.(*TestOpts)
 	if !ok {
@@ -285,7 +288,7 @@ func TestSelectRawSQLQuery(
 	orderByFunc func(worker *benchmark.BenchmarkWorker) string,
 	rowsRequired uint64,
 ) {
-	initCommon(b, testDesc, rowsRequired)
+	InitCommon(b, testDesc, rowsRequired)
 	batch := b.Vault.(*DBTestData).EffectiveBatch
 
 	b.WorkerRunFunc = func(worker *benchmark.BenchmarkWorker) (loops int) {
@@ -368,7 +371,7 @@ func TestSelectRawSQLQuery(
  * INSERT worker
  */
 
-func getDBDriver(b *benchmark.Benchmark) db.DialectName {
+func GetDBDriver(b *benchmark.Benchmark) db.DialectName {
 	var dialectName, err = db.GetDialectName(b.TestOpts.(*TestOpts).DBOpts.ConnString)
 	if err != nil {
 		b.Exit(err)
@@ -378,13 +381,13 @@ func getDBDriver(b *benchmark.Benchmark) db.DialectName {
 }
 
 func TestInsertGeneric(b *benchmark.Benchmark, testDesc *TestDesc) {
-	colConfs := testDesc.Table.GetColumnsForInsert(db.WithAutoInc(getDBDriver(b)))
+	colConfs := testDesc.Table.GetColumnsForInsert(db.WithAutoInc(GetDBDriver(b)))
 
 	if len(*colConfs) == 0 {
 		b.Exit(fmt.Sprintf("internal error: no columns eligible for INSERT found in '%s' configuration", testDesc.Table.TableName))
 	}
 
-	initCommon(b, testDesc, 0)
+	InitCommon(b, testDesc, 0)
 
 	batch := b.Vault.(*DBTestData).EffectiveBatch
 	table := &testDesc.Table
@@ -492,7 +495,7 @@ func InsertMultiValueDataWorker(b *benchmark.Benchmark, c *DBConnector, testDesc
 	for i := 0; i < batch; i++ {
 		var genColumns, vals, err = b.Randomizer.GenFakeData(colConfs, db.WithAutoInc(c.Database.DialectName()))
 		if err != nil {
-			b.Exit(err)
+			b.Exit(err.Error())
 		}
 
 		if genColumns == nil {
@@ -525,14 +528,14 @@ func InsertMultiValueDataWorker(b *benchmark.Benchmark, c *DBConnector, testDesc
 
 func TestUpdateGeneric(b *benchmark.Benchmark, testDesc *TestDesc, updateRows uint64, colConfs *[]benchmark.DBFakeColumnConf) {
 	if colConfs == nil {
-		colConfs = testDesc.Table.GetColumnsForUpdate(db.WithAutoInc(getDBDriver(b)))
+		colConfs = testDesc.Table.GetColumnsForUpdate(db.WithAutoInc(GetDBDriver(b)))
 	}
 
 	if len(*colConfs) == 0 {
 		b.Exit(fmt.Sprintf("internal error: no columns eligible for UPDATE found in '%s' configuration", testDesc.Table.TableName))
 	}
 
-	initCommon(b, testDesc, updateRows)
+	InitCommon(b, testDesc, updateRows)
 
 	batch := b.Vault.(*DBTestData).EffectiveBatch
 	table := &testDesc.Table
@@ -594,7 +597,7 @@ func TestUpdateGeneric(b *benchmark.Benchmark, testDesc *TestDesc, updateRows ui
  */
 // testDeleteGeneric is a generic DELETE worker
 func testDeleteGeneric(b *benchmark.Benchmark, testDesc *TestDesc, deleteRows uint64) { //nolint:unused
-	initCommon(b, testDesc, deleteRows)
+	InitCommon(b, testDesc, deleteRows)
 
 	batch := b.Vault.(*DBTestData).EffectiveBatch
 	table := &testDesc.Table

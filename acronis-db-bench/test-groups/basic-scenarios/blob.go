@@ -22,11 +22,11 @@ var TestTableBlob = engine.TestTable{
 	TableDefinition: func(dialect db.DialectName) *db.TableDefinition {
 		return &db.TableDefinition{
 			TableRows: []db.TableRow{
-				{Name: "id", Type: db.DataTypeBigIntAutoIncPK},
-				{Name: "uuid", Type: db.DataTypeUUID, NotNull: true, Indexed: true},
-				{Name: "tenant_id", Type: db.DataTypeUUID, NotNull: true, Indexed: true},
-				{Name: "timestamp", Type: db.DataTypeBigInt, NotNull: true, Indexed: true},
-				{Name: "data", Type: db.DataTypeHugeBlob, NotNull: true},
+				db.TableRowItem{Name: "id", Type: db.DataTypeBigIntAutoIncPK},
+				db.TableRowItem{Name: "uuid", Type: db.DataTypeUUID, NotNull: true, Indexed: true},
+				db.TableRowItem{Name: "tenant_id", Type: db.DataTypeUUID, NotNull: true, Indexed: true},
+				db.TableRowItem{Name: "timestamp", Type: db.DataTypeBigInt, NotNull: true, Indexed: true},
+				db.TableRowItem{Name: "data", Type: db.DataTypeHugeBlob, NotNull: true},
 			},
 		}
 	},
