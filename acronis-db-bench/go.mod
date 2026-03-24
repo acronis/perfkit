@@ -18,7 +18,7 @@ require (
 	github.com/denisenkom/go-mssqldb v0.12.3
 	github.com/google/uuid v1.6.0
 	github.com/lib/pq v1.10.9
-	github.com/stretchr/testify v1.9.0
+	github.com/stretchr/testify v1.11.1
 )
 
 require (
@@ -41,6 +41,7 @@ require (
 	github.com/goccy/go-json v0.10.3 // indirect
 	github.com/gocql/gocql v1.6.0 // indirect
 	github.com/gocraft/dbr/v2 v2.7.6 // indirect
+	github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
 	github.com/golang-sql/civil v0.0.0-20220223132316-b832511892a9 // indirect
 	github.com/golang-sql/sqlexp v0.1.0 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
@@ -51,6 +52,7 @@ require (
 	github.com/klauspost/compress v1.17.11 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.8 // indirect
 	github.com/mattn/go-sqlite3 v1.14.22 // indirect
+	github.com/meilisearch/meilisearch-go v0.36.1 // indirect
 	github.com/minio/asm2plan9s v0.0.0-20200509001527-cdd76441f9d8 // indirect
 	github.com/minio/c2goasm v0.0.0-20190812172519-36a3d3bbc4f3 // indirect
 	github.com/opensearch-project/opensearch-go/v4 v4.2.0 // indirect

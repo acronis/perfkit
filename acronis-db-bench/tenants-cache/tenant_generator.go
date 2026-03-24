@@ -307,12 +307,6 @@ engine = MergeTree() ORDER BY (tenant_id, cti_entity_uuid);`, TableNameCtiProvis
 
 // Init initializes tenants cache and creates tables if needed
 func (tc *TenantsCache) Init(database db.Database) error {
-	var dialect = database.DialectName()
-	if dialect != db.CLICKHOUSE && dialect != db.CASSANDRA && dialect != db.MYSQL && dialect != db.POSTGRES && dialect != db.SQLITE {
-		tc.logger.Error("unsupported dialect: %s", dialect)
-		return fmt.Errorf("unsupported dialect: %s", dialect)
-	}
-
 	var eventData []tenantStructureData
 	if err := json.Unmarshal(tenantStructure, &eventData); err != nil {
 		return fmt.Errorf("error unmarshalling tenant_structure.json: %v", err)
@@ -320,6 +314,18 @@ func (tc *TenantsCache) Init(database db.Database) error {
 
 	tc.logger.Trace("tenants probablity config: %v", eventData)
 	tc.tenantStructureRandomizer = newTenantStructureRandomizer(eventData)
+
+	// Document-store engines (ES, OpenSearch, Meilisearch) don't use SQL tenant tables
+	var dialect = database.DialectName()
+	if dialect == db.ELASTICSEARCH || dialect == db.OPENSEARCH || dialect == db.MEILISEARCH {
+		tc.logger.Trace("skipping tenant SQL tables for %s", dialect)
+		return nil
+	}
+
+	if dialect != db.CLICKHOUSE && dialect != db.CASSANDRA && dialect != db.MYSQL && dialect != db.POSTGRES && dialect != db.SQLITE {
+		tc.logger.Error("unsupported dialect: %s", dialect)
+		return fmt.Errorf("unsupported dialect: %s", dialect)
+	}
 
 	tc.logger.Trace("init")
 	tc.CreateTables(database)

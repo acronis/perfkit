@@ -1,0 +1,24 @@
+version: '3.4'
+
+x-logging:
+  &logging
+  driver: gelf
+  options:
+    gelf-address: udp://${GELF_IP}:${GELF_PORT}
+
+services:
+  meilisearch:
+    image: getmeili/meilisearch:v1.12
+    environment:
+      - MEILI_ENV=development
+      - MEILI_NO_ANALYTICS=true
+      - MEILI_LOG_LEVEL=INFO
+      - MEILI_EXPERIMENTAL_VECTOR_STORE=true
+    logging: *logging
+    volumes:
+      - meili-data:/meili_data
+    ports:
+      - 7700:7700
+
+volumes:
+  meili-data:

@@ -455,7 +455,7 @@ func TestInsertGeneric(b *benchmark.Benchmark, testDesc *TestDesc) {
 
 			if txErr := sess.Transact(func(tx db.DatabaseAccessor) error {
 				for i := 0; i < batch; i++ {
-					columns, values, err := worker.Randomizer.GenFakeData(colConfs, false)
+					columns, values, err := worker.Randomizer.GenFakeData(colConfs, db.WithAutoInc(dialectName))
 					if err != nil {
 						return err
 					}

@@ -10,6 +10,7 @@ import (
 
 	// List of database drivers
 	_ "github.com/acronis/perfkit/db/es"  // es drivers
+	_ "github.com/acronis/perfkit/db/ms"  // meilisearch drivers
 	_ "github.com/acronis/perfkit/db/sql" // sql drivers
 
 	// List of test groups

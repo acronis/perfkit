@@ -207,7 +207,7 @@ func PrintStack() {
 // WithAutoInc returns true if DBDriver should support 'autoinc' field as current time nanoseconds
 func WithAutoInc(name DialectName) bool {
 	switch name {
-	case CASSANDRA:
+	case CASSANDRA, MEILISEARCH:
 		return true
 	default:
 		return false

@@ -7,7 +7,6 @@ toolchain go1.21.4
 require (
 	github.com/ClickHouse/clickhouse-go/v2 v2.26.0
 	github.com/MichaelS11/go-cql-driver v0.1.1
-	github.com/acronis/perfkit/logger v0.0.0-20250402063049-20a8306d6a02
 	github.com/denisenkom/go-mssqldb v0.12.3
 	github.com/elastic/go-elasticsearch/v8 v8.15.0
 	github.com/fergusstrange/embedded-postgres v1.27.0
@@ -17,21 +16,23 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/lib/pq v1.10.9
 	github.com/mattn/go-sqlite3 v1.14.22
+	github.com/meilisearch/meilisearch-go v0.36.1
 	github.com/opensearch-project/opensearch-go/v4 v4.2.0
-	github.com/stretchr/testify v1.9.0
+	github.com/stretchr/testify v1.11.1
 	go.uber.org/atomic v1.11.0
 )
 
 require (
 	filippo.io/edwards25519 v1.1.0 // indirect
 	github.com/ClickHouse/ch-go v0.61.5 // indirect
-	github.com/andybalholm/brotli v1.1.0 // indirect
+	github.com/andybalholm/brotli v1.1.1 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/elastic/elastic-transport-go/v8 v8.6.0 // indirect
 	github.com/go-faster/city v1.0.1 // indirect
 	github.com/go-faster/errors v0.7.1 // indirect
 	github.com/go-logr/logr v1.4.1 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
+	github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
 	github.com/golang-sql/civil v0.0.0-20220223132316-b832511892a9 // indirect
 	github.com/golang-sql/sqlexp v0.1.0 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
