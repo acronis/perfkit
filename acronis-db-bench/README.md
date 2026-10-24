@@ -164,13 +164,13 @@ acronis-db-bench --connection-string "cql://<USER>:<PASSWORD>@<HOST>:<PORT>?keys
 #### ElasticSearch
 
 ```bash
-acronis-db-bench --connection-string "es://<USER>::<PASSWORD>@<HOST>:<PORT>"
+acronis-db-bench --connection-string "es://<USER>:<PASSWORD>@<HOST>:<PORT>"
 ```
 
 #### OpenSearch
 
 ```bash
-acronis-db-bench --connection-string "opensearch://<USER>::<PASSWORD>@<HOST>:<PORT>"
+acronis-db-bench --connection-string "opensearch://<USER>:<PASSWORD>@<HOST>:<PORT>"
 ```
 
 #### Using DBR

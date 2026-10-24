@@ -16,7 +16,7 @@ var quickJSON = jsoniter.ConfigCompatibleWithStandardLibrary
 // UseJsoniter is a flag
 var UseJsoniter = false
 
-// SerializationCache is a non-cleared concurrent safe cache of Serialize objects and marshalled strings
+// SerializationCache is a non-cleared concurrent safe cache of Serializable objects and marshalled strings
 type SerializationCache struct {
 	serializableMutex sync.Mutex
 	serializedMutex   sync.Mutex

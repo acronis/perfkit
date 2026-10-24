@@ -42,8 +42,8 @@ func constructConnStringFromOpts(connString, driver, dsn string) (string, error)
 				"  SQLite:        sqlite:///path/to/database.db\n" +
 				"  ClickHouse:    clickhouse://user:password@localhost:9000/database\n" +
 				"  Cassandra:     cql://user:password@localhost:9042?keyspace=database\n" +
-				"  ElasticSearch: es://user::password@localhost:9200\n" +
-				"  OpenSearch:    opensearch://user::password@localhost:9200\n" +
+				"  ElasticSearch: es://user:password@localhost:9200\n" +
+				"  OpenSearch:    opensearch://user:password@localhost:9200\n" +
 				"  SQLite+DBR:    sqlite+dbr://:memory:\n" +
 				"  MySQL+DBR:     mysql+dbr://user:password@tcp(localhost:3306)/database\n" +
 				"  MSSQL+DBR:     mssql+dbr://user:password@localhost:1433?database=database\n" +
@@ -56,7 +56,7 @@ func constructConnStringFromOpts(connString, driver, dsn string) (string, error)
 func convertDsnToUri(dbDriver string, dsn string) (string, error) {
 	switch dbDriver {
 	case "postgres":
-		// Postgres DSN can be respresnted in URI format and in key-value pairs format also
+		// Postgres DSN can be represented in URI format and in key-value pairs format also
 		// Check if the DSN is already in URI format
 		// And if not, convert it to URI format
 		if parsedUrl, parseErr := url.Parse(dsn); parseErr == nil {
